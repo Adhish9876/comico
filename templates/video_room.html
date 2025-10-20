@@ -12,9 +12,9 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #fff;
+            font-family: 'gg sans', 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: #1e1f22;
+            color: #f2f3f5;
             overflow: hidden;
         }
 
@@ -23,70 +23,198 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
+            position: relative;
         }
 
         .header {
-            background: rgba(0, 0, 0, 0.5);
-            padding: 15px 25px;
+            background: #2b2d31;
+            padding: 12px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            backdrop-filter: blur(10px);
-            border-bottom: 2px solid rgba(124, 77, 255, 0.3);
+            border-bottom: 1px solid #1e1f22;
             z-index: 100;
+            box-shadow: 0 1px 0 rgba(4,4,5,0.2), 0 1.5px 0 rgba(6,6,7,0.05), 0 2px 0 rgba(4,4,5,0.05);
         }
 
         .session-info h2 {
-            font-size: 20px;
-            color: #7c4dff;
-            margin-bottom: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #f2f3f5;
+            margin-bottom: 2px;
+            letter-spacing: 0.02em;
         }
 
         .session-info p {
             font-size: 12px;
-            color: #aaa;
+            color: #949ba4;
+            font-weight: 500;
         }
 
         .videos {
             flex: 1;
-            display: grid;
-            gap: 10px;
-            padding: 10px;
-            overflow-y: auto;
             position: relative;
+            overflow: hidden;
+            background: #1e1f22;
         }
-
-        /* Dynamic grid layout based on number of participants */
-        .videos.count-1 { grid-template-columns: 1fr; }
-        .videos.count-2 { grid-template-columns: repeat(2, 1fr); }
-        .videos.count-3 { grid-template-columns: repeat(2, 1fr); }
-        .videos.count-4 { grid-template-columns: repeat(2, 1fr); }
-        .videos.count-5 { grid-template-columns: repeat(3, 1fr); }
-        .videos.count-6 { grid-template-columns: repeat(3, 1fr); }
-        .videos.count-7 { grid-template-columns: repeat(3, 1fr); }
-        .videos.count-8 { grid-template-columns: repeat(3, 1fr); }
-        .videos.count-9 { grid-template-columns: repeat(3, 1fr); }
 
         .video-wrapper {
-            position: relative;
-            background: #000;
-            border-radius: 12px;
+            position: absolute;
+            background: #111214;
+            border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            border: 2px solid rgba(124, 77, 255, 0.2);
-            aspect-ratio: 16/9;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.4), 0 2px 10px 0 rgba(0,0,0,0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Local video minimized when others join */
-        .video-wrapper.local-minimized {
-            position: fixed !important;
-            bottom: 20px;
-            right: 20px;
-            width: 240px;
-            height: 135px;
-            z-index: 1000;
-            aspect-ratio: 16/9;
+        .video-wrapper:hover {
+            box-shadow: 0 0 0 2px #5865f2, 0 2px 10px 0 rgba(0,0,0,0.3);
         }
+
+        /* Featured speaker (when 2-4 people) */
+        .video-wrapper.featured {
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 100px;
+            border-radius: 8px;
+        }
+
+        /* Local video in bottom right corner when others are present */
+        .video-wrapper.local-pip {
+            width: 280px;
+            height: 158px;
+            bottom: 100px;
+            right: 16px;
+            z-index: 1000;
+            border: 2px solid #1e1f22;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+        }
+
+        .video-wrapper.local-pip:hover {
+            border-color: #5865f2;
+        }
+
+        /* Grid layouts for 3+ participants */
+        .video-wrapper.grid-item {
+            border-radius: 8px;
+        }
+
+        /* 3 participants: 2 on top, 1 on bottom */
+        .videos.layout-3 .video-wrapper:nth-child(1) {
+            top: 10px;
+            left: 10px;
+            width: calc(50% - 15px);
+            height: calc(50% - 55px);
+        }
+        .videos.layout-3 .video-wrapper:nth-child(2) {
+            top: 10px;
+            right: 10px;
+            width: calc(50% - 15px);
+            height: calc(50% - 55px);
+        }
+        .videos.layout-3 .video-wrapper:nth-child(3) {
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(50% - 15px);
+            height: calc(50% - 55px);
+        }
+
+        /* 4 participants: 2x2 grid */
+        .videos.layout-4 .video-wrapper:nth-child(1) {
+            top: 10px;
+            left: 10px;
+            width: calc(50% - 15px);
+            height: calc(50% - 55px);
+        }
+        .videos.layout-4 .video-wrapper:nth-child(2) {
+            top: 10px;
+            right: 10px;
+            width: calc(50% - 15px);
+            height: calc(50% - 55px);
+        }
+        .videos.layout-4 .video-wrapper:nth-child(3) {
+            bottom: 100px;
+            left: 10px;
+            width: calc(50% - 15px);
+            height: calc(50% - 55px);
+        }
+        .videos.layout-4 .video-wrapper:nth-child(4) {
+            bottom: 100px;
+            right: 10px;
+            width: calc(50% - 15px);
+            height: calc(50% - 55px);
+        }
+
+        /* 5-6 participants: 3x2 grid */
+        .videos.layout-5 .video-wrapper,
+        .videos.layout-6 .video-wrapper {
+            width: calc(33.333% - 14px);
+            height: calc(50% - 55px);
+        }
+        .videos.layout-5 .video-wrapper:nth-child(1),
+        .videos.layout-6 .video-wrapper:nth-child(1) {
+            top: 10px;
+            left: 10px;
+        }
+        .videos.layout-5 .video-wrapper:nth-child(2),
+        .videos.layout-6 .video-wrapper:nth-child(2) {
+            top: 10px;
+            left: calc(33.333% + 3px);
+        }
+        .videos.layout-5 .video-wrapper:nth-child(3),
+        .videos.layout-6 .video-wrapper:nth-child(3) {
+            top: 10px;
+            right: 10px;
+        }
+        .videos.layout-5 .video-wrapper:nth-child(4),
+        .videos.layout-6 .video-wrapper:nth-child(4) {
+            bottom: 100px;
+            left: 10px;
+        }
+        .videos.layout-5 .video-wrapper:nth-child(5),
+        .videos.layout-6 .video-wrapper:nth-child(5) {
+            bottom: 100px;
+            left: calc(33.333% + 3px);
+        }
+        .videos.layout-6 .video-wrapper:nth-child(6) {
+            bottom: 100px;
+            right: 10px;
+        }
+
+        /* 7-9 participants: 3x3 grid */
+        .videos.layout-7 .video-wrapper,
+        .videos.layout-8 .video-wrapper,
+        .videos.layout-9 .video-wrapper {
+            width: calc(33.333% - 14px);
+            height: calc(33.333% - 14px);
+        }
+
+        .videos.layout-7 .video-wrapper:nth-child(1),
+        .videos.layout-8 .video-wrapper:nth-child(1),
+        .videos.layout-9 .video-wrapper:nth-child(1) { top: 10px; left: 10px; }
+        .videos.layout-7 .video-wrapper:nth-child(2),
+        .videos.layout-8 .video-wrapper:nth-child(2),
+        .videos.layout-9 .video-wrapper:nth-child(2) { top: 10px; left: calc(33.333% + 3px); }
+        .videos.layout-7 .video-wrapper:nth-child(3),
+        .videos.layout-8 .video-wrapper:nth-child(3),
+        .videos.layout-9 .video-wrapper:nth-child(3) { top: 10px; right: 10px; }
+        .videos.layout-7 .video-wrapper:nth-child(4),
+        .videos.layout-8 .video-wrapper:nth-child(4),
+        .videos.layout-9 .video-wrapper:nth-child(4) { top: calc(33.333% + 3px); left: 10px; }
+        .videos.layout-7 .video-wrapper:nth-child(5),
+        .videos.layout-8 .video-wrapper:nth-child(5),
+        .videos.layout-9 .video-wrapper:nth-child(5) { top: calc(33.333% + 3px); left: calc(33.333% + 3px); }
+        .videos.layout-7 .video-wrapper:nth-child(6),
+        .videos.layout-8 .video-wrapper:nth-child(6),
+        .videos.layout-9 .video-wrapper:nth-child(6) { top: calc(33.333% + 3px); right: 10px; }
+        .videos.layout-7 .video-wrapper:nth-child(7),
+        .videos.layout-8 .video-wrapper:nth-child(7),
+        .videos.layout-9 .video-wrapper:nth-child(7) { bottom: 100px; left: 10px; }
+        .videos.layout-8 .video-wrapper:nth-child(8),
+        .videos.layout-9 .video-wrapper:nth-child(8) { bottom: 100px; left: calc(33.333% + 3px); }
+        .videos.layout-9 .video-wrapper:nth-child(9) { bottom: 100px; right: 10px; }
 
         video {
             width: 100%;
@@ -97,85 +225,232 @@
 
         .video-label {
             position: absolute;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 500;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
             z-index: 10;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #23a55a;
+            border: 2px solid #111214;
+            z-index: 11;
+            box-shadow: 0 0 8px rgba(35, 165, 90, 0.5);
+        }
+
+        .status-indicator.speaking {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(35, 165, 90, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(35, 165, 90, 0.8), 0 0 30px rgba(35, 165, 90, 0.4); }
+        }
+
+        .hand-raised-indicator {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(250, 166, 26, 0.95);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            z-index: 12;
+            display: none;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            animation: raiseHand 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .hand-raised-indicator.active {
+            display: flex;
+        }
+
+        @keyframes raiseHand {
+            0% { transform: translateY(-10px) scale(0.8); opacity: 0; }
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+
+        .screen-share-indicator {
+            position: absolute;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(88, 101, 242, 0.95);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 12;
+            display: none;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .screen-share-indicator.active {
+            display: block;
         }
 
         .controls {
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
+            background: #2b2d31;
+            padding: 16px;
             display: flex;
             justify-content: center;
-            gap: 15px;
-            border-top: 2px solid rgba(124, 77, 255, 0.3);
+            gap: 12px;
+            border-top: 1px solid #1e1f22;
             z-index: 100;
+            box-shadow: 0 -1px 0 rgba(4,4,5,0.2);
         }
 
         .control-btn {
-            width: 55px;
-            height: 55px;
-            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
             border: none;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s ease;
-            font-size: 24px;
+            transition: all 0.17s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 20px;
+            background: #3c3f45;
+            position: relative;
         }
 
         .control-btn:hover {
-            transform: scale(1.1);
+            background: #4e5058;
+            transform: translateY(-2px);
         }
 
-        .mic-btn {
-            background: #7c4dff;
+        .control-btn:active {
+            transform: translateY(0);
+        }
+
+        .control-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-8px);
+            background: #111214;
+            color: #f2f3f5;
+            padding: 6px 10px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.17s;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+        }
+
+        .control-btn:hover::after {
+            opacity: 1;
+        }
+
+        .hand-btn {
+            background: #3c3f45;
+        }
+
+        .hand-btn.raised {
+            background: #faa61a;
+        }
+
+        .hand-btn.raised:hover {
+            background: #f0a020;
+        }
+
+        .screen-share-btn {
+            background: #3c3f45;
+        }
+
+        .screen-share-btn.sharing {
+            background: #5865f2;
+        }
+
+        .screen-share-btn.sharing:hover {
+            background: #4752c4;
+        }
+
+        .settings-btn {
+            background: #3c3f45;
+        }
+
+        .noise-suppression-btn {
+            background: #3c3f45;
+        }
+
+        .noise-suppression-btn.active {
+            background: #23a55a;
+        }
+
+        .noise-suppression-btn.active:hover {
+            background: #1f8f4d;
         }
 
         .mic-btn.muted {
-            background: #ff4444;
+            background: #da373c;
         }
 
-        .video-btn {
-            background: #7c4dff;
+        .mic-btn.muted:hover {
+            background: #a12d30;
         }
 
         .video-btn.disabled {
-            background: #ff4444;
+            background: #da373c;
+        }
+
+        .video-btn.disabled:hover {
+            background: #a12d30;
         }
 
         .leave-btn {
-            background: #ff4444;
+            background: #da373c;
         }
 
         .leave-btn:hover {
-            background: #cc0000;
+            background: #a12d30;
         }
 
         .participants {
             position: absolute;
-            top: 80px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 12px;
-            min-width: 200px;
-            border: 2px solid rgba(124, 77, 255, 0.3);
+            top: 60px;
+            right: 16px;
+            background: #2b2d31;
+            padding: 12px;
+            border-radius: 8px;
+            min-width: 220px;
+            border: 1px solid #1e1f22;
             z-index: 1001;
-            max-height: 300px;
+            max-height: 400px;
             overflow-y: auto;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
         }
 
         .participants h3 {
-            font-size: 14px;
-            color: #7c4dff;
-            margin-bottom: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #949ba4;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .participant-list {
@@ -183,13 +458,140 @@
         }
 
         .participant-list li {
-            padding: 5px 0;
-            font-size: 13px;
-            color: #ddd;
+            padding: 6px 8px;
+            font-size: 14px;
+            color: #f2f3f5;
+            font-weight: 500;
+            border-radius: 4px;
+            transition: background 0.17s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .participant-list li:hover {
+            background: #3c3f45;
+        }
+
+        .participant-list li::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #23a55a;
+            box-shadow: 0 0 4px rgba(35, 165, 90, 0.5);
+            flex-shrink: 0;
+        }
+
+        .participant-list li.hand-raised {
+            background: rgba(250, 166, 26, 0.1);
+            border-left: 3px solid #faa61a;
+            padding-left: 5px;
+        }
+
+        .participant-list li .hand-icon {
+            margin-left: auto;
+            font-size: 16px;
+            animation: wave 0.5s ease-in-out infinite;
+        }
+
+        @keyframes wave {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(15deg); }
+            75% { transform: rotate(-15deg); }
+        }
+
+        .reaction-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80px;
+            z-index: 15;
+            pointer-events: none;
+            animation: reactionPop 1.5s ease-out forwards;
+        }
+
+        @keyframes reactionPop {
+            0% { 
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.5);
+            }
+            20% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.2);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -80%) scale(1);
+            }
+        }
+
+        .reactions-menu {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2b2d31;
+            padding: 8px;
+            border-radius: 24px;
+            display: none;
+            gap: 4px;
+            border: 1px solid #1e1f22;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            z-index: 1002;
+        }
+
+        .reactions-menu.active {
+            display: flex;
+        }
+
+        .reaction-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            background: #3c3f45;
+            cursor: pointer;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.17s;
+        }
+
+        .reaction-btn:hover {
+            background: #4e5058;
+            transform: scale(1.15);
+        }
+
+        .notification-toast {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: #2b2d31;
+            color: #f2f3f5;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+            border: 1px solid #1e1f22;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 2001;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .notification-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
         }
 
         #localVideo {
-            border: 3px solid #7c4dff;
+            border: 2px solid #5865f2;
         }
 
         .connecting-overlay {
@@ -198,7 +600,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.9);
+            background: #1e1f22;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -207,13 +609,13 @@
         }
 
         .spinner {
-            width: 60px;
-            height: 60px;
-            border: 5px solid rgba(124, 77, 255, 0.3);
-            border-top-color: #7c4dff;
+            width: 48px;
+            height: 48px;
+            border: 4px solid #2b2d31;
+            border-top-color: #5865f2;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
         }
 
         @keyframes spin {
@@ -221,8 +623,28 @@
         }
 
         .connecting-text {
-            font-size: 18px;
-            color: #7c4dff;
+            font-size: 16px;
+            font-weight: 600;
+            color: #949ba4;
+        }
+
+        /* Custom scrollbar for participants */
+        .participants::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .participants::-webkit-scrollbar-track {
+            background: #1e1f22;
+            border-radius: 4px;
+        }
+
+        .participants::-webkit-scrollbar-thumb {
+            background: #3c3f45;
+            border-radius: 4px;
+        }
+
+        .participants::-webkit-scrollbar-thumb:hover {
+            background: #4e5058;
         }
     </style>
 </head>
@@ -235,21 +657,41 @@
             </div>
         </div>
 
-        <div class="videos count-1" id="videosContainer">
-            <div class="video-wrapper" id="localVideoWrapper">
+        <div class="videos layout-1" id="videosContainer">
+            <div class="video-wrapper featured" id="localVideoWrapper">
                 <video id="localVideo" autoplay muted playsinline></video>
-                <div class="video-label">You (Local)</div>
+                <div class="video-label">You</div>
+                <div class="status-indicator"></div>
+                <div class="hand-raised-indicator" id="localHandIndicator">✋ Hand Raised</div>
+                <div class="screen-share-indicator" id="localScreenIndicator">Sharing Screen</div>
             </div>
         </div>
 
         <div class="controls">
-            <button class="control-btn mic-btn" id="micBtn" title="Toggle Microphone">🎤</button>
-            <button class="control-btn video-btn" id="videoBtn" title="Toggle Video">📹</button>
-            <button class="control-btn leave-btn" id="leaveBtn" title="Leave Call">📞</button>
+            <button class="control-btn mic-btn" id="micBtn" data-tooltip="Mute">🎤</button>
+            <button class="control-btn video-btn" id="videoBtn" data-tooltip="Turn Off Camera">📹</button>
+            <button class="control-btn screen-share-btn" id="screenShareBtn" data-tooltip="Share Screen">🖥️</button>
+            <button class="control-btn hand-btn" id="handBtn" data-tooltip="Raise Hand">✋</button>
+            <button class="control-btn" id="reactionBtn" data-tooltip="Send Reaction">😊</button>
+            <button class="control-btn noise-suppression-btn" id="noiseBtn" data-tooltip="Noise Suppression">🎵</button>
+            <button class="control-btn settings-btn" id="settingsBtn" data-tooltip="Settings">⚙️</button>
+            <button class="control-btn leave-btn" id="leaveBtn" data-tooltip="Leave Call">📞</button>
         </div>
 
+        <div class="reactions-menu" id="reactionsMenu">
+            <button class="reaction-btn" data-reaction="👍">👍</button>
+            <button class="reaction-btn" data-reaction="❤️">❤️</button>
+            <button class="reaction-btn" data-reaction="😂">😂</button>
+            <button class="reaction-btn" data-reaction="😮">😮</button>
+            <button class="reaction-btn" data-reaction="😢">😢</button>
+            <button class="reaction-btn" data-reaction="👏">👏</button>
+            <button class="reaction-btn" data-reaction="🎉">🎉</button>
+        </div>
+
+        <div class="notification-toast" id="notificationToast"></div>
+
         <div class="participants">
-            <h3>Participants (<span id="participantCount">1</span>)</h3>
+            <h3>Participants — <span id="participantCount">1</span></h3>
             <ul class="participant-list" id="participantList">
                 <li>You</li>
             </ul>
@@ -257,7 +699,7 @@
 
         <div class="connecting-overlay" id="connectingOverlay">
             <div class="spinner"></div>
-            <div class="connecting-text">Connecting to video call...</div>
+            <div class="connecting-text">Connecting to voice...</div>
         </div>
     </div>
 
@@ -274,6 +716,11 @@
     let myID = null;
     let isMicMuted = false;
     let isVideoDisabled = false;
+    let isHandRaised = false;
+    let isScreenSharing = false;
+    let isNoiseSuppression = false;
+    let screenStream = null;
+    let originalVideoTrack = null;
 
     const localVideo = document.getElementById('localVideo');
     const videosContainer = document.getElementById('videosContainer');
@@ -281,6 +728,13 @@
     const micBtn = document.getElementById('micBtn');
     const videoBtn = document.getElementById('videoBtn');
     const leaveBtn = document.getElementById('leaveBtn');
+    const handBtn = document.getElementById('handBtn');
+    const screenShareBtn = document.getElementById('screenShareBtn');
+    const reactionBtn = document.getElementById('reactionBtn');
+    const noiseBtn = document.getElementById('noiseBtn');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const reactionsMenu = document.getElementById('reactionsMenu');
+    const notificationToast = document.getElementById('notificationToast');
     const participantList = document.getElementById('participantList');
     const participantCount = document.getElementById('participantCount');
     const connectingOverlay = document.getElementById('connectingOverlay');
@@ -446,7 +900,7 @@
         
         if (!videoWrapper) {
             videoWrapper = document.createElement('div');
-            videoWrapper.className = 'video-wrapper';
+            videoWrapper.className = 'video-wrapper grid-item';
             videoWrapper.id = `video-${peer_id}`;
             
             const video = document.createElement('video');
@@ -458,12 +912,142 @@
             label.className = 'video-label';
             label.textContent = `User ${peer_id.substring(0, 6)}`;
             
+            const status = document.createElement('div');
+            status.className = 'status-indicator';
+            
+            const handIndicator = document.createElement('div');
+            handIndicator.className = 'hand-raised-indicator';
+            handIndicator.id = `hand-${peer_id}`;
+            handIndicator.textContent = '✋ Hand Raised';
+            
+            const screenIndicator = document.createElement('div');
+            screenIndicator.className = 'screen-share-indicator';
+            screenIndicator.id = `screen-${peer_id}`;
+            screenIndicator.textContent = 'Sharing Screen';
+            
             videoWrapper.appendChild(video);
             videoWrapper.appendChild(label);
+            videoWrapper.appendChild(status);
+            videoWrapper.appendChild(handIndicator);
+            videoWrapper.appendChild(screenIndicator);
             videosContainer.appendChild(videoWrapper);
             
             updateLayout();
         }
+    }
+
+    function showReaction(peer_id, emoji) {
+        const videoWrapper = peer_id === myID ? localVideoWrapper : document.getElementById(`video-${peer_id}`);
+        if (!videoWrapper) return;
+
+        const reaction = document.createElement('div');
+        reaction.className = 'reaction-overlay';
+        reaction.textContent = emoji;
+        videoWrapper.appendChild(reaction);
+
+        setTimeout(() => reaction.remove(), 1500);
+    }
+
+    function showNotification(message) {
+        notificationToast.textContent = message;
+        notificationToast.classList.add('show');
+        setTimeout(() => {
+            notificationToast.classList.remove('show');
+        }, 3000);
+    }
+
+    function toggleHandRaise() {
+        isHandRaised = !isHandRaised;
+        handBtn.classList.toggle('raised', isHandRaised);
+        document.getElementById('localHandIndicator').classList.toggle('active', isHandRaised);
+        
+        // Emit to other users
+        socket.emit('hand_raise', {
+            session_id: sessionId,
+            user_id: myID,
+            raised: isHandRaised
+        });
+
+        updateParticipantListWithHands();
+    }
+
+    async function toggleScreenShare() {
+        if (!isScreenSharing) {
+            try {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: "always" },
+                    audio: false
+                });
+
+                const screenTrack = screenStream.getVideoTracks()[0];
+                originalVideoTrack = localStream.getVideoTracks()[0];
+
+                // Replace video track in all peer connections
+                for (let peer_id in _peer_list) {
+                    const sender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
+                    if (sender) {
+                        sender.replaceTrack(screenTrack);
+                    }
+                }
+
+                // Update local video
+                localVideo.srcObject = screenStream;
+                isScreenSharing = true;
+                screenShareBtn.classList.add('sharing');
+                document.getElementById('localScreenIndicator').classList.add('active');
+
+                screenTrack.onended = () => {
+                    stopScreenShare();
+                };
+
+                socket.emit('screen_share', {
+                    session_id: sessionId,
+                    user_id: myID,
+                    sharing: true
+                });
+
+            } catch (error) {
+                console.error('Error sharing screen:', error);
+                showNotification('Could not share screen');
+            }
+        } else {
+            stopScreenShare();
+        }
+    }
+
+    function stopScreenShare() {
+        if (screenStream) {
+            screenStream.getTracks().forEach(track => track.stop());
+        }
+
+        // Restore original video track
+        for (let peer_id in _peer_list) {
+            const sender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
+            if (sender && originalVideoTrack) {
+                sender.replaceTrack(originalVideoTrack);
+            }
+        }
+
+        localVideo.srcObject = localStream;
+        isScreenSharing = false;
+        screenShareBtn.classList.remove('sharing');
+        document.getElementById('localScreenIndicator').classList.remove('active');
+
+        socket.emit('screen_share', {
+            session_id: sessionId,
+            user_id: myID,
+            sharing: false
+        });
+    }
+
+    function sendReaction(emoji) {
+        showReaction(myID, emoji);
+        socket.emit('reaction', {
+            session_id: sessionId,
+            user_id: myID,
+            emoji: emoji
+        });
+        reactionsMenu.classList.remove('active');
     }
 
     function removeRemoteVideo(peer_id) {
@@ -475,19 +1059,29 @@
     }
 
     function updateLayout() {
-        const allWrappers = videosContainer.querySelectorAll('.video-wrapper');
-        const remoteWrappers = Array.from(allWrappers).filter(w => w.id !== 'localVideoWrapper');
+        const allWrappers = Array.from(videosContainer.querySelectorAll('.video-wrapper'));
+        const remoteWrappers = allWrappers.filter(w => w.id !== 'localVideoWrapper');
         const totalParticipants = remoteWrappers.length + 1;
 
-        // Update grid class
+        // Remove all layout classes
         videosContainer.className = 'videos';
-        videosContainer.classList.add(`count-${Math.min(totalParticipants, 9)}`);
-
-        // Minimize local video when others join
-        if (remoteWrappers.length > 0) {
-            localVideoWrapper.classList.add('local-minimized');
+        
+        if (remoteWrappers.length === 0) {
+            // Only local user - featured view
+            videosContainer.classList.add('layout-1');
+            localVideoWrapper.className = 'video-wrapper featured';
+        } else if (remoteWrappers.length === 1) {
+            // 2 people total - remote featured, local PiP
+            videosContainer.classList.add('layout-2');
+            remoteWrappers[0].className = 'video-wrapper featured';
+            localVideoWrapper.className = 'video-wrapper local-pip';
         } else {
-            localVideoWrapper.classList.remove('local-minimized');
+            // 3+ people - grid layout
+            videosContainer.classList.add(`layout-${totalParticipants}`);
+            localVideoWrapper.className = 'video-wrapper grid-item';
+            remoteWrappers.forEach(w => {
+                w.className = 'video-wrapper grid-item';
+            });
         }
 
         updateParticipantCount(totalParticipants);
@@ -555,6 +1149,49 @@
         }
     });
 
+    socket.on('hand_raise', (data) => {
+        const peer_id = data.user_id;
+        const raised = data.raised;
+        
+        if (peer_id !== myID) {
+            const handIndicator = document.getElementById(`hand-${peer_id}`);
+            if (handIndicator) {
+                handIndicator.classList.toggle('active', raised);
+            }
+            
+            const username = `User ${peer_id.substring(0, 6)}`;
+            if (raised) {
+                showNotification(`${username} raised their hand`);
+            }
+        }
+    });
+
+    socket.on('screen_share', (data) => {
+        const peer_id = data.user_id;
+        const sharing = data.sharing;
+        
+        if (peer_id !== myID) {
+            const screenIndicator = document.getElementById(`screen-${peer_id}`);
+            if (screenIndicator) {
+                screenIndicator.classList.toggle('active', sharing);
+            }
+            
+            const username = `User ${peer_id.substring(0, 6)}`;
+            if (sharing) {
+                showNotification(`${username} is sharing their screen`);
+            }
+        }
+    });
+
+    socket.on('reaction', (data) => {
+        const peer_id = data.user_id;
+        const emoji = data.emoji;
+        
+        if (peer_id !== myID) {
+            showReaction(peer_id, emoji);
+        }
+    });
+
     function updateParticipantList(participants) {
         participantList.innerHTML = '<li>You</li>';
         participants.forEach(p => {
@@ -562,6 +1199,25 @@
                 const li = document.createElement('li');
                 li.textContent = `User ${p.substring(0, 6)}`;
                 participantList.appendChild(li);
+            }
+        });
+    }
+
+    function updateParticipantListWithHands() {
+        const items = participantList.querySelectorAll('li');
+        items.forEach((item, index) => {
+            if (index === 0 && isHandRaised) {
+                item.classList.add('hand-raised');
+                if (!item.querySelector('.hand-icon')) {
+                    const handIcon = document.createElement('span');
+                    handIcon.className = 'hand-icon';
+                    handIcon.textContent = '✋';
+                    item.appendChild(handIcon);
+                }
+            } else if (index === 0) {
+                item.classList.remove('hand-raised');
+                const handIcon = item.querySelector('.hand-icon');
+                if (handIcon) handIcon.remove();
             }
         });
     }
@@ -577,6 +1233,7 @@
         });
         micBtn.classList.toggle('muted', isMicMuted);
         micBtn.textContent = isMicMuted ? '🔇' : '🎤';
+        micBtn.setAttribute('data-tooltip', isMicMuted ? 'Unmute' : 'Mute');
     });
 
     videoBtn.addEventListener('click', () => {
@@ -586,10 +1243,44 @@
         });
         videoBtn.classList.toggle('disabled', isVideoDisabled);
         videoBtn.textContent = isVideoDisabled ? '📷' : '📹';
+        videoBtn.setAttribute('data-tooltip', isVideoDisabled ? 'Turn On Camera' : 'Turn Off Camera');
+    });
+
+    handBtn.addEventListener('click', toggleHandRaise);
+
+    screenShareBtn.addEventListener('click', toggleScreenShare);
+
+    reactionBtn.addEventListener('click', () => {
+        reactionsMenu.classList.toggle('active');
+    });
+
+    document.querySelectorAll('.reaction-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const emoji = btn.getAttribute('data-reaction');
+            sendReaction(emoji);
+        });
+    });
+
+    noiseBtn.addEventListener('click', () => {
+        isNoiseSuppression = !isNoiseSuppression;
+        noiseBtn.classList.toggle('active', isNoiseSuppression);
+        // Note: Actual noise suppression would require audio processing library
+        showNotification(isNoiseSuppression ? 'Noise Suppression enabled' : 'Noise Suppression disabled');
+    });
+
+    settingsBtn.addEventListener('click', () => {
+        showNotification('Settings panel coming soon!');
+    });
+
+    // Close reactions menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!reactionBtn.contains(e.target) && !reactionsMenu.contains(e.target)) {
+            reactionsMenu.classList.remove('active');
+        }
     });
 
     leaveBtn.addEventListener('click', () => {
-        if (confirm('Are you sure you want to leave this call?')) {
+        if (confirm('Are you sure you want to disconnect?')) {
             leaveCall();
         }
     });

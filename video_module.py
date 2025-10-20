@@ -162,6 +162,46 @@ def handle_data(msg):
     
     # Forward to target
     socketio.emit('data', msg, room=target_sid)
+    
+    
+@socketio.on('hand_raise')
+def handle_hand_raise(data):
+    session_id = data['session_id']
+    user_id = data['user_id']
+    raised = data['raised']
+    
+    print(f"[VIDEO SERVER] Hand {'raised' if raised else 'lowered'} by {user_id}")
+    
+    emit('hand_raise', {
+        'user_id': user_id,
+        'raised': raised
+    }, room=session_id, skip_sid=request.sid)
+    
+@socketio.on('screen_share')
+def handle_screen_share(data):
+    session_id = data['session_id']
+    user_id = data['user_id']
+    sharing = data['sharing']
+    
+    print(f"[VIDEO SERVER] Screen {'share' if sharing else 'stop'} by {user_id}")
+    
+    emit('screen_share', {
+        'user_id': user_id,
+        'sharing': sharing
+    }, room=session_id, skip_sid=request.sid)
+
+@socketio.on('reaction')
+def handle_reaction(data):
+    session_id = data['session_id']
+    user_id = data['user_id']
+    emoji = data['emoji']
+    
+    print(f"[VIDEO SERVER] Reaction {emoji} from {user_id}")
+    
+    emit('reaction', {
+        'user_id': user_id,
+        'emoji': emoji
+    }, room=session_id, skip_sid=request.sid)
 
 def create_video_session(session_type: str, session_name: str, creator: str, chat_id: str) -> str:
     """Create a new video session"""

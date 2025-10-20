@@ -301,6 +301,8 @@ class CollaborationServer:
             if 'video_invite' in msg_type:
                 print(f"[SERVER] ERROR: No handler found for {msg_type}")
     
+
+
     def _handle_global_file_share(self, client_socket: socket.socket, message: Dict):
         """Handle global file sharing"""
         sender = message.get('sender')
