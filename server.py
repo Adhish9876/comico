@@ -30,16 +30,19 @@ class CollaborationServer:
         
         self.clients: Dict[socket.socket, Dict[str, Any]] = {}
         self.groups: Dict[str, Dict[str, Any]] = {}
-        self.chat_history: List[Dict] = []
+        # Load chat history from storage instead of starting empty
+        self.chat_history: List[Dict] = storage.get_global_chat(1000)
         self.private_messages: Dict[Tuple[str, str], List[Dict]] = {}
         self.group_messages: Dict[str, List[Dict]] = {}
-        self.file_metadata: Dict[str, Dict[str, Any]] = {}
+        self.file_metadata: Dict[str, Dict[str, Any]] = storage.get_files()
         self.recent_chats: Dict[str, List[str]] = {}
         
         self.lock = threading.Lock()
         self.running = True
         
         print(f"Server initializing on {host}:{port} (chat) and {host}:{file_port} (files)")
+        print(f"Loaded {len(self.chat_history)} historical global messages")
+        print(f"Loaded {len(self.file_metadata)} historical files")
 
     def _create_socket(self) -> socket.socket:
     
@@ -255,8 +258,10 @@ class CollaborationServer:
         handlers = {
             'chat': self._handle_chat_message,
             'private': self._handle_private_message,
+            'private_file': self._handle_private_file,
             'group_create': self._handle_group_create,
             'group_message': self._handle_group_message,
+            'group_file': self._handle_group_file,
             'group_add_member': self._handle_group_add_member,
             'group_remove_member': self._handle_group_remove_member,
             'request_private_history': self._handle_private_history_request,
@@ -264,11 +269,46 @@ class CollaborationServer:
             'screen_share': self._handle_screen_share,
             'save_recent_chat': self._handle_save_recent_chat,
             'request_chat_history': self._handle_chat_history_request,
+            'file_share': self._handle_global_file_share,
         }
         handler = handlers.get(msg_type)
         if handler:
             handler(client_socket, message)
     
+    def _handle_global_file_share(self, client_socket: socket.socket, message: Dict):
+        """Handle global file sharing"""
+        sender = message.get('sender')
+        file_id = message.get('file_id')
+        file_name = message.get('file_name')
+        file_size = message.get('file_size')
+        
+        if not file_id:
+            return
+        
+        print(f"📨 Global file share from {sender}: {file_name}")
+        
+        # Create message object for storage
+        file_notification = {
+            'type': 'file_notification',
+            'sender': sender,
+            'file_id': file_id,
+            'file_name': file_name,
+            'size': file_size,
+            'file_size': file_size,
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Add to global chat history
+        self.chat_history.append(file_notification)
+        storage.add_global_message(file_notification)
+        
+        if len(self.chat_history) > 1000:
+            self.chat_history = self.chat_history[-1000:]
+        
+        # Broadcast to ALL clients
+        print(f"📢 Broadcasting file notification to all clients")
+        self.broadcast(json.dumps(file_notification))
+        
     def _handle_chat_history_request(self, client_socket: socket.socket, message: Dict):
         """Handle request for global chat history"""
         self.send_chat_history(client_socket)
@@ -289,6 +329,7 @@ class CollaborationServer:
         # Broadcast to ALL clients (no exclude)
         print(f"📢 Broadcasting to all {len(self.clients)} connected clients")
         self.broadcast(json.dumps(message))
+
     def _handle_private_message(self, client_socket: socket.socket, message: Dict):
    
         sender = message.get('sender')
@@ -331,6 +372,64 @@ class CollaborationServer:
         
         # SEND MESSAGE BACK TO SENDER SO THEY SEE IT TOO
         self._send_to_client(client_socket, message)
+
+    def _handle_private_file(self, client_socket: socket.socket, message: Dict):
+        """Handle private file sharing"""
+        sender = message.get('sender')
+        receiver = message.get('receiver')
+        file_id = message.get('file_id')
+        file_name = message.get('file_name')
+        file_size = message.get('file_size')
+        
+        if not receiver or not file_id:
+            return
+        
+        print(f"📨 Private file from {sender} to {receiver}: {file_name}")
+        
+        # Create message object for storage - PRIVATE ONLY, don't broadcast
+        file_message = {
+            'type': 'private_file',
+            'sender': sender,
+            'receiver': receiver,
+            'file_id': file_id,
+            'file_name': file_name,
+            'size': file_size,
+            'file_size': file_size,
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Store in private chat history ONLY
+        storage.add_private_message(sender, receiver, file_message)
+        
+        # Update recent chats
+        with self.lock:
+            if sender not in self.recent_chats:
+                self.recent_chats[sender] = []
+            if receiver not in self.recent_chats:
+                self.recent_chats[receiver] = []
+                
+            if receiver not in self.recent_chats[sender]:
+                self.recent_chats[sender].insert(0, receiver)
+                if len(self.recent_chats[sender]) > 5:
+                    self.recent_chats[sender].pop()
+            
+            if sender not in self.recent_chats[receiver]:
+                self.recent_chats[receiver].insert(0, sender)
+                if len(self.recent_chats[receiver]) > 5:
+                    self.recent_chats[receiver].pop()
+        
+        # Send ONLY to receiver if online - don't broadcast to everyone
+        receiver_socket = self._find_client_socket(receiver)
+        if receiver_socket:
+            self._send_to_client(receiver_socket, file_message)
+            print(f"   ✓ Sent file to {receiver}")
+        else:
+            print(f"   ℹ️  {receiver} is offline, file saved to history")
+        
+        # Send acknowledgment back to sender
+        self._send_to_client(client_socket, file_message)
+        print(f"   ✓ Sent file acknowledgment to {sender}")
+
     def _handle_group_create(self, client_socket: socket.socket, message: Dict):
         """Handle group creation"""
         group_name = message.get('group_name')
@@ -383,10 +482,49 @@ class CollaborationServer:
         self.group_messages[group_id].append(message)
         storage.add_group_message(group_id, message)  # PERSIST TO STORAGE
         
+        # Send to ALL group members including sender
         with self.lock:
             for sock, info in self.clients.items():
-                if sock != client_socket and info['username'] in self.groups[group_id]['members']:
+                if info['username'] in self.groups[group_id]['members']:
                     self._send_to_client(sock, message)
+
+    def _handle_group_file(self, client_socket: socket.socket, message: Dict):
+        """Handle group file sharing"""
+        group_id = message.get('group_id')
+        sender = message.get('sender')
+        file_id = message.get('file_id')
+        file_name = message.get('file_name')
+        file_size = message.get('file_size')
+        
+        if group_id not in self.groups or not file_id:
+            return
+        
+        if sender not in self.groups[group_id]['members']:
+            return
+        
+        print(f"📨 Group file from {sender} in group {group_id}: {file_name}")
+        
+        # Create file message for group
+        file_message = {
+            'type': 'group_file',
+            'sender': sender,
+            'group_id': group_id,
+            'file_id': file_id,
+            'file_name': file_name,
+            'size': file_size,
+            'file_size': file_size,
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Store in group chat history
+        self.group_messages[group_id].append(file_message)
+        storage.add_group_message(group_id, file_message)
+        
+        # Send to all group members
+        with self.lock:
+            for sock, info in self.clients.items():
+                if info['username'] in self.groups[group_id]['members']:
+                    self._send_to_client(sock, file_message)
 
     def _handle_group_add_member(self, client_socket: socket.socket, message: Dict):
         """Handle adding member to group"""
@@ -565,15 +703,10 @@ class CollaborationServer:
         if bytes_received == file_size:
             print(f"✓ File received: {file_name} ({self._format_bytes(bytes_received)})")
             
-            notification = {
-                'type': 'file_notification',
-                'file_id': file_id,
-                'file_name': file_name,
-                'sender': sender,
-                'size': file_size,
-                'timestamp': self.file_metadata[file_id]['timestamp']
-            }
-            self.broadcast(json.dumps(notification))
+            # Don't broadcast file_notification here anymore
+            # Let the client send private_file, group_file, or explicit global broadcast
+            # This prevents files from appearing in wrong chat contexts
+            
         else:
             print(f"⚠️ Incomplete file transfer: {bytes_received}/{file_size} bytes")
 
@@ -614,6 +747,8 @@ class CollaborationServer:
         try:
             # GET FROM STORAGE
             messages = storage.get_global_chat(100)
+            
+            print(f"📜 Sending {len(messages)} chat history messages to client")
             
             history_msg = {
                 'type': 'chat_history',

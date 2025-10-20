@@ -145,18 +145,33 @@ def disconnect_from_server():
     return {'success': True}
 
 @eel.expose
-def upload_file(file_path: str):
+def upload_file(file_name: str, file_size: int, file_data):
     """Upload a file to the server"""
     if not state.connected:
         return {'success': False, 'message': 'Not connected'}
     
+    if not file_name or not file_data:
+        return {'success': False, 'message': 'No file selected'}
+    
+    # Check file size limit (2GB = 2 * 1024 * 1024 * 1024 bytes)
+    MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
+    if file_size > MAX_FILE_SIZE:
+        return {'success': False, 'message': f'File too large. Maximum size is 2GB'}
+    
     try:
+        import base64
+        
+        # Decode base64 data if it's a string
+        if isinstance(file_data, str):
+            file_bytes = base64.b64decode(file_data)
+        else:
+            file_bytes = file_data
+        
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(30.0)
+        sock.settimeout(120.0)  # Increase timeout to 2 minutes for large files
         sock.connect((state.server_host, state.file_port))
         
-        file_name = os.path.basename(file_path)
-        file_size = os.path.getsize(file_path)
+        print(f"[CLIENT] Uploading file: {file_name} ({file_size} bytes)")
         
         # Send metadata
         metadata = {
@@ -164,7 +179,7 @@ def upload_file(file_path: str):
             'file_size': file_size,
             'sender': state.username
         }
-        sock.send(json.dumps(metadata).encode('utf-8'))
+        sock.send(json.dumps(metadata).encode('utf-8') + b'\n')
         
         # Wait for ready signal
         response = json.loads(sock.recv(1024).decode('utf-8'))
@@ -175,21 +190,14 @@ def upload_file(file_path: str):
         file_id = response.get('file_id')
         
         # Send file data
-        with open(file_path, 'rb') as f:
-            bytes_sent = 0
-            while bytes_sent < file_size:
-                chunk = f.read(4096)
-                if not chunk:
-                    break
-                sock.sendall(chunk)
-                bytes_sent += len(chunk)
-                progress = int((bytes_sent / file_size) * 100)
-                eel.updateProgress(progress)
+        sock.sendall(file_bytes)
         
-        sock.close()
-        print(f"[CLIENT] File uploaded: {file_name}")
+        print(f"[CLIENT] File upload complete: {file_name}")
+        print(f"[CLIENT] File uploaded successfully: {file_name}")
         return {'success': True, 'file_id': file_id, 'file_name': file_name}
     
+    except FileNotFoundError:
+        return {'success': False, 'message': 'File not found on disk'}
     except Exception as e:
         print(f"Upload error: {e}")
         return {'success': False, 'message': str(e)}

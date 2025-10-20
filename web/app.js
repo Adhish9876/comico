@@ -1,4 +1,4 @@
-// Shadow Nexus - Updated Client Logic
+// Shadow Nexus - Updated Client Logic with Fixed Private File Sharing
 
 let currentChatType = 'global';
 let currentChatTarget = null;
@@ -108,64 +108,118 @@ function handleMessage(message) {
     console.log('Current chat type:', currentChatType);
     console.log('Message type:', message.type);
     console.log('================================');
-    console.log('Received message:', message); // Debugging log
     const msgType = message.type;
 
     if (msgType === 'chat' && currentChatType === 'global') {
-        // Show all messages, including your own
         addMessage(message);
     }
-     else if (msgType === 'private') {
-    console.log('Private message from', message.sender, 'to', message.receiver);
-    // Show message if in private chat with this person
-    const isRelevant = (message.sender === username && currentChatTarget === message.receiver) ||
-                       (message.receiver === username && currentChatTarget === message.sender);
-    
-    if (currentChatType === 'private' && isRelevant) {
-        addMessage(message);
-    }
-    
-    // Add to recent chats if received from someone
-    if (message.receiver === username) {
-        addToRecentChats(message.sender);
-    }
-}
-     else if (msgType === 'group_message') {
-        console.log('Processing group message:', message); // Debugging log
-        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
-            if (message.sender !== username) addMessage(message);
+    else if (msgType === 'private') {
+        console.log('Private message from', message.sender, 'to', message.receiver);
+        const isRelevant = (message.sender === username && currentChatTarget === message.receiver) ||
+                           (message.receiver === username && currentChatTarget === message.sender);
+        
+        if (currentChatType === 'private' && isRelevant) {
+            addMessage(message);
         }
-    } else if (msgType === 'system') {
-        console.log('Processing system message:', message); // Debugging log
+        
+        if (message.receiver === username) {
+            addToRecentChats(message.sender);
+        }
+    }
+    else if (msgType === 'private_file') {
+        console.log('Private file from', message.sender, 'to', message.receiver);
+        const isRelevant = (message.sender === username && currentChatTarget === message.receiver) ||
+                           (message.receiver === username && currentChatTarget === message.sender);
+        
+        if (currentChatType === 'private' && isRelevant) {
+            addMessage(message);
+            addFileToList(message);
+        }
+        
+        if (message.receiver === username) {
+            addToRecentChats(message.sender);
+            showNotification(`${message.sender} shared a file`, 'info');
+        }
+    }
+    else if (msgType === 'group_message') {
+        console.log('Processing group message:', message);
+        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+            // Allow sender to see their own messages too
+            addMessage(message);
+        }
+    }
+    else if (msgType === 'group_file') {
+        console.log('Processing group file:', message);
+        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+            addMessage(message);
+            addFileToList(message);
+        }
+    }
+    else if (msgType === 'system') {
+        console.log('Processing system message:', message);
         addSystemMessage(message.content);
-    } else if (msgType === 'chat_history') {
-        console.log('Processing chat history:', message); // Debugging log
+    }
+    else if (msgType === 'chat_history') {
+        console.log('Processing chat history:', message);
         messagesContainer.innerHTML = '';
         message.messages.forEach(msg => addMessage(msg));
-    } else if (msgType === 'private_history') {
-        console.log('Processing private history:', message); // Debugging log
+    }
+    else if (msgType === 'private_history') {
+        console.log('Processing private history:', message);
         if (currentChatType === 'private' && currentChatTarget === message.target_user) {
             messagesContainer.innerHTML = '';
-            message.messages.forEach(msg => addMessage(msg));
+            message.messages.forEach(msg => {
+                addMessage(msg);
+                // Add files to the shared files list
+                if (msg.type === 'private_file') {
+                    addFileToList(msg);
+                }
+            });
         }
-    } else if (msgType === 'group_history') {
-        console.log('Processing group history:', message); // Debugging log
+    }
+    else if (msgType === 'group_history') {
+        console.log('Processing group history:', message);
         if (currentChatType === 'group' && currentChatTarget === message.group_id) {
             messagesContainer.innerHTML = '';
-            message.messages.forEach(msg => addMessage(msg));
+            message.messages.forEach(msg => {
+                addMessage(msg);
+                // Add files to the shared files list
+                if (msg.type === 'group_file') {
+                    addFileToList(msg);
+                }
+            });
         }
-    } else if (msgType === 'user_list') {
-        console.log('Processing user list update:', message.users); // Debugging log
+    }
+    else if (msgType === 'user_list') {
+        console.log('Processing user list update:', message.users);
         updateUsersList(message.users);
-    } else if (msgType === 'group_list') {
-        console.log('Processing group list update:', message); // Debugging log
+    }
+    else if (msgType === 'group_list') {
+        console.log('Processing group list update:', message);
         updateGroupsList(message.groups);
-    } else if (msgType === 'file_notification') {
-        console.log('Processing file notification:', message); // Debugging log
+    }
+    else if (msgType === 'file_notification') {
+        console.log('Processing file notification:', message);
+        console.log('File notification received for:', message.file_name, 'from:', message.sender);
         addFileToList(message);
-        showNotification(`${message.sender} shared a file`, 'info');
-    } else if (msgType === 'file_metadata') {
-        console.log('Processing file metadata:', message); // Debugging log
+        // Show file for ALL users (including sender) in ALL chat types
+        addMessage({
+            type: 'file_share',
+            file_id: message.file_id,
+            file_name: message.file_name || message.name,
+            sender: message.sender,
+            size: message.size || message.file_size,
+            file_size: message.size || message.file_size,
+            timestamp: message.timestamp || getCurrentTime(),
+            isOwn: message.sender === username
+        });
+        console.log('File message added to chat for:', message.file_name);
+        if (message.sender !== username) {
+            showNotification(`${message.sender} shared a file`, 'info');
+        }
+    }
+    else if (msgType === 'file_metadata') {
+        console.log('Processing file metadata:', message);
         message.files.forEach(file => addFileToList(file));
     }
 }
@@ -199,11 +253,34 @@ function addMessage(message) {
         content.appendChild(header);
     }
     
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
-    bubble.textContent = message.content;
+    // Check if this is a file share message
+    if ((message.type === 'file_share' || message.type === 'file_notification' || message.type === 'private_file' || message.type === 'group_file') && message.file_id) {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'message-bubble file-item';
+        
+        const infoSection = document.createElement('div');
+        infoSection.className = 'file-info-section';
+        infoSection.innerHTML = `
+            <div class="file-name">${message.file_name || message.name}</div>
+            <div class="file-detail">${formatFileSize(message.size || message.file_size)} • ${message.sender}</div>
+        `;
+        
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'file-download-btn';
+        downloadBtn.textContent = 'Download';
+        downloadBtn.onclick = () => downloadFile(message);
+        
+        fileItem.appendChild(infoSection);
+        fileItem.appendChild(downloadBtn);
+        content.appendChild(fileItem);
+    } else if (message.type !== 'private_file' && message.type !== 'file_share' && message.type !== 'file_notification' && message.type !== 'group_file') {
+        // Regular text message
+        const bubble = document.createElement('div');
+        bubble.className = 'message-bubble';
+        bubble.textContent = message.content;
+        content.appendChild(bubble);
+    }
     
-    content.appendChild(bubble);
     messageDiv.appendChild(avatar);
     messageDiv.appendChild(content);
     
@@ -221,8 +298,7 @@ function addSystemMessage(content) {
 
 // ===== USER & GROUP LISTS =====
 function updateUsersList(users) {
-    console.log('updateUsersList called with:', users); // Debugging log
-    // Only show users who are not yourself
+    console.log('updateUsersList called with:', users);
     allUsers = users.filter(u => u !== username);
     usersList.innerHTML = '';
     if (allUsers.length === 0) {
@@ -304,7 +380,6 @@ async function switchToPrivateChat(user) {
     document.querySelector(`.chat-item[data-user="${user}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
     addToRecentChats(user);
-    // Always request private chat history from server
     await eel.send_message('request_private_history', '', {target_user: user})();
 }
 
@@ -330,7 +405,6 @@ globalNetworkItem.addEventListener('click', async function() {
     messagesContainer.innerHTML = '';
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     this.classList.add('active');
-    // Request chat history from server when switching to global tab
     await eel.send_message('request_chat_history', '', {})();
 });
 
@@ -354,17 +428,71 @@ attachBtn.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) {
+        console.log('[APP] No file selected');
+        return;
+    }
+    
+    console.log('[APP] File selected:', file.name, file.size);
     
     try {
-        const result = await eel.upload_file(file.path)();
+        const fileData = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+        
+        // Convert ArrayBuffer to base64 in chunks to avoid stack overflow
+        const uint8Array = new Uint8Array(fileData);
+        let base64Data = '';
+        const chunkSize = 8192; // Process 8KB at a time
+        
+        for (let i = 0; i < uint8Array.length; i += chunkSize) {
+            const chunk = uint8Array.subarray(i, i + chunkSize);
+            base64Data += String.fromCharCode.apply(null, chunk);
+        }
+        
+        base64Data = btoa(base64Data);
+        console.log('[APP] Uploading file:', file.name, 'Size:', file.size);
+        const result = await eel.upload_file(file.name, file.size, base64Data)();
+        
         if (result.success) {
-            showNotification('File uploaded', 'success');
+            showNotification(`✓ Uploaded: ${result.file_name}`, 'success');
+            console.log('[APP] Upload successful:', result);
+            
+            // Send file to appropriate context based on current chat
+            if (currentChatType === 'private' && currentChatTarget) {
+                console.log('[APP] Sending to private chat with:', currentChatTarget);
+                await eel.send_message('private_file', '', {
+                    receiver: currentChatTarget,
+                    file_id: result.file_id,
+                    file_name: result.file_name,
+                    file_size: file.size
+                })();
+            } else if (currentChatType === 'group' && currentChatTarget) {
+                console.log('[APP] Sending to group chat:', currentChatTarget);
+                await eel.send_message('group_file', '', {
+                    group_id: currentChatTarget,
+                    file_id: result.file_id,
+                    file_name: result.file_name,
+                    file_size: file.size
+                })();
+            } else {
+                console.log('[APP] Sending to global chat');
+                await eel.send_message('file_share', '', {
+                    file_id: result.file_id,
+                    file_name: result.file_name,
+                    file_size: file.size
+                })();
+            }
         } else {
-            showNotification('Upload failed', 'error');
+            showNotification(`✗ Upload failed: ${result.message}`, 'error');
+            console.log('[APP] Upload error:', result);
         }
     } catch (error) {
-        showNotification('Upload error', 'error');
+        showNotification('Upload error: ' + error, 'error');
+        console.error('[APP] Upload exception:', error);
     }
     fileInput.value = '';
 });
@@ -495,9 +623,8 @@ function showGroupModal(users) {
     };
 }
 
-// Add event listener for the refresh button
 refreshUsersBtn.addEventListener('click', () => {
-    eel.refresh_user_list()(); // Call the Python function to refresh the user list
+    eel.refresh_user_list()();
 });
 
 // ===== UTILITY FUNCTIONS =====
