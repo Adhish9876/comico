@@ -1,10 +1,17 @@
-// Shadow Nexus - Updated Client Logic with Fixed Private File Sharing
+// Shadow Nexus - Complete Fixed Client with Persistent Chat History
 
 let currentChatType = 'global';
 let currentChatTarget = null;
 let username = '';
 let recentChats = [];
 let allUsers = [];
+
+// Store all chat histories locally
+const chatHistories = {
+    global: [],
+    private: {},  // username -> messages[]
+    group: {}     // groupId -> messages[]
+};
 
 // DOM Elements
 const connectionScreen = document.getElementById('connectionScreen');
@@ -104,22 +111,27 @@ async function sendMessage() {
 
 eel.expose(handleMessage);
 function handleMessage(message) {
-    console.log('===== RAW MESSAGE RECEIVED =====');
-    console.log('Message:', message);
-    console.log('Current chat type:', currentChatType);
-    console.log('Message type:', message.type);
-    console.log('================================');
+    console.log('===== MESSAGE RECEIVED =====');
+    console.log('Type:', message.type);
+    console.log('Current chat:', currentChatType, currentChatTarget);
+    
     const msgType = message.type;
 
-    if (msgType === 'chat' && currentChatType === 'global') {
-        addMessage(message);
+    // Store messages in appropriate history and display if in correct chat
+    if (msgType === 'chat') {
+        chatHistories.global.push(message);
+        if (currentChatType === 'global') {
+            addMessage(message);
+        }
     }
     else if (msgType === 'private') {
-        console.log('Private message from', message.sender, 'to', message.receiver);
-        const isRelevant = (message.sender === username && currentChatTarget === message.receiver) ||
-                           (message.receiver === username && currentChatTarget === message.sender);
+        const otherUser = message.sender === username ? message.receiver : message.sender;
+        if (!chatHistories.private[otherUser]) {
+            chatHistories.private[otherUser] = [];
+        }
+        chatHistories.private[otherUser].push(message);
         
-        if (currentChatType === 'private' && isRelevant) {
+        if (currentChatType === 'private' && currentChatTarget === otherUser) {
             addMessage(message);
         }
         
@@ -128,11 +140,13 @@ function handleMessage(message) {
         }
     }
     else if (msgType === 'private_file') {
-        console.log('Private file from', message.sender, 'to', message.receiver);
-        const isRelevant = (message.sender === username && currentChatTarget === message.receiver) ||
-                           (message.receiver === username && currentChatTarget === message.sender);
+        const otherUser = message.sender === username ? message.receiver : message.sender;
+        if (!chatHistories.private[otherUser]) {
+            chatHistories.private[otherUser] = [];
+        }
+        chatHistories.private[otherUser].push(message);
         
-        if (currentChatType === 'private' && isRelevant) {
+        if (currentChatType === 'private' && currentChatTarget === otherUser) {
             addMessage(message);
             addFileToList(message);
         }
@@ -143,99 +157,85 @@ function handleMessage(message) {
         }
     }
     else if (msgType === 'group_message') {
-        console.log('Processing group message:', message);
+        if (!chatHistories.group[message.group_id]) {
+            chatHistories.group[message.group_id] = [];
+        }
+        chatHistories.group[message.group_id].push(message);
+        
         if (currentChatType === 'group' && currentChatTarget === message.group_id) {
-            // Allow sender to see their own messages too
             addMessage(message);
         }
     }
     else if (msgType === 'group_file') {
-        console.log('Processing group file:', message);
+        if (!chatHistories.group[message.group_id]) {
+            chatHistories.group[message.group_id] = [];
+        }
+        chatHistories.group[message.group_id].push(message);
+        
         if (currentChatType === 'group' && currentChatTarget === message.group_id) {
             addMessage(message);
             addFileToList(message);
         }
     }
     else if (msgType === 'system') {
-        console.log('Processing system message:', message);
         addSystemMessage(message.content);
     }
     else if (msgType === 'chat_history') {
-        console.log('Processing chat history:', message);
-        messagesContainer.innerHTML = '';
-        message.messages.forEach(msg => addMessage(msg));
+        chatHistories.global = message.messages || [];
+        if (currentChatType === 'global') {
+            renderCurrentChat();
+        }
     }
     else if (msgType === 'private_history') {
-        console.log('Processing private history:', message);
-        if (currentChatType === 'private' && currentChatTarget === message.target_user) {
-            messagesContainer.innerHTML = '';
-            message.messages.forEach(msg => {
-                addMessage(msg);
-                // Add files to the shared files list
-                if (msg.type === 'private_file') {
-                    addFileToList(msg);
-                }
-            });
+        const targetUser = message.target_user;
+        chatHistories.private[targetUser] = message.messages || [];
+        if (currentChatType === 'private' && currentChatTarget === targetUser) {
+            renderCurrentChat();
         }
     }
     else if (msgType === 'group_history') {
-        console.log('Processing group history:', message);
-        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
-            messagesContainer.innerHTML = '';
-            message.messages.forEach(msg => {
-                addMessage(msg);
-                // Add files to the shared files list
-                if (msg.type === 'group_file') {
-                    addFileToList(msg);
-                }
-            });
+        const groupId = message.group_id;
+        chatHistories.group[groupId] = message.messages || [];
+        if (currentChatType === 'group' && currentChatTarget === groupId) {
+            renderCurrentChat();
         }
     }
     else if (msgType === 'user_list') {
-        console.log('Processing user list update:', message.users);
         updateUsersList(message.users);
     }
     else if (msgType === 'group_list') {
-        console.log('Processing group list update:', message);
         updateGroupsList(message.groups);
     }
     else if (msgType === 'file_notification') {
-        console.log('Processing file notification:', message);
-        console.log('File notification received for:', message.file_name, 'from:', message.sender);
+        chatHistories.global.push(message);
         addFileToList(message);
-        // Show file for ALL users (including sender) in ALL chat types
-        addMessage({
-            type: 'file_share',
-            file_id: message.file_id,
-            file_name: message.file_name || message.name,
-            sender: message.sender,
-            size: message.size || message.file_size,
-            file_size: message.size || message.file_size,
-            timestamp: message.timestamp || getCurrentTime(),
-            isOwn: message.sender === username
-        });
-        console.log('File message added to chat for:', message.file_name);
+        
+        if (currentChatType === 'global') {
+            addMessage(message);
+        }
+        
         if (message.sender !== username) {
             showNotification(`${message.sender} shared a file`, 'info');
         }
     }
     else if (msgType === 'file_metadata') {
-        console.log('Processing file metadata:', message);
         message.files.forEach(file => addFileToList(file));
     }
     else if (msgType === 'audio_message' || msgType === 'private_audio' || msgType === 'group_audio') {
-        console.log('Processing audio message:', message);
-        
-        // Show in global chat if it's an audio_message type
-        if (msgType === 'audio_message' && currentChatType === 'global') {
-            addMessage(message);
+        if (msgType === 'audio_message') {
+            chatHistories.global.push(message);
+            if (currentChatType === 'global') {
+                addMessage(message);
+            }
         }
-        // Show in private chat if it's relevant to current private chat
         else if (msgType === 'private_audio') {
-            const isRelevant = (message.sender === username && currentChatTarget === message.receiver) ||
-                              (message.receiver === username && currentChatTarget === message.sender);
+            const otherUser = message.sender === username ? message.receiver : message.sender;
+            if (!chatHistories.private[otherUser]) {
+                chatHistories.private[otherUser] = [];
+            }
+            chatHistories.private[otherUser].push(message);
             
-            if (currentChatType === 'private' && isRelevant) {
+            if (currentChatType === 'private' && currentChatTarget === otherUser) {
                 addMessage(message);
             }
             
@@ -244,22 +244,115 @@ function handleMessage(message) {
                 showNotification(`${message.sender} sent an audio message`, 'info');
             }
         }
-        // Show in group chat if it's the current group
-        else if (msgType === 'group_audio' && currentChatType === 'group' && currentChatTarget === message.group_id) {
-            addMessage(message);
+        else if (msgType === 'group_audio') {
+            if (!chatHistories.group[message.group_id]) {
+                chatHistories.group[message.group_id] = [];
+            }
+            chatHistories.group[message.group_id].push(message);
+            
+            if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+                addMessage(message);
+            }
         }
     }
-    // Handle video invites
+    // Handle video invites with proper storage
     else if (msgType === 'video_invite') {
-        handleVideoInvite(message, 'Global Network');
+        console.log('[VIDEO] Global video invite received');
+        chatHistories.global.push(message);
+        
+        // Display the invite if we're viewing global chat
+        if (currentChatType === 'global') {
+            if (message.is_acknowledgment) {
+                // This is just an acknowledgment, don't show the invite again
+                return;
+            }
+            handleVideoInvite(message);
+        } else if (message.sender !== username) {
+            // We're not in global chat but someone else started a call
+            showNotification(`${message.sender} started a video call in Global Network`, 'info');
+        }
     }
     else if (msgType === 'video_invite_private') {
-        if (message.receiver === username) {
-            handleVideoInvite(message, `Private chat with ${message.sender}`);
+        console.log('[VIDEO] Private video invite received');
+        const otherUser = message.sender === username ? message.receiver : message.sender;
+
+        if (!chatHistories.private[otherUser]) {
+            chatHistories.private[otherUser] = [];
+        }
+        chatHistories.private[otherUser].push(message);
+
+        // Both sender and receiver should see the join button if they're viewing the chat
+        if (currentChatType === 'private' && currentChatTarget === otherUser) {
+            if (message.is_acknowledgment) {
+                // This is just an acknowledgment, don't show the invite again
+                return;
+            }
+            handleVideoInvite(message);
+        } else if (message.sender !== username) {
+            // We're the receiver but not viewing this chat
+            showNotification(`${message.sender} started a video call`, 'info');
         }
     }
     else if (msgType === 'video_invite_group') {
-        handleVideoInvite(message, `Group chat`);
+        console.log('[VIDEO] Group video invite received');
+
+        if (!chatHistories.group[message.group_id]) {
+            chatHistories.group[message.group_id] = [];
+        }
+        chatHistories.group[message.group_id].push(message);
+
+        // Display the invite if we're viewing this group chat
+        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+            if (message.is_acknowledgment) {
+                // This is just an acknowledgment, don't show the invite again
+                return;
+            }
+            handleVideoInvite(message);
+        } else if (message.sender !== username) {
+            // We're not viewing this group but someone else started a call
+            showNotification(`${message.sender} started a video call in group`, 'info');
+        }
+    }
+    else if (msgType === 'video_missed') {
+        handleVideoMissed(message);
+    }
+}
+
+function renderCurrentChat() {
+    messagesContainer.innerHTML = '';
+    
+    if (currentChatType === 'global') {
+        chatHistories.global.forEach(msg => {
+            if (msg.type === 'video_invite') {
+                handleVideoInvite(msg);
+            } else {
+                addMessage(msg);
+            }
+        });
+    } else if (currentChatType === 'private' && currentChatTarget) {
+        const history = chatHistories.private[currentChatTarget] || [];
+        history.forEach(msg => {
+            if (msg.type === 'video_invite_private') {
+                handleVideoInvite(msg);
+            } else {
+                addMessage(msg);
+                if (msg.type === 'private_file') {
+                    addFileToList(msg);
+                }
+            }
+        });
+    } else if (currentChatType === 'group' && currentChatTarget) {
+        const history = chatHistories.group[currentChatTarget] || [];
+        history.forEach(msg => {
+            if (msg.type === 'video_invite_group') {
+                handleVideoInvite(msg);
+            } else {
+                addMessage(msg);
+                if (msg.type === 'group_file') {
+                    addFileToList(msg);
+                }
+            }
+        });
     }
 }
 
@@ -292,7 +385,7 @@ function addMessage(message) {
         content.appendChild(header);
     }
     
-    // Check if this is a file share message
+    // Handle different message types
     if ((message.type === 'file_share' || message.type === 'file_notification' || message.type === 'private_file' || message.type === 'group_file') && message.file_id) {
         const fileItem = document.createElement('div');
         fileItem.className = 'message-bubble file-item';
@@ -312,8 +405,7 @@ function addMessage(message) {
         fileItem.appendChild(infoSection);
         fileItem.appendChild(downloadBtn);
         content.appendChild(fileItem);
-    } 
-    // Check if this is an audio message
+    }
     else if ((message.type === 'audio_message' || message.type === 'private_audio' || message.type === 'group_audio') && (message.audio_data || message.has_audio)) {
         const audioItem = document.createElement('div');
         audioItem.className = 'message-bubble audio-item';
@@ -333,7 +425,6 @@ function addMessage(message) {
             </svg> Play
         `;
         
-        // If audio data is available
         if (message.audio_data) {
             playBtn.onclick = () => {
                 playBtn.disabled = true;
@@ -349,19 +440,15 @@ function addMessage(message) {
                 });
             };
         } else {
-            // If audio needs to be downloaded first
             playBtn.textContent = 'Audio not available';
             playBtn.disabled = true;
-            playBtn.title = 'Audio data not available for old messages';
         }
         
         audioItem.appendChild(infoSection);
         audioItem.appendChild(playBtn);
         content.appendChild(audioItem);
     }
-    else if (message.type !== 'private_file' && message.type !== 'file_share' && message.type !== 'file_notification' && 
-             message.type !== 'group_file' && message.type !== 'audio_message' && message.type !== 'private_audio' && 
-             message.type !== 'group_audio') {
+    else if (!['private_file', 'file_share', 'file_notification', 'group_file', 'audio_message', 'private_audio', 'group_audio', 'video_invite', 'video_invite_private', 'video_invite_group'].includes(message.type)) {
         // Regular text message
         const bubble = document.createElement('div');
         bubble.className = 'message-bubble';
@@ -376,57 +463,151 @@ function addMessage(message) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-function handleVideoInvite(message, chatContext) {
+function handleVideoInvite(message) {
     const { sender, link, session_id } = message;
     
-    console.log(`[VIDEO] Video invite from ${sender} for ${chatContext}`);
+    console.log('[VIDEO] Handling video invite from', sender);
     
-    // Show system message in chat
-    addSystemMessage(`${sender} started a video call in ${chatContext}`);
+    // Check if this invite is already marked as missed
+    const isMissed = message.is_missed || false;
+    const missedTime = message.missed_at || '';
     
-    // Show notification with join option
-    showVideoInviteNotification(sender, link, chatContext);
+    const videoMessage = document.createElement('div');
+    videoMessage.className = 'message system-message';
+    if (session_id) videoMessage.dataset.sessionId = session_id;
+    
+    if (isMissed) {
+        // Show missed call message
+        videoMessage.innerHTML = `
+            <div style="background: linear-gradient(135deg, rgba(85, 85, 85, 0.2), rgba(119, 119, 119, 0.2)); 
+                        border: 2px solid rgba(119, 119, 119, 0.5); 
+                        border-radius: 12px; 
+                        padding: 15px 20px; 
+                        margin: 10px 0;
+                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <div style="font-size: 28px;">📵</div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 16px; color: #999; margin-bottom: 4px;">
+                            ${sender} started a video call
+                        </div>
+                        <div style="font-size: 13px; color: #777;">
+                            ${message.timestamp || new Date().toLocaleTimeString()}
+                        </div>
+                    </div>
+                </div>
+                <button class="join-call-btn" disabled
+                        style="width: 100%; 
+                               background: linear-gradient(135deg, #555, #777); 
+                               border: none; 
+                               border-radius: 8px; 
+                               padding: 12px 20px; 
+                               color: white; 
+                               font-weight: 600; 
+                               font-size: 15px; 
+                               cursor: default; 
+                               font-family: 'Rajdhani', sans-serif;
+                               text-transform: uppercase;
+                               letter-spacing: 1px;">
+                    📵 Missed Call (${missedTime})
+                </button>
+            </div>
+        `;
+    } else {
+        // Show active call invitation
+        videoMessage.innerHTML = `
+            <div style="background: linear-gradient(135deg, rgba(124, 77, 255, 0.2), rgba(0, 212, 255, 0.2)); 
+                        border: 2px solid rgba(124, 77, 255, 0.5); 
+                        border-radius: 12px; 
+                        padding: 15px 20px; 
+                        margin: 10px 0;
+                        box-shadow: 0 4px 20px rgba(124, 77, 255, 0.3);">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <div style="font-size: 28px;">📹</div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 16px; color: #7c4dff; margin-bottom: 4px;">
+                            ${sender} started a video call
+                        </div>
+                        <div style="font-size: 13px; color: #9ca3af;">
+                            ${message.timestamp || new Date().toLocaleTimeString()}
+                        </div>
+                    </div>
+                </div>
+                <button class="join-call-btn" onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'video_call', 'width=1200,height=800')" 
+                        style="width: 100%; 
+                               background: linear-gradient(135deg, #7c4dff, #00d4ff); 
+                               border: none; 
+                               border-radius: 8px; 
+                               padding: 12px 20px; 
+                               color: white; 
+                               font-weight: 600; 
+                               font-size: 15px; 
+                               cursor: pointer; 
+                               transition: all 0.3s;
+                               font-family: 'Rajdhani', sans-serif;
+                               text-transform: uppercase;
+                               letter-spacing: 1px;"
+                        onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 25px rgba(124, 77, 255, 0.5)';"
+                        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
+                    🎥 Join Video Call
+                </button>
+            </div>
+        `;
+    }
+    
+    messagesContainer.appendChild(videoMessage);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-function showVideoInviteNotification(sender, link, chatContext) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 100px;
-        right: 20px;
-        background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(124, 58, 237, 0.2));
-        border: 1px solid rgba(0, 212, 255, 0.5);
-        border-radius: 12px;
-        padding: 16px 20px;
-        color: #e8eaed;
-        font-size: 14px;
-        font-weight: 600;
-        z-index: 10001;
-        box-shadow: 0 8px 32px rgba(0, 212, 255, 0.3);
-        font-family: 'Rajdhani', sans-serif;
-        max-width: 350px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    `;
+function handleVideoMissed(message) {
+    const sessionId = message.session_id;
+    const timestamp = message.timestamp || getCurrentTime();
+    if (!sessionId) return;
+
+    console.log('[VIDEO] Handling missed call for session:', sessionId);
+
+    // Find all video invite messages with this session ID
+    const selectors = document.querySelectorAll(`[data-session-id="${sessionId}"]`);
+    console.log('[VIDEO] Found', selectors.length, 'invite messages to update');
     
-    notification.innerHTML = `
-        <div>📹 ${sender} started a video call in ${chatContext}</div>
-        <div style="display: flex; gap: 8px;">
-            <button style="flex: 1; background: rgba(0, 212, 255, 0.3); border: 1px solid rgba(0, 212, 255, 0.5); border-radius: 6px; padding: 8px; color: #00d4ff; cursor: pointer; font-weight: 600; font-family: 'Rajdhani', sans-serif; transition: all 0.3s;" onclick="window.open('${link}', 'video_call', 'width=1024,height=768')">Join Call</button>
-            <button style="flex: 1; background: transparent; border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 6px; padding: 8px; color: #9ca3af; cursor: pointer; font-weight: 600; font-family: 'Rajdhani', sans-serif;" onclick="this.parentElement.parentElement.remove()">Dismiss</button>
-        </div>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto-dismiss after 15 seconds
-    setTimeout(() => {
-        if (notification.parentElement) {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => notification.remove(), 300);
+    selectors.forEach(el => {
+        const btn = el.querySelector('.join-call-btn');
+        if (btn && !btn.disabled) {  // Only update if not already disabled
+            console.log('[VIDEO] Updating button to missed call');
+            btn.disabled = true;
+            btn.textContent = `📵 Missed Call (${timestamp})`;
+            btn.style.background = 'linear-gradient(135deg, #555, #777)';
+            btn.style.cursor = 'default';
+            btn.onmouseover = null;
+            btn.onmouseout = null;
         }
-    }, 15000);
+    });
+    
+    // Also update in stored history
+    if (message.session_type === 'global') {
+        updateVideoInviteInHistory(chatHistories.global, sessionId, timestamp);
+    } else if (message.session_type === 'private' && message.chat_id) {
+        const otherUser = message.chat_id;
+        if (chatHistories.private[otherUser]) {
+            updateVideoInviteInHistory(chatHistories.private[otherUser], sessionId, timestamp);
+        }
+    } else if (message.session_type === 'group' && message.chat_id) {
+        if (chatHistories.group[message.chat_id]) {
+            updateVideoInviteInHistory(chatHistories.group[message.chat_id], sessionId, timestamp);
+        }
+    }
+}
+
+function updateVideoInviteInHistory(history, sessionId, timestamp) {
+    // Find and mark the video invite as missed in history
+    for (let msg of history) {
+        if (msg.session_id === sessionId && 
+            (msg.type === 'video_invite' || msg.type === 'video_invite_private' || msg.type === 'video_invite_group')) {
+            msg.is_missed = true;
+            msg.missed_at = timestamp;
+            console.log('[VIDEO] Marked invite as missed in history');
+        }
+    }
 }
 
 function addSystemMessage(content) {
@@ -439,7 +620,6 @@ function addSystemMessage(content) {
 
 // ===== USER & GROUP LISTS =====
 function updateUsersList(users) {
-    console.log('updateUsersList called with:', users);
     allUsers = users.filter(u => u !== username);
     usersList.innerHTML = '';
     if (allUsers.length === 0) {
@@ -516,11 +696,16 @@ async function switchToPrivateChat(user) {
     currentChatTarget = user;
     chatHeaderName.textContent = user;
     chatHeaderStatus.textContent = 'Private Chat';
-    messagesContainer.innerHTML = '';
+    
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     document.querySelector(`.chat-item[data-user="${user}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
     addToRecentChats(user);
+    
+    // Render local history first
+    renderCurrentChat();
+    
+    // Then request updated history from server
     await eel.send_message('request_private_history', '', {target_user: user})();
     await eel.set_current_chat('private', user)();
 }
@@ -530,12 +715,15 @@ async function switchToGroupChat(groupId, groupName) {
     currentChatTarget = groupId;
     chatHeaderName.textContent = groupName;
     chatHeaderStatus.textContent = 'Group Chat';
-    messagesContainer.innerHTML = '';
     
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     document.querySelector(`.chat-item[data-group-id="${groupId}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
     
+    // Render local history first
+    renderCurrentChat();
+    
+    // Then request updated history from server
     await eel.send_message('request_group_history', '', {group_id: groupId})();
     await eel.set_current_chat('group', groupId)();
 }
@@ -545,151 +733,57 @@ globalNetworkItem.addEventListener('click', async function() {
     currentChatTarget = null;
     chatHeaderName.textContent = 'Global Network';
     chatHeaderStatus.textContent = 'Secure broadcast channel';
-    messagesContainer.innerHTML = '';
+    
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     this.classList.add('active');
+    
+    // Render local history first
+    renderCurrentChat();
+    
+    // Then request updated history from server
     await eel.send_message('request_chat_history', '', {})();
     await eel.set_current_chat('global', null)();
 });
 
-// ===== TABS =====
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        const tab = this.dataset.tab;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
+// ===== VIDEO CALL =====
+videoCallBtn.addEventListener('click', async () => {
+    if (!currentChatType) {
+        showNotification('Select a chat first', 'warning');
+        return;
+    }
+    
+    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' : 
+                           currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
+                           `Group chat`;
+    
+    if (!confirm(`Start video call in ${chatTypeDisplay}?`)) {
+        return;
+    }
+    
+    try {
+        const result = await eel.start_video_call(currentChatType, currentChatTarget || 'global')();
         
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        document.querySelector(`.tab-content[data-tab="${tab}"]`).classList.add('active');
-    });
+        if (result.success) {
+            // Open video call window
+            window.open(`${result.link}?username=${encodeURIComponent(username)}`, 'video_call', 'width=1200,height=800');
+            showNotification('Video call started!', 'success');
+        } else {
+            showNotification(`Failed to start call: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification('Error starting video call', 'error');
+    }
 });
 
-// ===== FILES AND AUDIO =====
+// ===== FILE HANDLING =====
 filesToggleBtn.addEventListener('click', () => filesPanel.classList.toggle('active'));
 closeFilesBtn.addEventListener('click', () => filesPanel.classList.remove('active'));
 uploadFileBtn.addEventListener('click', () => fileInput.click());
 attachBtn.addEventListener('click', () => fileInput.click());
 
-// Audio recording
-const recordAudioBtn = document.getElementById('recordAudioBtn');
-const recordingIndicator = document.getElementById('recordingIndicator');
-const recordingText = document.getElementById('recordingText');
-let isRecording = false;
-let currentRecordingData = null;
-let currentRecordingDuration = 0;
-
-recordAudioBtn.addEventListener('click', async () => {
-    if (isRecording) {
-        // Stop recording and send message
-        try {
-            const result = await eel.stop_audio_recording()();
-            if (result.success) {
-                showNotification('Audio recorded and sent', 'success');
-                sendAudioMessage(result.audio_data, result.duration);
-            } else {
-                showNotification(`Recording failed: ${result.message}`, 'error');
-            }
-        } catch (error) {
-            showNotification('Error stopping recording', 'error');
-            console.error('[APP] Stop recording error:', error);
-        } finally {
-            isRecording = false;
-            updateRecordButtonState();
-        }
-    } else {
-        // Start recording
-        try {
-            isRecording = true;
-            updateRecordButtonState();
-            
-            const result = await eel.start_audio_recording()();
-            if (!result.success) {
-                showNotification(`Failed to start recording: ${result.message}`, 'error');
-                isRecording = false;
-                updateRecordButtonState();
-            }
-        } catch (error) {
-            showNotification('Error starting recording', 'error');
-            console.error('[APP] Start recording error:', error);
-            isRecording = false;
-            updateRecordButtonState();
-        }
-    }
-});
-
-function updateRecordButtonState() {
-    if (isRecording) {
-        recordAudioBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16"/>
-                <rect x="14" y="4" width="4" height="16"/>
-            </svg>
-        `;
-        recordAudioBtn.style.color = 'var(--danger)';
-        recordAudioBtn.title = 'Click to stop recording and send';
-    } else {
-        recordAudioBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-            </svg>
-        `;
-        recordAudioBtn.style.color = '';
-        recordAudioBtn.title = 'Click to start recording';
-    }
-}// Function exposed to Python to show recording state
-eel.expose(showRecordingState);
-function showRecordingState(recording, duration = 0) {
-    if (recording) {
-        recordingIndicator.style.display = 'block';
-        
-        // Start countdown timer
-        let seconds = 0;
-        const countdownInterval = setInterval(() => {
-            seconds++;
-            recordingText.textContent = `Recording... (${seconds}s)`;
-            
-            if (seconds >= duration) {
-                clearInterval(countdownInterval);
-            }
-        }, 1000);
-        
-        // Store interval ID to clear it later
-        recordingIndicator.dataset.intervalId = countdownInterval;
-    } else {
-        // Clear interval if exists
-        if (recordingIndicator.dataset.intervalId) {
-            clearInterval(parseInt(recordingIndicator.dataset.intervalId));
-            delete recordingIndicator.dataset.intervalId;
-        }
-        recordingIndicator.style.display = 'none';
-    }
-}
-
-async function sendAudioMessage(audioData, duration) {
-    try {
-        console.log(`[APP] Sending audio message (${Math.round(audioData.length/1024)}KB, ${duration}s)`);
-        const result = await eel.send_audio_message(audioData, duration)();
-        
-        if (result.success) {
-            showNotification('Audio message sent', 'success');
-        } else {
-            showNotification(`Failed to send audio: ${result.message}`, 'error');
-        }
-    } catch (error) {
-        showNotification('Error sending audio', 'error');
-        console.error('[APP] Send audio error:', error);
-    }
-}
-
 fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
-    if (!file) {
-        console.log('[APP] No file selected');
-        return;
-    }
-    
-    console.log('[APP] File selected:', file.name, file.size);
+    if (!file) return;
     
     try {
         const fileData = await new Promise((resolve, reject) => {
@@ -699,10 +793,9 @@ fileInput.addEventListener('change', async (e) => {
             reader.readAsArrayBuffer(file);
         });
         
-        // Convert ArrayBuffer to base64 in chunks to avoid stack overflow
         const uint8Array = new Uint8Array(fileData);
         let base64Data = '';
-        const chunkSize = 8192; // Process 8KB at a time
+        const chunkSize = 8192;
         
         for (let i = 0; i < uint8Array.length; i += chunkSize) {
             const chunk = uint8Array.subarray(i, i + chunkSize);
@@ -710,16 +803,12 @@ fileInput.addEventListener('change', async (e) => {
         }
         
         base64Data = btoa(base64Data);
-        console.log('[APP] Uploading file:', file.name, 'Size:', file.size);
         const result = await eel.upload_file(file.name, file.size, base64Data)();
         
         if (result.success) {
             showNotification(`✓ Uploaded: ${result.file_name}`, 'success');
-            console.log('[APP] Upload successful:', result);
             
-            // Send file to appropriate context based on current chat
             if (currentChatType === 'private' && currentChatTarget) {
-                console.log('[APP] Sending to private chat with:', currentChatTarget);
                 await eel.send_message('private_file', '', {
                     receiver: currentChatTarget,
                     file_id: result.file_id,
@@ -727,7 +816,6 @@ fileInput.addEventListener('change', async (e) => {
                     file_size: file.size
                 })();
             } else if (currentChatType === 'group' && currentChatTarget) {
-                console.log('[APP] Sending to group chat:', currentChatTarget);
                 await eel.send_message('group_file', '', {
                     group_id: currentChatTarget,
                     file_id: result.file_id,
@@ -735,7 +823,6 @@ fileInput.addEventListener('change', async (e) => {
                     file_size: file.size
                 })();
             } else {
-                console.log('[APP] Sending to global chat');
                 await eel.send_message('file_share', '', {
                     file_id: result.file_id,
                     file_name: result.file_name,
@@ -744,11 +831,9 @@ fileInput.addEventListener('change', async (e) => {
             }
         } else {
             showNotification(`✗ Upload failed: ${result.message}`, 'error');
-            console.log('[APP] Upload error:', result);
         }
     } catch (error) {
         showNotification('Upload error: ' + error, 'error');
-        console.error('[APP] Upload exception:', error);
     }
     fileInput.value = '';
 });
@@ -800,7 +885,6 @@ newGroupBtn.addEventListener('click', async () => {
         showNotification('No other users online', 'warning');
         return;
     }
-    
     showGroupModal(allUsers);
 });
 
@@ -813,12 +897,10 @@ function showGroupModal(users) {
     
     modalContent.innerHTML = `
         <div class="modal-title">Create New Group</div>
-        
         <div class="form-group">
             <label>Group Name</label>
             <input type="text" id="groupNameInput" placeholder="Enter group name">
         </div>
-        
         <div class="admin-selector">
             <label>Group Admin</label>
             <select id="adminSelect">
@@ -826,7 +908,6 @@ function showGroupModal(users) {
                 ${users.map(u => `<option value="${u}">${u}</option>`).join('')}
             </select>
         </div>
-        
         <div style="margin-bottom: 16px;">
             <label style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; display: block; margin-bottom: 10px;">Select Members</label>
             <div class="user-select-list">
@@ -838,7 +919,6 @@ function showGroupModal(users) {
                 `).join('')}
             </div>
         </div>
-        
         <div class="modal-buttons">
             <button class="modal-btn cancel" id="cancelBtn">Cancel</button>
             <button class="modal-btn create" id="createBtn">Create Group</button>
@@ -879,46 +959,20 @@ function showGroupModal(users) {
     };
 }
 
-refreshUsersBtn.addEventListener('click', () => {
-    eel.refresh_user_list()();
+// ===== TABS =====
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const tab = this.dataset.tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelector(`.tab-content[data-tab="${tab}"]`).classList.add('active');
+    });
 });
 
-// ===== VIDEO CALL FUNCTIONALITY =====
-videoCallBtn.addEventListener('click', async () => {
-    if (!currentChatType) {
-        showNotification('Select a chat first', 'warning');
-        return;
-    }
-    
-    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' : 
-                           currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
-                           `Group chat`;
-    
-    if (!confirm(`Start video call in ${chatTypeDisplay}?`)) {
-        return;
-    }
-    
-    try {
-        console.log(`[VIDEO] Starting ${currentChatType} video call`);
-        
-        const result = await eel.start_video_call(currentChatType, currentChatTarget || 'global')();
-        
-        if (result.success) {
-            const { session_id, link } = result;
-            
-            console.log(`[VIDEO] Call started: ${session_id}, Link: ${link}`);
-            
-            // Open video call window
-            window.open(link, 'video_call', 'width=1024,height=768');
-            showNotification('Video call started!', 'success');
-            
-        } else {
-            showNotification(`Failed to start call: ${result.error}`, 'error');
-        }
-    } catch (error) {
-        console.error('[VIDEO] Error starting call:', error);
-        showNotification('Error starting video call', 'error');
-    }
+refreshUsersBtn.addEventListener('click', () => {
+    eel.refresh_user_list()();
 });
 
 // ===== UTILITY FUNCTIONS =====

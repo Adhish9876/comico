@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-video_server.py - Flask WebRTC Signaling Server for Shadow Nexus
-Handles WebRTC signaling for video conferencing
+video_server.py - Flask WebRTC Signaling Server with Session Tracking
+Handles WebRTC signaling and notifies when sessions become empty
 """
 
 from flask import Flask, render_template, request, jsonify
+import json
 from flask_socketio import SocketIO, emit, join_room, leave_room
+import socket as py_socket
 import uuid
 from datetime import datetime
 from typing import Dict, List
@@ -16,8 +18,11 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Active video sessions
 video_sessions: Dict[str, Dict] = {}
-# Participants in each session
-session_participants: Dict[str, List[str]] = {}
+
+# Track users in each session/room
+_users_in_room = {}  # room_id -> [sid, sid, ...]
+_room_of_sid = {}    # sid -> room_id
+_name_of_sid = {}    # sid -> display_name
 
 @app.route('/')
 def index():
@@ -42,8 +47,9 @@ def api_create_session():
     session_type = data.get('session_type', 'global')
     session_name = data.get('session_name', 'Video Call')
     creator = data.get('creator', 'Unknown')
+    chat_id = data.get('chat_id', 'global')
     
-    session_id = create_video_session(session_type, session_name, creator)
+    session_id = create_video_session(session_type, session_name, creator, chat_id)
     
     return jsonify({
         'success': True,
@@ -53,100 +59,111 @@ def api_create_session():
 
 @socketio.on('connect')
 def handle_connect():
-    print(f"[VIDEO SERVER] Client connected: {request.sid}")
-    emit('connected', {'sid': request.sid})
+    sid = request.sid
+    print(f"[VIDEO SERVER] Client connected: {sid}")
+    emit('connected', {'sid': sid})
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print(f"[VIDEO SERVER] Client disconnected: {request.sid}")
-    # Remove from all sessions
-    for session_id, participants in session_participants.items():
-        if request.sid in participants:
-            participants.remove(request.sid)
-            emit('participant_left', {'sid': request.sid}, room=session_id, skip_sid=request.sid)
+    sid = request.sid
+    print(f"[VIDEO SERVER] Client disconnected: {sid}")
+    
+    # Remove from room
+    if sid in _room_of_sid:
+        room_id = _room_of_sid[sid]
+        display_name = _name_of_sid.get(sid, 'Unknown')
+        
+        if room_id in _users_in_room and sid in _users_in_room[room_id]:
+            _users_in_room[room_id].remove(sid)
+            
+            # Notify others in room
+            emit('user-disconnect', {'sid': sid}, room=room_id, skip_sid=sid)
+            
+            # CHECK IF ROOM IS NOW EMPTY
+            if len(_users_in_room[room_id]) == 0:
+                print(f"[VIDEO SERVER] Room {room_id} is now empty - notifying chat server")
+                _users_in_room.pop(room_id)
+                # Notify chat server that session is empty
+                notify_chat_server_session_empty(room_id)
+        
+        _room_of_sid.pop(sid)
+        _name_of_sid.pop(sid)
+        
+        print(f"[VIDEO SERVER] User <{sid}> left room <{room_id}>")
 
 @socketio.on('join_session')
 def handle_join_session(data):
-    """Handle user joining video session"""
-    session_id = data.get('session_id')
-    username = data.get('username')
+    """Handle user joining video session (room) - mesh topology"""
+    sid = request.sid
+    room_id = data.get('session_id')
+    username = data.get('username', 'Guest')
     
-    if session_id not in video_sessions:
+    if room_id not in video_sessions:
         emit('error', {'message': 'Invalid session'})
         return
     
-    join_room(session_id)
+    # Join the room
+    join_room(room_id)
+    _room_of_sid[sid] = room_id
+    _name_of_sid[sid] = username
     
-    if session_id not in session_participants:
-        session_participants[session_id] = []
+    print(f"[VIDEO SERVER] {username} <{sid}> joined session {room_id}")
     
-    session_participants[session_id].append(request.sid)
-    
-    # Notify others in the room
-    emit('participant_joined', {
-        'sid': request.sid,
-        'username': username
-    }, room=session_id, skip_sid=request.sid)
-    
-    # Send existing participants to new user
-    emit('existing_participants', {
-        'participants': [p for p in session_participants[session_id] if p != request.sid]
-    })
-    
-    print(f"[VIDEO SERVER] {username} joined session {session_id}")
+    # Initialize room user list if needed
+    if room_id not in _users_in_room:
+        _users_in_room[room_id] = [sid]
+        # First user in room
+        emit('user-list', {'my_id': sid}, room=sid)
+        print(f"[VIDEO SERVER] First user in room {room_id}")
+    else:
+        # Existing users in room - send them to new user
+        existing_users = {u_id: _name_of_sid[u_id] for u_id in _users_in_room[room_id]}
+        emit('user-list', {'list': existing_users, 'my_id': sid}, room=sid)
+        
+        # Notify existing users about new user
+        emit('user-connect', {'sid': sid, 'name': username}, room=room_id, skip_sid=sid)
+        
+        # Add new user to room
+        _users_in_room[room_id].append(sid)
+        print(f"[VIDEO SERVER] New user joined. Room {room_id} now has {len(_users_in_room[room_id])} users")
 
 @socketio.on('leave_session')
 def handle_leave_session(data):
     """Handle user leaving video session"""
-    session_id = data.get('session_id')
+    sid = request.sid
+    room_id = data.get('session_id')
     
-    if session_id in session_participants:
-        if request.sid in session_participants[session_id]:
-            session_participants[session_id].remove(request.sid)
+    if room_id in _users_in_room and sid in _users_in_room[room_id]:
+        _users_in_room[room_id].remove(sid)
+        leave_room(room_id)
+        emit('user-disconnect', {'sid': sid}, room=room_id)
         
-        leave_room(session_id)
-        emit('participant_left', {'sid': request.sid}, room=session_id)
-    
-    print(f"[VIDEO SERVER] Client left session {session_id}")
+        # Check if room is now empty
+        if len(_users_in_room[room_id]) == 0:
+            print(f"[VIDEO SERVER] Room {room_id} is now empty after leave")
+            _users_in_room.pop(room_id)
+            notify_chat_server_session_empty(room_id)
+        
+        print(f"[VIDEO SERVER] User {sid} left room {room_id}")
 
-@socketio.on('offer')
-def handle_offer(data):
-    """Forward WebRTC offer"""
-    target_sid = data.get('target')
-    offer = data.get('offer')
+@socketio.on('data')
+def handle_data(msg):
+    """Forward WebRTC signaling data (offer/answer/ICE) between peers"""
+    sender_sid = msg.get('sender_id')
+    target_sid = msg.get('target_id')
+    msg_type = msg.get('type')
     
-    emit('offer', {
-        'offer': offer,
-        'sender': request.sid
-    }, room=target_sid)
+    if sender_sid != request.sid:
+        print(f"[VIDEO SERVER] WARNING: sender_id mismatch!")
+        return
     
-    print(f"[VIDEO SERVER] Forwarded offer from {request.sid} to {target_sid}")
+    if msg_type != 'new-ice-candidate':
+        print(f"[VIDEO SERVER] {msg_type} from {sender_sid} to {target_sid}")
+    
+    # Forward to target
+    socketio.emit('data', msg, room=target_sid)
 
-@socketio.on('answer')
-def handle_answer(data):
-    """Forward WebRTC answer"""
-    target_sid = data.get('target')
-    answer = data.get('answer')
-    
-    emit('answer', {
-        'answer': answer,
-        'sender': request.sid
-    }, room=target_sid)
-    
-    print(f"[VIDEO SERVER] Forwarded answer from {request.sid} to {target_sid}")
-
-@socketio.on('ice_candidate')
-def handle_ice_candidate(data):
-    """Forward ICE candidate"""
-    target_sid = data.get('target')
-    candidate = data.get('candidate')
-    
-    emit('ice_candidate', {
-        'candidate': candidate,
-        'sender': request.sid
-    }, room=target_sid)
-
-def create_video_session(session_type: str, session_name: str, creator: str) -> str:
+def create_video_session(session_type: str, session_name: str, creator: str, chat_id: str) -> str:
     """Create a new video session"""
     session_id = str(uuid.uuid4())[:8]
     video_sessions[session_id] = {
@@ -154,62 +171,58 @@ def create_video_session(session_type: str, session_name: str, creator: str) -> 
         'type': session_type,
         'name': session_name,
         'creator': creator,
+        'chat_id': chat_id,
         'created_at': datetime.now().isoformat()
     }
-    session_participants[session_id] = []
-    print(f"[VIDEO SERVER] Created session {session_id} ({session_type})")
+    print(f"[VIDEO SERVER] Created session {session_id} ({session_type}) for chat {chat_id}")
     return session_id
 
-def start_video_call(chat_type: str, chat_id: str) -> dict:
-    """
-    Start a video call for the specified chat context
-    Returns a dict with session info
-    """
+def notify_chat_server_session_empty(session_id: str):
+    
     try:
-        session_id = str(uuid.uuid4())[:8]
-        
-        # Determine session name based on type
-        if chat_type == 'global':
-            session_name = 'Global Video Call'
-        elif chat_type == 'private':
-            session_name = f'Private Video Call'
-        elif chat_type == 'group':
-            session_name = f'Group Video Call - {chat_id}'
-        else:
-            session_name = 'Video Call'
-        
-        # Create session in our local sessions dict
-        video_sessions[session_id] = {
-            'id': session_id,
-            'type': chat_type,
-            'name': session_name,
-            'chat_id': chat_id,
-            'created_at': datetime.now().isoformat()
-        }
-        session_participants[session_id] = []
-        
-        # Generate the video conference link
-        join_link = f"http://localhost:5000/video/{session_id}"
-        
-        print(f"[VIDEO] Started {chat_type} call (ID: {chat_id}, Session: {session_id})")
-        
-        return {
-            'success': True,
+        session = video_sessions.get(session_id)
+        if not session:
+            print(f"[VIDEO SERVER] Session {session_id} not found in video_sessions")
+            return
+
+        payload = {
+            'type': 'video_missed',
+            'sender': 'VideoServer',
             'session_id': session_id,
-            'link': join_link,
-            'chat_type': chat_type,
-            'chat_id': chat_id
+            'session_type': session.get('type', 'global'),
+            'chat_id': session.get('chat_id', 'global'),
+            'timestamp': datetime.now().strftime('%H:%M:%S')
         }
+
+        print(f"[VIDEO SERVER] Notifying chat server about empty session: {payload}")
+
+        # Connect to chat server TCP socket
+        chat_host = 'localhost'
+        chat_port = 5555
+        s = py_socket.socket(py_socket.AF_INET, py_socket.SOCK_STREAM)
+        s.settimeout(5.0)
+        s.connect((chat_host, chat_port))
+        
+        # Send FAKE username first (server requires it) but mark as system
+        s.send((json.dumps({'username': '_VideoServer_System_'}) + '\n').encode('utf-8'))
+        
+        # Wait a tiny bit for server to process username
+        import time as pytime
+        pytime.sleep(0.1)
+        
+        # Send the missed call notification
+        s.send((json.dumps(payload) + '\n').encode('utf-8'))
+        
+        # Wait for confirmation
+        pytime.sleep(0.2)
+        
+        s.close()
     except Exception as e:
-        print(f"[VIDEO] Error starting call: {e}")
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        print(f"[VIDEO SERVER] Error notifying chat server: {str(e)}")
 
 if __name__ == '__main__':
     print("\n" + "="*60)
     print("🎥 Shadow Nexus Video Server (WebRTC)")
     print("="*60)
     print("Video server starting on http://localhost:5000\n")
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)

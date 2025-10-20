@@ -332,11 +332,12 @@ def start_video_call(chat_type, chat_id):
         else:
             session_name = 'Video Call'
         
-        # Call video server API to create session
+        # Call video server API to create session with chat_id
         response = requests.post('http://localhost:5000/api/create_session', json={
             'session_type': chat_type,
             'session_name': session_name,
-            'creator': state.username
+            'creator': state.username,
+            'chat_id': chat_id  # CRITICAL: Pass chat_id to video server
         })
         
         if response.status_code != 200:
@@ -348,6 +349,10 @@ def start_video_call(chat_type, chat_id):
             session_id = result['session_id']
             link = result['link']
             
+            print(f"[CLIENT] Video session created: {session_id}")
+            print(f"[CLIENT] Video link: {link}")
+            print(f"[CLIENT] Chat type: {chat_type}, Chat ID: {chat_id}")
+            
             # Send video invite to appropriate recipients
             if chat_type == 'global':
                 message_type = 'video_invite'
@@ -358,6 +363,7 @@ def start_video_call(chat_type, chat_id):
                     'link': link,
                     'timestamp': datetime.now().strftime("%H:%M:%S")
                 }
+                print(f"[CLIENT] Sending global video invite")
             elif chat_type == 'private':
                 message_type = 'video_invite_private'
                 message_data = {
@@ -368,6 +374,7 @@ def start_video_call(chat_type, chat_id):
                     'link': link,
                     'timestamp': datetime.now().strftime("%H:%M:%S")
                 }
+                print(f"[CLIENT] Sending private video invite to: {chat_id}")
             elif chat_type == 'group':
                 message_type = 'video_invite_group'
                 message_data = {
@@ -378,12 +385,18 @@ def start_video_call(chat_type, chat_id):
                     'link': link,
                     'timestamp': datetime.now().strftime("%H:%M:%S")
                 }
+                print(f"[CLIENT] Sending group video invite to group: {chat_id}")
             else:
                 return {'success': False, 'error': 'Invalid chat type'}
             
             # Send the video invite message to server
             if state.connected and state.socket:
+                print(f"[CLIENT] Sending video invite message: {message_type}")
+                print(f"[CLIENT] Message data: {message_data}")
                 state.socket.send((json.dumps(message_data) + '\n').encode('utf-8'))
+                print(f"[CLIENT] Video invite message sent successfully")
+            else:
+                print(f"[CLIENT] ERROR: Not connected or no socket available")
             
             return result
         else:

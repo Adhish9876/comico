@@ -194,8 +194,17 @@ class CollaborationServer:
             return None
 
     def _send_welcome_messages(self, client_socket: socket.socket, username: str):
-   
-    # First, send to all OTHER clients that someone joined
+        # SKIP welcome messages for system users like VideoServer
+        if username.startswith('_') and username.endswith('_System_'):
+            print(f"[SERVER] System connection from {username} - skipping broadcasts")
+            # Just send them minimal data
+            self.send_chat_history(client_socket)
+            # DON'T broadcast to other users
+            # DON'T add to user list
+            return
+        
+        # Normal user - proceed with welcome messages
+        # First, send to all OTHER clients that someone joined
         welcome_msg = {
             'type': 'system',
             'sender': 'Server',
@@ -203,7 +212,6 @@ class CollaborationServer:
             'timestamp': self._timestamp()
         }
         self.broadcast(json.dumps(welcome_msg), exclude=client_socket)
-        
         # Now send welcome message to the new user themselves
         welcome_msg_self = {
             'type': 'system',
@@ -255,6 +263,12 @@ class CollaborationServer:
         if 'timestamp' not in message:
             message['timestamp'] = self._timestamp()
         msg_type = message.get('type', 'chat')
+        
+        # Debug logging for video invites
+        if 'video_invite' in msg_type:
+            print(f"[SERVER] Routing video message: {msg_type}")
+            print(f"[SERVER] Message details: {message}")
+        
         handlers = {
             'chat': self._handle_chat_message,
             'private': self._handle_private_message,
@@ -276,10 +290,16 @@ class CollaborationServer:
             'video_invite': self._handle_video_invite,
             'video_invite_private': self._handle_video_invite_private,
             'video_invite_group': self._handle_video_invite_group,
+            'video_missed': self._handle_video_missed,
         }
         handler = handlers.get(msg_type)
         if handler:
+            if 'video_invite' in msg_type:
+                print(f"[SERVER] Found handler for {msg_type}, calling it")
             handler(client_socket, message)
+        else:
+            if 'video_invite' in msg_type:
+                print(f"[SERVER] ERROR: No handler found for {msg_type}")
     
     def _handle_global_file_share(self, client_socket: socket.socket, message: Dict):
         """Handle global file sharing"""
@@ -768,11 +788,16 @@ class CollaborationServer:
         session_id = message.get('session_id')
         link = message.get('link')
         
+        print(f"[SERVER] Received global video invite from {sender}")
+        print(f"[SERVER] Session ID: {session_id}")
+        print(f"[SERVER] Link: {link}")
+        
         if not session_id or not link:
+            print(f"[SERVER] ERROR: Missing session_id or link in video invite")
             return
         
         print(f"📹 Global video invite from {sender}")
-        
+
         # Create video invite message
         video_invite = {
             'type': 'video_invite',
@@ -782,9 +807,18 @@ class CollaborationServer:
             'chat_type': 'global',
             'timestamp': message.get('timestamp', self._timestamp())
         }
-        
-        # Broadcast to all clients except sender
-        self.broadcast(json.dumps(video_invite), exclude=client_socket)
+
+        # Persist to global chat history
+        self.chat_history.append(video_invite)
+        storage.add_global_message(video_invite)
+        if len(self.chat_history) > 1000:
+            self.chat_history = self.chat_history[-1000:]
+
+        print(f"[SERVER] Broadcasting global video invite to all clients")
+        print(f"[SERVER] Connected clients count: {len(self.clients)}")
+
+        # Broadcast to all clients including sender (so sender can see join button)
+        self.broadcast(json.dumps(video_invite), exclude=None)
 
     def _handle_video_invite_private(self, client_socket: socket.socket, message: Dict):
         """Handle private video call invite"""
@@ -792,14 +826,15 @@ class CollaborationServer:
         receiver = message.get('receiver')
         session_id = message.get('session_id')
         link = message.get('link')
-        
+
         if not receiver or not session_id or not link:
+            print(f"[SERVER] ERROR: Missing receiver, session_id or link in private video invite")
             return
-        
+
         print(f"📹 Private video invite from {sender} to {receiver}")
-        
-        # Create video invite message
-        video_invite = {
+
+        # Create the primary video invite message
+        video_invite_message = {
             'type': 'video_invite_private',
             'sender': sender,
             'receiver': receiver,
@@ -808,17 +843,23 @@ class CollaborationServer:
             'chat_type': 'private',
             'timestamp': message.get('timestamp', self._timestamp())
         }
-        
-        # Send to receiver if online
+
+        # Persist the single invite message to the shared private history
+        storage.add_private_message(sender, receiver, video_invite_message)
+
+        # Send the full invite to the receiver if they are online
         receiver_socket = self._find_client_socket(receiver)
         if receiver_socket:
-            self._send_to_client(receiver_socket, video_invite)
+            print(f"[SERVER] Found receiver socket, sending video invite to {receiver}")
+            self._send_to_client(receiver_socket, video_invite_message)
             print(f"   ✓ Sent video invite to {receiver}")
         else:
-            print(f"   ℹ️  {receiver} is offline")
-        
-        # Send acknowledgment back to sender
-        self._send_to_client(client_socket, video_invite)
+            print(f"   ℹ️  {receiver} is offline - message will be in history.")
+
+        # Send the full invite to the sender as well (so they can see the join button)
+        print(f"[SERVER] Sending full video invite to sender {sender}")
+        self._send_to_client(client_socket, video_invite_message)
+        print(f"[SERVER] Sent video invite to sender {sender}")
 
     def _handle_video_invite_group(self, client_socket: socket.socket, message: Dict):
         """Handle group video call invite"""
@@ -827,16 +868,22 @@ class CollaborationServer:
         session_id = message.get('session_id')
         link = message.get('link')
         
+        print(f"[SERVER] Received group video invite from {sender} for group {group_id}")
+        print(f"[SERVER] Session ID: {session_id}")
+        print(f"[SERVER] Link: {link}")
+        
         if group_id not in self.groups or not session_id or not link:
+            print(f"[SERVER] ERROR: Invalid group_id, missing session_id or link in group video invite")
             return
         
         if sender not in self.groups[group_id]['members']:
+            print(f"[SERVER] ERROR: Sender {sender} is not a member of group {group_id}")
             return
         
         print(f"📹 Group video invite from {sender} in group {group_id}")
         
-        # Create video invite message
-        video_invite = {
+        # Create the primary video invite message
+        video_invite_message = {
             'type': 'video_invite_group',
             'sender': sender,
             'group_id': group_id,
@@ -846,14 +893,72 @@ class CollaborationServer:
             'timestamp': message.get('timestamp', self._timestamp())
         }
         
-        # Send to all group members except sender
+        print(f"[SERVER] Sending group video invite to {len(self.groups[group_id]['members'])} members")
+        
+        # Persist to group history (single message for all)
+        storage.add_group_message(group_id, video_invite_message)
+
+        # Send to all group members including sender
         with self.lock:
             for sock, info in self.clients.items():
-                if info['username'] in self.groups[group_id]['members'] and sock != client_socket:
-                    self._send_to_client(sock, video_invite)
-        
-        # Send acknowledgment back to sender
-        self._send_to_client(client_socket, video_invite)
+                if info['username'] in self.groups[group_id]['members']:
+                    print(f"[SERVER] Sending video invite to group member: {info['username']}")
+                    self._send_to_client(sock, video_invite_message)
+
+    def _handle_video_missed(self, client_socket: socket.socket, message: Dict):
+        """Handle missed video call notifications"""
+        session_id = message.get('session_id')
+        session_type = message.get('session_type', 'global')
+        chat_id = message.get('chat_id')
+        sender = message.get('sender', 'VideoServer')
+        timestamp = message.get('timestamp', self._timestamp())
+
+        missed_msg = {
+            'type': 'video_missed',
+            'sender': sender,
+            'session_id': session_id,
+            'session_type': session_type,
+            'chat_id': chat_id,
+            'content': f"Missed video call (session {session_id}) at {timestamp}",
+            'timestamp': timestamp
+        }
+
+        if session_type == 'global':
+            # Persist to global chat
+            self.chat_history.append(missed_msg)
+            storage.add_global_message(missed_msg)
+            if len(self.chat_history) > 1000:
+                self.chat_history = self.chat_history[-1000:]
+
+            # Broadcast to all
+            self.broadcast(json.dumps(missed_msg))
+
+        elif session_type == 'private':
+            # chat_id should be the other user's username
+            other = chat_id
+            if not other:
+                return
+
+            # Store in private history for both participants
+            storage.add_private_message(sender, other, missed_msg)
+
+            # Send to both if online
+            with self.lock:
+                for sock, info in self.clients.items():
+                    if info['username'] in [sender, other]:
+                        self._send_to_client(sock, missed_msg)
+
+        elif session_type == 'group':
+            group_id = chat_id
+            if group_id not in self.groups:
+                return
+
+            # Persist to group history
+            self.group_messages[group_id].append(missed_msg)
+            storage.add_group_message(group_id, missed_msg)
+
+            # Notify group members
+            self._notify_group_members(group_id, missed_msg)
 
     def handle_file_transfer(self, client_socket: socket.socket, address: Tuple):
         """Handle file upload or download"""
@@ -1056,7 +1161,9 @@ class CollaborationServer:
     def broadcast_user_list(self):
         """Broadcast current user list to all clients"""
         with self.lock:
-            users = [info['username'] for info in self.clients.values()]
+            # Filter out system users (those starting with _ and ending with _System_)
+            users = [info['username'] for info in self.clients.values() 
+                     if not (info['username'].startswith('_') and info['username'].endswith('_System_'))]
         
         self.broadcast(json.dumps({
             'type': 'user_list',
@@ -1091,18 +1198,20 @@ class CollaborationServer:
                 
                 print(f"👋 User '{username}' disconnected")
                 
-                # Send disconnect message to remaining clients
-                disconnect_msg = {
-                    'type': 'system',
-                    'sender': 'Server',
-                    'content': f"{username} left the chat",
-                    'timestamp': self._timestamp()
-                }
-                # Broadcast to all remaining clients
-                self.broadcast(json.dumps(disconnect_msg))
-                
-                # Update user list for all remaining clients
-                self.broadcast_user_list()
+                # Don't announce system users disconnecting
+                if not (username.startswith('_') and username.endswith('_System_')):
+                    # Send disconnect message to remaining clients
+                    disconnect_msg = {
+                        'type': 'system',
+                        'sender': 'Server',
+                        'content': f"{username} left the chat",
+                        'timestamp': self._timestamp()
+                    }
+                    # Broadcast to all remaining clients
+                    self.broadcast(json.dumps(disconnect_msg))
+                    
+                    # Update user list for all remaining clients
+                    self.broadcast_user_list()
         
         try:
             client_socket.close()
