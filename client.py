@@ -9,8 +9,12 @@ import threading
 import json
 import time
 import os
+import base64
 from datetime import datetime
 from typing import Optional, Dict, List
+
+# Import audio module
+from audio_module import AudioEngine, audio_engine as global_audio_engine
 
 # Initialize Eel with web folder
 eel.init('web')
@@ -22,6 +26,7 @@ class ClientState:
         self.server_host = "localhost"
         self.server_port = 5555
         self.file_port = 5556
+        self.audio_port = 5557
         self.socket: Optional[socket.socket] = None
         self.running = False
         self.buffer = b""
@@ -31,6 +36,7 @@ class ClientState:
         self.groups: Dict[str, Dict] = {}
         self.current_chat_type = 'global'
         self.current_chat_target = None
+        self.audio_engine = None
 
 state = ClientState()
 
@@ -92,6 +98,13 @@ def connect_to_server(username: str, host: str, port: int):
         state.running = True
         state.connected = True
         
+        # Initialize audio engine
+        state.audio_engine = AudioEngine(username, host, state.audio_port)
+        
+        # Set the global audio_engine reference
+        import audio_module
+        audio_module.audio_engine = state.audio_engine
+        
         # Start receive thread
         thread = threading.Thread(target=receive_messages, daemon=True)
         thread.start()
@@ -141,8 +154,47 @@ def disconnect_from_server():
             state.socket.close()
         except:
             pass
+    
+    # Stop audio engine if running
+    if state.audio_engine:
+        try:
+            state.audio_engine.stop()
+        except:
+            pass
+    
     state.connected = False
     return {'success': True}
+
+@eel.expose
+def send_audio_message(audio_data, duration):
+    """Send audio message to current chat context"""
+    if not state.connected or not state.socket:
+        return {'success': False, 'message': 'Not connected'}
+    
+    try:
+        print(f"[CLIENT] Sending audio message ({len(audio_data) // 1024} KB)")
+        
+        # Create message based on current chat context
+        if state.current_chat_type == 'private' and state.current_chat_target:
+            message_type = 'private_audio'
+            extra_params = {'receiver': state.current_chat_target}
+        elif state.current_chat_type == 'group' and state.current_chat_target:
+            message_type = 'group_audio'
+            extra_params = {'group_id': state.current_chat_target}
+        else:
+            message_type = 'audio_share'  # Global audio
+            extra_params = {}
+            
+        # Add audio metadata
+        extra_params['audio_data'] = audio_data
+        extra_params['duration'] = duration
+        
+        # Send the message
+        result = send_message(message_type, '', extra_params)
+        return result
+    except Exception as e:
+        print(f"[CLIENT] Send audio error: {e}")
+        return {'success': False, 'message': str(e)}
 
 @eel.expose
 def upload_file(file_name: str, file_size: int, file_data):
@@ -257,15 +309,12 @@ def download_file(file_id: str):
         return {'success': False, 'message': str(e)}
 
 @eel.expose
-def get_state():
-    """Get current client state"""
-    return {
-        'username': state.username,
-        'connected': state.connected,
-        'users': state.online_users,
-        'files': state.files,
-        'groups': state.groups
-    }
+def set_current_chat(chat_type: str, chat_target: str = None):
+    """Set the current chat context for sending messages"""
+    state.current_chat_type = chat_type
+    state.current_chat_target = chat_target
+    print(f"[CLIENT] Chat context set to: {chat_type} -> {chat_target}")
+    return {'success': True}
 
 @eel.expose
 def refresh_user_list():

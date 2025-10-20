@@ -222,6 +222,32 @@ function handleMessage(message) {
         console.log('Processing file metadata:', message);
         message.files.forEach(file => addFileToList(file));
     }
+    else if (msgType === 'audio_message' || msgType === 'private_audio' || msgType === 'group_audio') {
+        console.log('Processing audio message:', message);
+        
+        // Show in global chat if it's an audio_message type
+        if (msgType === 'audio_message' && currentChatType === 'global') {
+            addMessage(message);
+        }
+        // Show in private chat if it's relevant to current private chat
+        else if (msgType === 'private_audio') {
+            const isRelevant = (message.sender === username && currentChatTarget === message.receiver) ||
+                              (message.receiver === username && currentChatTarget === message.sender);
+            
+            if (currentChatType === 'private' && isRelevant) {
+                addMessage(message);
+            }
+            
+            if (message.receiver === username) {
+                addToRecentChats(message.sender);
+                showNotification(`${message.sender} sent an audio message`, 'info');
+            }
+        }
+        // Show in group chat if it's the current group
+        else if (msgType === 'group_audio' && currentChatType === 'group' && currentChatTarget === message.group_id) {
+            addMessage(message);
+        }
+    }
 }
 
 function addMessage(message) {
@@ -273,7 +299,56 @@ function addMessage(message) {
         fileItem.appendChild(infoSection);
         fileItem.appendChild(downloadBtn);
         content.appendChild(fileItem);
-    } else if (message.type !== 'private_file' && message.type !== 'file_share' && message.type !== 'file_notification' && message.type !== 'group_file') {
+    } 
+    // Check if this is an audio message
+    else if ((message.type === 'audio_message' || message.type === 'private_audio' || message.type === 'group_audio') && (message.audio_data || message.has_audio)) {
+        const audioItem = document.createElement('div');
+        audioItem.className = 'message-bubble audio-item';
+        
+        const infoSection = document.createElement('div');
+        infoSection.className = 'audio-info-section';
+        infoSection.innerHTML = `
+            <div class="audio-title">🎵 Audio Message</div>
+            <div class="audio-detail">${message.duration}s • ${message.sender}</div>
+        `;
+        
+        const playBtn = document.createElement('button');
+        playBtn.className = 'audio-play-btn';
+        playBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+            </svg> Play
+        `;
+        
+        // If audio data is available
+        if (message.audio_data) {
+            playBtn.onclick = () => {
+                playBtn.disabled = true;
+                playBtn.innerHTML = 'Playing...';
+                
+                eel.play_audio(message.audio_data)().then(() => {
+                    playBtn.disabled = false;
+                    playBtn.innerHTML = `
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg> Play
+                    `;
+                });
+            };
+        } else {
+            // If audio needs to be downloaded first
+            playBtn.textContent = 'Audio not available';
+            playBtn.disabled = true;
+            playBtn.title = 'Audio data not available for old messages';
+        }
+        
+        audioItem.appendChild(infoSection);
+        audioItem.appendChild(playBtn);
+        content.appendChild(audioItem);
+    }
+    else if (message.type !== 'private_file' && message.type !== 'file_share' && message.type !== 'file_notification' && 
+             message.type !== 'group_file' && message.type !== 'audio_message' && message.type !== 'private_audio' && 
+             message.type !== 'group_audio') {
         // Regular text message
         const bubble = document.createElement('div');
         bubble.className = 'message-bubble';
@@ -381,6 +456,7 @@ async function switchToPrivateChat(user) {
     globalNetworkItem.classList.remove('active');
     addToRecentChats(user);
     await eel.send_message('request_private_history', '', {target_user: user})();
+    await eel.set_current_chat('private', user)();
 }
 
 async function switchToGroupChat(groupId, groupName) {
@@ -395,6 +471,7 @@ async function switchToGroupChat(groupId, groupName) {
     globalNetworkItem.classList.remove('active');
     
     await eel.send_message('request_group_history', '', {group_id: groupId})();
+    await eel.set_current_chat('group', groupId)();
 }
 
 globalNetworkItem.addEventListener('click', async function() {
@@ -406,6 +483,7 @@ globalNetworkItem.addEventListener('click', async function() {
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     this.classList.add('active');
     await eel.send_message('request_chat_history', '', {})();
+    await eel.set_current_chat('global', null)();
 });
 
 // ===== TABS =====
@@ -420,11 +498,123 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     });
 });
 
-// ===== FILES =====
+// ===== FILES AND AUDIO =====
 filesToggleBtn.addEventListener('click', () => filesPanel.classList.toggle('active'));
 closeFilesBtn.addEventListener('click', () => filesPanel.classList.remove('active'));
 uploadFileBtn.addEventListener('click', () => fileInput.click());
 attachBtn.addEventListener('click', () => fileInput.click());
+
+// Audio recording
+const recordAudioBtn = document.getElementById('recordAudioBtn');
+const recordingIndicator = document.getElementById('recordingIndicator');
+const recordingText = document.getElementById('recordingText');
+let isRecording = false;
+let currentRecordingData = null;
+let currentRecordingDuration = 0;
+
+recordAudioBtn.addEventListener('click', async () => {
+    if (isRecording) {
+        // Stop recording and send message
+        try {
+            const result = await eel.stop_audio_recording()();
+            if (result.success) {
+                showNotification('Audio recorded and sent', 'success');
+                sendAudioMessage(result.audio_data, result.duration);
+            } else {
+                showNotification(`Recording failed: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            showNotification('Error stopping recording', 'error');
+            console.error('[APP] Stop recording error:', error);
+        } finally {
+            isRecording = false;
+            updateRecordButtonState();
+        }
+    } else {
+        // Start recording
+        try {
+            isRecording = true;
+            updateRecordButtonState();
+            
+            const result = await eel.start_audio_recording()();
+            if (!result.success) {
+                showNotification(`Failed to start recording: ${result.message}`, 'error');
+                isRecording = false;
+                updateRecordButtonState();
+            }
+        } catch (error) {
+            showNotification('Error starting recording', 'error');
+            console.error('[APP] Start recording error:', error);
+            isRecording = false;
+            updateRecordButtonState();
+        }
+    }
+});
+
+function updateRecordButtonState() {
+    if (isRecording) {
+        recordAudioBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16"/>
+                <rect x="14" y="4" width="4" height="16"/>
+            </svg>
+        `;
+        recordAudioBtn.style.color = 'var(--danger)';
+        recordAudioBtn.title = 'Click to stop recording and send';
+    } else {
+        recordAudioBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+        `;
+        recordAudioBtn.style.color = '';
+        recordAudioBtn.title = 'Click to start recording';
+    }
+}// Function exposed to Python to show recording state
+eel.expose(showRecordingState);
+function showRecordingState(recording, duration = 0) {
+    if (recording) {
+        recordingIndicator.style.display = 'block';
+        
+        // Start countdown timer
+        let seconds = 0;
+        const countdownInterval = setInterval(() => {
+            seconds++;
+            recordingText.textContent = `Recording... (${seconds}s)`;
+            
+            if (seconds >= duration) {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+        
+        // Store interval ID to clear it later
+        recordingIndicator.dataset.intervalId = countdownInterval;
+    } else {
+        // Clear interval if exists
+        if (recordingIndicator.dataset.intervalId) {
+            clearInterval(parseInt(recordingIndicator.dataset.intervalId));
+            delete recordingIndicator.dataset.intervalId;
+        }
+        recordingIndicator.style.display = 'none';
+    }
+}
+
+async function sendAudioMessage(audioData, duration) {
+    try {
+        console.log(`[APP] Sending audio message (${Math.round(audioData.length/1024)}KB, ${duration}s)`);
+        const result = await eel.send_audio_message(audioData, duration)();
+        
+        if (result.success) {
+            showNotification('Audio message sent', 'success');
+        } else {
+            showNotification(`Failed to send audio: ${result.message}`, 'error');
+        }
+    } catch (error) {
+        showNotification('Error sending audio', 'error');
+        console.error('[APP] Send audio error:', error);
+    }
+}
 
 fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];

@@ -259,9 +259,11 @@ class CollaborationServer:
             'chat': self._handle_chat_message,
             'private': self._handle_private_message,
             'private_file': self._handle_private_file,
+            'private_audio': self._handle_private_audio,
             'group_create': self._handle_group_create,
             'group_message': self._handle_group_message,
             'group_file': self._handle_group_file,
+            'group_audio': self._handle_group_audio,
             'group_add_member': self._handle_group_add_member,
             'group_remove_member': self._handle_group_remove_member,
             'request_private_history': self._handle_private_history_request,
@@ -270,6 +272,7 @@ class CollaborationServer:
             'save_recent_chat': self._handle_save_recent_chat,
             'request_chat_history': self._handle_chat_history_request,
             'file_share': self._handle_global_file_share,
+            'audio_share': self._handle_global_audio_share,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -308,6 +311,128 @@ class CollaborationServer:
         # Broadcast to ALL clients
         print(f"📢 Broadcasting file notification to all clients")
         self.broadcast(json.dumps(file_notification))
+        
+    def _handle_global_audio_share(self, client_socket: socket.socket, message: Dict):
+        """Handle global audio sharing"""
+        sender = message.get('sender')
+        audio_data = message.get('audio_data')
+        duration = message.get('duration', 0)
+        
+        if not audio_data:
+            return
+        
+        print(f"🎵 Global audio message from {sender} ({duration}s)")
+        
+        # Create message object for storage - strip audio data to save space in chat history
+        audio_message = {
+            'type': 'audio_message',
+            'sender': sender,
+            'duration': duration,
+            'has_audio': True,
+            'audio_data': audio_data,  # Include audio data for storage
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Add to global chat history
+        self.chat_history.append(audio_message)
+        storage.add_global_message(audio_message)
+        
+        if len(self.chat_history) > 1000:
+            self.chat_history = self.chat_history[-1000:]
+        
+        # Broadcast to ALL clients
+        print(f"📢 Broadcasting audio message to all clients")
+        self.broadcast(json.dumps(audio_message))
+        
+    def _handle_private_audio(self, client_socket: socket.socket, message: Dict):
+        """Handle private audio message"""
+        sender = message.get('sender')
+        receiver = message.get('receiver')
+        audio_data = message.get('audio_data')
+        duration = message.get('duration', 0)
+        
+        if not receiver or not audio_data:
+            return
+        
+        print(f"🎵 Private audio from {sender} to {receiver} ({duration}s)")
+        
+        # Create audio message for private chat
+        audio_message = {
+            'type': 'private_audio',
+            'sender': sender,
+            'receiver': receiver,
+            'duration': duration,
+            'has_audio': True,
+            'audio_data': audio_data,
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Store in private chat history
+        storage.add_private_message(sender, receiver, audio_message)
+        
+        # Update recent chats
+        with self.lock:
+            if sender not in self.recent_chats:
+                self.recent_chats[sender] = []
+            if receiver not in self.recent_chats:
+                self.recent_chats[receiver] = []
+                
+            if receiver not in self.recent_chats[sender]:
+                self.recent_chats[sender].insert(0, receiver)
+                if len(self.recent_chats[sender]) > 5:
+                    self.recent_chats[sender].pop()
+            
+            if sender not in self.recent_chats[receiver]:
+                self.recent_chats[receiver].insert(0, sender)
+                if len(self.recent_chats[receiver]) > 5:
+                    self.recent_chats[receiver].pop()
+        
+        # Send to receiver if online
+        receiver_socket = self._find_client_socket(receiver)
+        if receiver_socket:
+            self._send_to_client(receiver_socket, audio_message)
+            print(f"   ✓ Sent audio to {receiver}")
+        else:
+            print(f"   ℹ️  {receiver} is offline, audio saved to history")
+        
+        # Send back to sender for confirmation
+        self._send_to_client(client_socket, audio_message)
+        
+    def _handle_group_audio(self, client_socket: socket.socket, message: Dict):
+        """Handle group audio message"""
+        group_id = message.get('group_id')
+        sender = message.get('sender')
+        audio_data = message.get('audio_data')
+        duration = message.get('duration', 0)
+        
+        if group_id not in self.groups or not audio_data:
+            return
+        
+        if sender not in self.groups[group_id]['members']:
+            return
+        
+        print(f"🎵 Group audio from {sender} in group {group_id} ({duration}s)")
+        
+        # Create audio message for group
+        audio_message = {
+            'type': 'group_audio',
+            'sender': sender,
+            'group_id': group_id,
+            'duration': duration,
+            'has_audio': True,
+            'audio_data': audio_data,
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Store in group chat history
+        self.group_messages[group_id].append(audio_message)
+        storage.add_group_message(group_id, audio_message)
+        
+        # Send to all group members (including sender for confirmation)
+        with self.lock:
+            for sock, info in self.clients.items():
+                if info['username'] in self.groups[group_id]['members']:
+                    self._send_to_client(sock, audio_message)
         
     def _handle_chat_history_request(self, client_socket: socket.socket, message: Dict):
         """Handle request for global chat history"""
