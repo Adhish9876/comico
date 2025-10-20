@@ -273,6 +273,9 @@ class CollaborationServer:
             'request_chat_history': self._handle_chat_history_request,
             'file_share': self._handle_global_file_share,
             'audio_share': self._handle_global_audio_share,
+            'video_invite': self._handle_video_invite,
+            'video_invite_private': self._handle_video_invite_private,
+            'video_invite_group': self._handle_video_invite_group,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -758,6 +761,99 @@ class CollaborationServer:
                     self.recent_chats[username].insert(0, target)
                     if len(self.recent_chats[username]) > 5:
                         self.recent_chats[username].pop()
+
+    def _handle_video_invite(self, client_socket: socket.socket, message: Dict):
+        """Handle global video call invite"""
+        sender = message.get('sender')
+        session_id = message.get('session_id')
+        link = message.get('link')
+        
+        if not session_id or not link:
+            return
+        
+        print(f"📹 Global video invite from {sender}")
+        
+        # Create video invite message
+        video_invite = {
+            'type': 'video_invite',
+            'sender': sender,
+            'session_id': session_id,
+            'link': link,
+            'chat_type': 'global',
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Broadcast to all clients except sender
+        self.broadcast(json.dumps(video_invite), exclude=client_socket)
+
+    def _handle_video_invite_private(self, client_socket: socket.socket, message: Dict):
+        """Handle private video call invite"""
+        sender = message.get('sender')
+        receiver = message.get('receiver')
+        session_id = message.get('session_id')
+        link = message.get('link')
+        
+        if not receiver or not session_id or not link:
+            return
+        
+        print(f"📹 Private video invite from {sender} to {receiver}")
+        
+        # Create video invite message
+        video_invite = {
+            'type': 'video_invite_private',
+            'sender': sender,
+            'receiver': receiver,
+            'session_id': session_id,
+            'link': link,
+            'chat_type': 'private',
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Send to receiver if online
+        receiver_socket = self._find_client_socket(receiver)
+        if receiver_socket:
+            self._send_to_client(receiver_socket, video_invite)
+            print(f"   ✓ Sent video invite to {receiver}")
+        else:
+            print(f"   ℹ️  {receiver} is offline")
+        
+        # Send acknowledgment back to sender
+        self._send_to_client(client_socket, video_invite)
+
+    def _handle_video_invite_group(self, client_socket: socket.socket, message: Dict):
+        """Handle group video call invite"""
+        sender = message.get('sender')
+        group_id = message.get('group_id')
+        session_id = message.get('session_id')
+        link = message.get('link')
+        
+        if group_id not in self.groups or not session_id or not link:
+            return
+        
+        if sender not in self.groups[group_id]['members']:
+            return
+        
+        print(f"📹 Group video invite from {sender} in group {group_id}")
+        
+        # Create video invite message
+        video_invite = {
+            'type': 'video_invite_group',
+            'sender': sender,
+            'group_id': group_id,
+            'session_id': session_id,
+            'link': link,
+            'chat_type': 'group',
+            'timestamp': message.get('timestamp', self._timestamp())
+        }
+        
+        # Send to all group members except sender
+        with self.lock:
+            for sock, info in self.clients.items():
+                if info['username'] in self.groups[group_id]['members'] and sock != client_socket:
+                    self._send_to_client(sock, video_invite)
+        
+        # Send acknowledgment back to sender
+        self._send_to_client(client_socket, video_invite)
 
     def handle_file_transfer(self, client_socket: socket.socket, address: Tuple):
         """Handle file upload or download"""

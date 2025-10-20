@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shadow Nexus - Video Call</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .video-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            border-bottom: 2px solid rgba(124, 77, 255, 0.3);
+        }
+
+        .session-info h2 {
+            font-size: 20px;
+            color: #7c4dff;
+            margin-bottom: 5px;
+        }
+
+        .session-info p {
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .videos {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .video-wrapper {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(124, 77, 255, 0.2);
+            min-height: 250px;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .video-label {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .controls {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            border-top: 2px solid rgba(124, 77, 255, 0.3);
+        }
+
+        .control-btn {
+            width: 55px;
+            height: 55px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            font-size: 24px;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .mic-btn {
+            background: #7c4dff;
+        }
+
+        .mic-btn.muted {
+            background: #ff4444;
+        }
+
+        .video-btn {
+            background: #7c4dff;
+        }
+
+        .video-btn.disabled {
+            background: #ff4444;
+        }
+
+        .leave-btn {
+            background: #ff4444;
+        }
+
+        .leave-btn:hover {
+            background: #cc0000;
+        }
+
+        .participants {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 12px;
+            min-width: 200px;
+            border: 2px solid rgba(124, 77, 255, 0.3);
+        }
+
+        .participants h3 {
+            font-size: 14px;
+            color: #7c4dff;
+            margin-bottom: 10px;
+        }
+
+        .participant-list {
+            list-style: none;
+        }
+
+        .participant-list li {
+            padding: 5px 0;
+            font-size: 13px;
+            color: #ddd;
+        }
+
+        #localVideo {
+            border: 3px solid #7c4dff;
+        }
+
+        .connecting-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid rgba(124, 77, 255, 0.3);
+            border-top-color: #7c4dff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .connecting-text {
+            font-size: 18px;
+            color: #7c4dff;
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container">
+        <div class="header">
+            <div class="session-info">
+                <h2>{{ session_name }}</h2>
+                <p>Session ID: {{ session_id }}</p>
+            </div>
+        </div>
+
+        <div class="videos" id="videosContainer">
+            <div class="video-wrapper">
+                <video id="localVideo" autoplay muted playsinline></video>
+                <div class="video-label">You (Local)</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="control-btn mic-btn" id="micBtn" title="Toggle Microphone">🎤</button>
+            <button class="control-btn video-btn" id="videoBtn" title="Toggle Video">📹</button>
+            <button class="control-btn leave-btn" id="leaveBtn" title="Leave Call">📞</button>
+        </div>
+
+        <div class="participants">
+            <h3>Participants</h3>
+            <ul class="participant-list" id="participantList">
+                <li>You</li>
+            </ul>
+        </div>
+
+        <div class="connecting-overlay" id="connectingOverlay">
+            <div class="spinner"></div>
+            <div class="connecting-text">Connecting to video call...</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const sessionId = "{{ session_id }}";
+        const sessionType = "{{ session_type }}";
+        const socket = io('http://localhost:5000');
+        
+        let localStream = null;
+        let peerConnections = {};
+        let isMicMuted = false;
+        let isVideoDisabled = false;
+
+        const localVideo = document.getElementById('localVideo');
+        const videosContainer = document.getElementById('videosContainer');
+        const micBtn = document.getElementById('micBtn');
+        const videoBtn = document.getElementById('videoBtn');
+        const leaveBtn = document.getElementById('leaveBtn');
+        const participantList = document.getElementById('participantList');
+        const connectingOverlay = document.getElementById('connectingOverlay');
+
+        // ICE servers configuration
+        const iceServers = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        // Initialize video call
+        async function initVideoCall() {
+            try {
+                // Get local media stream
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720 },
+                    audio: true
+                });
+                
+                localVideo.srcObject = localStream;
+                
+                // Join the session room
+                socket.emit('join_session', { session_id: sessionId });
+                
+                // Hide connecting overlay
+                setTimeout(() => {
+                    connectingOverlay.style.display = 'none';
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error accessing media devices:', error);
+                alert('Could not access camera/microphone. Please check permissions.');
+            }
+        }
+
+        // Create peer connection
+        function createPeerConnection(peerId) {
+            const pc = new RTCPeerConnection(iceServers);
+            
+            // Add local stream tracks
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+            });
+            
+            // Handle incoming tracks
+            pc.ontrack = (event) => {
+                addRemoteVideo(peerId, event.streams[0]);
+            };
+            
+            // Handle ICE candidates
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice_candidate', {
+                        session_id: sessionId,
+                        target: peerId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+            
+            return pc;
+        }
+
+        // Add remote video
+        function addRemoteVideo(peerId, stream) {
+            let videoWrapper = document.getElementById(`video-${peerId}`);
+            
+            if (!videoWrapper) {
+                videoWrapper = document.createElement('div');
+                videoWrapper.className = 'video-wrapper';
+                videoWrapper.id = `video-${peerId}`;
+                
+                const video = document.createElement('video');
+                video.autoplay = true;
+                video.playsinline = true;
+                video.srcObject = stream;
+                
+                const label = document.createElement('div');
+                label.className = 'video-label';
+                label.textContent = `User ${peerId.substring(0, 6)}`;
+                
+                videoWrapper.appendChild(video);
+                videoWrapper.appendChild(label);
+                videosContainer.appendChild(videoWrapper);
+            }
+        }
+
+        // Remove remote video
+        function removeRemoteVideo(peerId) {
+            const videoWrapper = document.getElementById(`video-${peerId}`);
+            if (videoWrapper) {
+                videoWrapper.remove();
+            }
+        }
+
+        // Socket event handlers
+        socket.on('user_joined', async (data) => {
+            console.log('User joined:', data.peer_id);
+            
+            // Update participant list
+            updateParticipantList(data.participants);
+            
+            // Create peer connection and send offer
+            const pc = createPeerConnection(data.peer_id);
+            peerConnections[data.peer_id] = pc;
+            
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            
+            socket.emit('offer', {
+                session_id: sessionId,
+                target: data.peer_id,
+                offer: offer
+            });
+        });
+
+        socket.on('offer', async (data) => {
+            console.log('Received offer from:', data.sender);
+            
+            const pc = createPeerConnection(data.sender);
+            peerConnections[data.sender] = pc;
+            
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            
+            socket.emit('answer', {
+                session_id: sessionId,
+                target: data.sender,
+                answer: answer
+            });
+        });
+
+        socket.on('answer', async (data) => {
+            console.log('Received answer from:', data.sender);
+            
+            const pc = peerConnections[data.sender];
+            if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            }
+        });
+
+        socket.on('ice_candidate', async (data) => {
+            const pc = peerConnections[data.sender];
+            if (pc) {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+        });
+
+        socket.on('user_left', (data) => {
+            console.log('User left:', data.peer_id);
+            
+            // Close peer connection
+            if (peerConnections[data.peer_id]) {
+                peerConnections[data.peer_id].close();
+                delete peerConnections[data.peer_id];
+            }
+            
+            // Remove video
+            removeRemoteVideo(data.peer_id);
+            
+            // Update participant list
+            updateParticipantList(data.participants);
+        });
+
+        // Update participant list
+        function updateParticipantList(participants) {
+            participantList.innerHTML = '<li>You</li>';
+            participants.forEach(p => {
+                if (p !== socket.id) {
+                    const li = document.createElement('li');
+                    li.textContent = `User ${p.substring(0, 6)}`;
+                    participantList.appendChild(li);
+                }
+            });
+        }
+
+        // Control buttons
+        micBtn.addEventListener('click', () => {
+            isMicMuted = !isMicMuted;
+            localStream.getAudioTracks().forEach(track => {
+                track.enabled = !isMicMuted;
+            });
+            micBtn.classList.toggle('muted', isMicMuted);
+            micBtn.textContent = isMicMuted ? '🔇' : '🎤';
+        });
+
+        videoBtn.addEventListener('click', () => {
+            isVideoDisabled = !isVideoDisabled;
+            localStream.getVideoTracks().forEach(track => {
+                track.enabled = !isVideoDisabled;
+            });
+            videoBtn.classList.toggle('disabled', isVideoDisabled);
+            videoBtn.textContent = isVideoDisabled ? '📷' : '📹';
+        });
+
+        leaveBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to leave this call?')) {
+                leaveCall();
+            }
+        });
+
+        function leaveCall() {
+            // Stop all tracks
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Close all peer connections
+            Object.values(peerConnections).forEach(pc => pc.close());
+            
+            // Leave session
+            socket.emit('leave_session', { session_id: sessionId });
+            
+            // Close window
+            window.close();
+        }
+
+        // Initialize on load
+        window.addEventListener('load', initVideoCall);
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            leaveCall();
+        });
+    </script>
+</body>
+</html>

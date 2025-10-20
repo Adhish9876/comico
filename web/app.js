@@ -34,6 +34,7 @@ const globalNetworkItem = document.getElementById('globalNetworkItem');
 const noUsersMsg = document.getElementById('noUsersMsg');
 const noGroupsMsg = document.getElementById('noGroupsMsg');
 const refreshUsersBtn = document.getElementById('refreshUsersBtn');
+const videoCallBtn = document.getElementById('videoCallBtn');
 
 // ===== CONNECTION =====
 connectBtn.addEventListener('click', async () => {
@@ -248,6 +249,18 @@ function handleMessage(message) {
             addMessage(message);
         }
     }
+    // Handle video invites
+    else if (msgType === 'video_invite') {
+        handleVideoInvite(message, 'Global Network');
+    }
+    else if (msgType === 'video_invite_private') {
+        if (message.receiver === username) {
+            handleVideoInvite(message, `Private chat with ${message.sender}`);
+        }
+    }
+    else if (msgType === 'video_invite_group') {
+        handleVideoInvite(message, `Group chat`);
+    }
 }
 
 function addMessage(message) {
@@ -361,6 +374,59 @@ function addMessage(message) {
     
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function handleVideoInvite(message, chatContext) {
+    const { sender, link, session_id } = message;
+    
+    console.log(`[VIDEO] Video invite from ${sender} for ${chatContext}`);
+    
+    // Show system message in chat
+    addSystemMessage(`${sender} started a video call in ${chatContext}`);
+    
+    // Show notification with join option
+    showVideoInviteNotification(sender, link, chatContext);
+}
+
+function showVideoInviteNotification(sender, link, chatContext) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 100px;
+        right: 20px;
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(124, 58, 237, 0.2));
+        border: 1px solid rgba(0, 212, 255, 0.5);
+        border-radius: 12px;
+        padding: 16px 20px;
+        color: #e8eaed;
+        font-size: 14px;
+        font-weight: 600;
+        z-index: 10001;
+        box-shadow: 0 8px 32px rgba(0, 212, 255, 0.3);
+        font-family: 'Rajdhani', sans-serif;
+        max-width: 350px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    `;
+    
+    notification.innerHTML = `
+        <div>📹 ${sender} started a video call in ${chatContext}</div>
+        <div style="display: flex; gap: 8px;">
+            <button style="flex: 1; background: rgba(0, 212, 255, 0.3); border: 1px solid rgba(0, 212, 255, 0.5); border-radius: 6px; padding: 8px; color: #00d4ff; cursor: pointer; font-weight: 600; font-family: 'Rajdhani', sans-serif; transition: all 0.3s;" onclick="window.open('${link}', 'video_call', 'width=1024,height=768')">Join Call</button>
+            <button style="flex: 1; background: transparent; border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 6px; padding: 8px; color: #9ca3af; cursor: pointer; font-weight: 600; font-family: 'Rajdhani', sans-serif;" onclick="this.parentElement.parentElement.remove()">Dismiss</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-dismiss after 15 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 15000);
 }
 
 function addSystemMessage(content) {
@@ -815,6 +881,44 @@ function showGroupModal(users) {
 
 refreshUsersBtn.addEventListener('click', () => {
     eel.refresh_user_list()();
+});
+
+// ===== VIDEO CALL FUNCTIONALITY =====
+videoCallBtn.addEventListener('click', async () => {
+    if (!currentChatType) {
+        showNotification('Select a chat first', 'warning');
+        return;
+    }
+    
+    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' : 
+                           currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
+                           `Group chat`;
+    
+    if (!confirm(`Start video call in ${chatTypeDisplay}?`)) {
+        return;
+    }
+    
+    try {
+        console.log(`[VIDEO] Starting ${currentChatType} video call`);
+        
+        const result = await eel.start_video_call(currentChatType, currentChatTarget || 'global')();
+        
+        if (result.success) {
+            const { session_id, link } = result;
+            
+            console.log(`[VIDEO] Call started: ${session_id}, Link: ${link}`);
+            
+            // Open video call window
+            window.open(link, 'video_call', 'width=1024,height=768');
+            showNotification('Video call started!', 'success');
+            
+        } else {
+            showNotification(`Failed to start call: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('[VIDEO] Error starting call:', error);
+        showNotification('Error starting video call', 'error');
+    }
 });
 
 // ===== UTILITY FUNCTIONS =====
