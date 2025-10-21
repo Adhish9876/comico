@@ -110,6 +110,42 @@ def connect_to_server(username: str, host: str, port: int):
         thread.start()
         
         print(f"[CLIENT] Connected as {username}")
+        
+        # Wait a moment for connection to stabilize
+        time.sleep(0.2)
+        
+        # Request chat history with proper parameters
+        request_chat_history_msg = {
+            'type': 'request_chat_history',
+            'sender': username,
+            'chat_type': 'global',
+            'timestamp': datetime.now().strftime("%H:%M:%S")
+        }
+        state.socket.send((json.dumps(request_chat_history_msg) + '\n').encode('utf-8'))
+        print("[CLIENT] Requested global chat history")
+        
+        # Wait a moment before requesting user list
+        time.sleep(0.1)
+        
+        # Request online users list
+        user_list_request = {
+            'type': 'get_users',
+            'sender': username,
+            'timestamp': datetime.now().strftime("%H:%M:%S")
+        }
+        state.socket.send((json.dumps(user_list_request) + '\n').encode('utf-8'))
+        print("[CLIENT] Requested user list")
+        
+        # Request groups list
+        time.sleep(0.1)
+        groups_request = {
+            'type': 'request_groups',
+            'sender': username,
+            'timestamp': datetime.now().strftime("%H:%M:%S")
+        }
+        state.socket.send((json.dumps(groups_request) + '\n').encode('utf-8'))
+        print("[CLIENT] Requested groups list")
+        
         return {'success': True, 'message': 'Connected successfully'}
     
     except socket.timeout:
@@ -314,6 +350,36 @@ def set_current_chat(chat_type: str, chat_target: str = None):
     state.current_chat_type = chat_type
     state.current_chat_target = chat_target
     print(f"[CLIENT] Chat context set to: {chat_type} -> {chat_target}")
+    
+    # When switching chats, request the chat history for that context
+    if chat_type == 'private' and chat_target:
+        request_msg = {
+            'type': 'request_private_history',
+            'sender': state.username,
+            'receiver': chat_target,
+            'timestamp': datetime.now().strftime("%H:%M:%S")
+        }
+        state.socket.send((json.dumps(request_msg) + '\n').encode('utf-8'))
+        print(f"[CLIENT] Requested private chat history with {chat_target}")
+    elif chat_type == 'group' and chat_target:
+        request_msg = {
+            'type': 'request_group_history',
+            'sender': state.username,
+            'group_id': chat_target,
+            'timestamp': datetime.now().strftime("%H:%M:%S")
+        }
+        state.socket.send((json.dumps(request_msg) + '\n').encode('utf-8'))
+        print(f"[CLIENT] Requested group chat history for {chat_target}")
+    elif chat_type == 'global':
+        request_msg = {
+            'type': 'request_chat_history',
+            'sender': state.username,
+            'chat_type': 'global',
+            'timestamp': datetime.now().strftime("%H:%M:%S")
+        }
+        state.socket.send((json.dumps(request_msg) + '\n').encode('utf-8'))
+        print(f"[CLIENT] Requested global chat history")
+    
     return {'success': True}
 
 @eel.expose
@@ -412,11 +478,12 @@ def refresh_user_list():
         try:
             # Request user list from server
             request = {
-                'type': 'request_user_list',
+                'type': 'get_users',
                 'sender': state.username,
                 'timestamp': datetime.now().strftime("%H:%M:%S")
             }
             state.socket.send((json.dumps(request) + '\n').encode('utf-8'))
+            print("[CLIENT] Refreshing user list")
             return {'success': True}
         except Exception as e:
             print(f"Refresh error: {e}")

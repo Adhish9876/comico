@@ -42,6 +42,13 @@ const noUsersMsg = document.getElementById('noUsersMsg');
 const noGroupsMsg = document.getElementById('noGroupsMsg');
 const refreshUsersBtn = document.getElementById('refreshUsersBtn');
 const videoCallBtn = document.getElementById('videoCallBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const themeOptions = document.querySelectorAll('.theme-option');
+const notificationsToggle = document.getElementById('notificationsToggle');
+const soundsToggle = document.getElementById('soundsToggle');
+const onlineStatusToggle = document.getElementById('onlineStatusToggle');
 
 // ===== CONNECTION =====
 connectBtn.addEventListener('click', async () => {
@@ -360,6 +367,16 @@ function addMessage(message) {
     const isOwn = message.sender === username;
     const messageDiv = document.createElement('div');
     messageDiv.className = isOwn ? 'message own' : 'message';
+    
+    // Add different-user class if this message is from a different user than the previous one
+    const messages = messagesContainer.children;
+    if (messages.length > 0) {
+        const lastMessage = messages[messages.length - 1];
+        const lastSender = lastMessage.querySelector('.message-sender')?.textContent;
+        if (lastSender && lastSender !== message.sender) {
+            messageDiv.classList.add('different-user');
+        }
+    }
     
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
@@ -973,6 +990,121 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 refreshUsersBtn.addEventListener('click', () => {
     eel.refresh_user_list()();
+});
+
+// ===== SETTINGS =====
+document.addEventListener('DOMContentLoaded', function() {
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const themeOptions = document.querySelectorAll('.theme-option');
+    
+    // Open settings modal
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            settingsModal.style.display = 'flex';
+            console.log('Settings modal opened');
+        });
+    }
+    
+    // Close settings modal
+    if (closeSettingsBtn) {
+        closeSettingsBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            settingsModal.style.display = 'none';
+            console.log('Settings modal closed');
+        });
+    }
+    
+    // Close modal when clicking outside
+    settingsModal.addEventListener('click', function(e) {
+        if (e.target === settingsModal) {
+            settingsModal.style.display = 'none';
+        }
+    });
+    
+    // Theme switching
+    themeOptions.forEach(option => {
+        option.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const theme = this.dataset.theme;
+            
+            console.log('Theme option clicked:', theme);
+            
+            // Remove active class from all options
+            themeOptions.forEach(opt => opt.classList.remove('active'));
+            
+            // Add active class to clicked option
+            this.classList.add('active');
+            
+            // Apply theme
+            if (theme === 'alt') {
+                document.body.classList.add('theme-alt');
+                localStorage.setItem('theme', 'alt');
+                console.log('Applied alt theme');
+            } else {
+                document.body.classList.remove('theme-alt');
+                localStorage.setItem('theme', 'default');
+                console.log('Applied default theme');
+            }
+        });
+    });
+    
+    // Load saved theme on page load
+    const savedTheme = localStorage.getItem('theme');
+    console.log('Saved theme:', savedTheme);
+    
+    if (savedTheme === 'alt') {
+        document.body.classList.add('theme-alt');
+        const altOption = document.querySelector('[data-theme="alt"]');
+        const defaultOption = document.querySelector('[data-theme="default"]');
+        if (altOption) altOption.classList.add('active');
+        if (defaultOption) defaultOption.classList.remove('active');
+        console.log('Loaded alt theme from storage');
+    }
+    
+    // Settings toggles
+    const notificationsToggle = document.getElementById('notificationsToggle');
+    const soundsToggle = document.getElementById('soundsToggle');
+    const onlineStatusToggle = document.getElementById('onlineStatusToggle');
+    
+    // Load saved settings
+    if (notificationsToggle) {
+        if (localStorage.getItem('notifications') === 'false') {
+            notificationsToggle.checked = false;
+        }
+        
+        notificationsToggle.addEventListener('change', function() {
+            localStorage.setItem('notifications', this.checked);
+            console.log('Notifications:', this.checked);
+        });
+    }
+    
+    if (soundsToggle) {
+        if (localStorage.getItem('sounds') === 'false') {
+            soundsToggle.checked = false;
+        }
+        
+        soundsToggle.addEventListener('change', function() {
+            localStorage.setItem('sounds', this.checked);
+            console.log('Sounds:', this.checked);
+        });
+    }
+    
+    if (onlineStatusToggle) {
+        if (localStorage.getItem('onlineStatus') === 'false') {
+            onlineStatusToggle.checked = false;
+        }
+        
+        onlineStatusToggle.addEventListener('change', function() {
+            localStorage.setItem('onlineStatus', this.checked);
+            console.log('Online status:', this.checked);
+        });
+    }
 });
 
 // ===== UTILITY FUNCTIONS =====

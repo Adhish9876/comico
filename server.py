@@ -203,33 +203,21 @@ class CollaborationServer:
             # DON'T add to user list
             return
         
-        # Normal user - proceed with welcome messages
-        # First, send to all OTHER clients that someone joined
-        welcome_msg = {
-            'type': 'system',
-            'sender': 'Server',
-            'content': f"{username} joined the chat",
-            'timestamp': self._timestamp()
-        }
-        self.broadcast(json.dumps(welcome_msg), exclude=client_socket)
-        # Now send welcome message to the new user themselves
-        welcome_msg_self = {
-            'type': 'system',
-            'sender': 'Server',
-            'content': f"Welcome {username}! You joined the chat",
-            'timestamp': self._timestamp()
-        }
-        self._send_to_client(client_socket, welcome_msg_self)
+        print(f"[SERVER] Sending welcome messages to {username}")
         
-        # Broadcast user list to EVERYONE
-        self.broadcast_user_list()
-        
-        # Send all data to the new client
+        # First, send chat history to the NEW user (so they see old messages)
         self.send_chat_history(client_socket)
-        self.send_file_metadata(client_socket)
-        self.send_group_list(client_socket)
+        print(f"[SERVER] Sent chat history to {username}")
         
-        # SEND ALL GROUP MESSAGES TO THE NEW USER
+        # Send file metadata
+        self.send_file_metadata(client_socket)
+        print(f"[SERVER] Sent file metadata to {username}")
+        
+        # Send group list
+        self.send_group_list(client_socket)
+        print(f"[SERVER] Sent group list to {username}")
+        
+        # Send all group messages to the new user
         with self.lock:
             for group_id in self.groups.keys():
                 messages = storage.get_group_chat(group_id, 100)
@@ -239,6 +227,29 @@ class CollaborationServer:
                     'messages': messages
                 }
                 self._send_to_client(client_socket, response)
+        
+        # NOW broadcast to all OTHER clients that someone joined
+        welcome_msg = {
+            'type': 'system',
+            'sender': 'Server',
+            'content': f"{username} joined the chat",
+            'timestamp': self._timestamp()
+        }
+        self.broadcast(json.dumps(welcome_msg), exclude=client_socket)
+        print(f"[SERVER] Broadcasted join message for {username}")
+        
+        # Send welcome message to the new user themselves
+        welcome_msg_self = {
+            'type': 'system',
+            'sender': 'Server',
+            'content': f"Welcome {username}! You joined the chat",
+            'timestamp': self._timestamp()
+        }
+        self._send_to_client(client_socket, welcome_msg_self)
+        
+        # Broadcast updated user list to EVERYONE (including new user)
+        self.broadcast_user_list()
+        print(f"[SERVER] Broadcasted user list to all clients")
 
     def _process_messages(self, client_socket: socket.socket, buffer: str) -> str:
         """Process received messages from buffer"""
@@ -291,6 +302,8 @@ class CollaborationServer:
             'video_invite_private': self._handle_video_invite_private,
             'video_invite_group': self._handle_video_invite_group,
             'video_missed': self._handle_video_missed,
+            'get_users': self._handle_get_users,  # NEW HANDLER
+            'request_groups': self._handle_request_groups,  # NEW HANDLER
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -300,8 +313,18 @@ class CollaborationServer:
         else:
             if 'video_invite' in msg_type:
                 print(f"[SERVER] ERROR: No handler found for {msg_type}")
-    
+            else:
+                print(f"[SERVER] No handler for message type: {msg_type}")
 
+    def _handle_get_users(self, client_socket: socket.socket, message: Dict):
+        """Handle explicit request for user list"""
+        print(f"[SERVER] Received get_users request")
+        self.send_user_list_to_client(client_socket)
+
+    def _handle_request_groups(self, client_socket: socket.socket, message: Dict):
+        """Handle explicit request for groups list"""
+        print(f"[SERVER] Received request_groups request")
+        self.send_group_list(client_socket)
 
     def _handle_global_file_share(self, client_socket: socket.socket, message: Dict):
         """Handle global file sharing"""
@@ -461,6 +484,7 @@ class CollaborationServer:
         
     def _handle_chat_history_request(self, client_socket: socket.socket, message: Dict):
         """Handle request for global chat history"""
+        print(f"[SERVER] Received request for chat history")
         self.send_chat_history(client_socket)
 
     def _handle_chat_message(self, client_socket: socket.socket, message: Dict):
@@ -733,17 +757,17 @@ class CollaborationServer:
     def _handle_private_history_request(self, client_socket: socket.socket, message: Dict):
         """Handle request for private message history"""
         username = self.clients.get(client_socket, {}).get('username')
-        target_user = message.get('target_user')
+        receiver = message.get('receiver')
         
-        if not username or not target_user:
+        if not username or not receiver:
             return
         
         # GET FROM STORAGE FIRST
-        messages = storage.get_private_chat(username, target_user, 100)
+        messages = storage.get_private_chat(username, receiver, 100)
         
         response = {
             'type': 'private_history',
-            'target_user': target_user,
+            'receiver': receiver,
             'messages': messages
         }
         self._send_to_client(client_socket, response)
@@ -1133,6 +1157,24 @@ class CollaborationServer:
         except Exception as e:
             print(f"❌ Error sending group list: {e}")
 
+    def send_user_list_to_client(self, client_socket: socket.socket):
+        """Send user list to a specific client"""
+        try:
+            with self.lock:
+                requester = self.clients.get(client_socket, {}).get('username')
+                # Filter out system users and the requester themselves
+                users = [info['username'] for info in self.clients.values()
+                         if not (info['username'].startswith('_') and info['username'].endswith('_System_'))
+                         and info['username'] != requester]
+
+            self._send_to_client(client_socket, {
+                'type': 'user_list',
+                'users': sorted(users)
+            })
+            print(f"📋 Sent user list to client '{requester}': {users}")
+        except Exception as e:
+            print(f"❌ Error sending user list: {e}")
+
     def broadcast(self, message: str, exclude: Optional[socket.socket] = None):
         """Broadcast message to all clients except excluded one"""
         with self.lock:
@@ -1163,14 +1205,22 @@ class CollaborationServer:
     def broadcast_user_list(self):
         """Broadcast current user list to all clients"""
         with self.lock:
-            # Filter out system users (those starting with _ and ending with _System_)
-            users = [info['username'] for info in self.clients.values() 
-                     if not (info['username'].startswith('_') and info['username'].endswith('_System_'))]
-        
-        self.broadcast(json.dumps({
-            'type': 'user_list',
-            'users': sorted(users)
-        }))
+            # Prepare a base set of non-system users
+            non_system_users = [info['username'] for info in self.clients.values()
+                                if not (info['username'].startswith('_') and info['username'].endswith('_System_'))]
+
+            # Send a tailored list to each client (exclude themselves)
+            for sock, info in list(self.clients.items()):
+                requester = info.get('username')
+                users_for_client = sorted([u for u in non_system_users if u != requester])
+                try:
+                    sock.send((json.dumps({
+                        'type': 'user_list',
+                        'users': users_for_client
+                    }) + '\n').encode('utf-8'))
+                    print(f"📋 Sent tailored user list to '{requester}': {users_for_client}")
+                except Exception as e:
+                    print(f"   ❌ Failed to send user list to {requester}: {e}")
 
     def broadcast_group_list(self):
         """Broadcast group list to all clients"""
