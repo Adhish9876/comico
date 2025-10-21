@@ -249,10 +249,15 @@ function handleMessage(message) {
         }
     }
     else if (msgType === 'private_history') {
-        const targetUser = message.target_user;
-        chatHistories.private[targetUser] = message.messages || [];
-        if (currentChatType === 'private' && currentChatTarget === targetUser) {
-            renderCurrentChat();
+        // Server may send the field as 'receiver' or 'target_user' depending on source
+        const targetUser = message.target_user || message.receiver || message.target || message.user;
+        if (targetUser) {
+            chatHistories.private[targetUser] = message.messages || [];
+            if (currentChatType === 'private' && currentChatTarget === targetUser) {
+                renderCurrentChat();
+            }
+        } else {
+            console.log('WARN: private_history received without target user', message);
         }
     }
     else if (msgType === 'group_history') {
@@ -535,11 +540,28 @@ function addMessage(message) {
         content.appendChild(bubble);
     }
     
+    // Add message menu button
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'message-menu-btn';
+    menuBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+        </svg>
+    `;
+    menuBtn.onclick = (e) => {
+        e.stopPropagation();
+        messageDiv.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        showMessageContextMenu(e, messageDiv);
+    };
+    
     messageDiv.appendChild(avatar);
     messageDiv.appendChild(content);
+    messageDiv.appendChild(menuBtn);
     
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    return messageDiv;
 }
 
 function handleVideoInvite(message) {
@@ -702,54 +724,112 @@ function updateUsersList(users) {
     console.log('===== UPDATING USER LIST =====');
     console.log('Received users:', users);
     console.log('Current username:', username);
-    
-    allUsers = users.filter(u => u !== username);
-    console.log('Filtered users:', allUsers);
-    
+    console.log('===== UPDATING USER LIST =====');
+    console.log('Received users:', users);
+    console.log('Current username:', username);
+    // Get all users we've chatted with privately from storage
+    const chattedUsers = new Set();
+    // Check private_chats.json format: keys like "user1_user2"
+    for (const key in chatHistories.private) {
+        const messages = chatHistories.private[key];
+        if (!messages || messages.length === 0) continue;
+        // Check if current username is involved in this chat
+        const hasMyMessages = messages.some(msg => 
+            msg.sender === username || msg.receiver === username
+        );
+        if (hasMyMessages) {
+            // Extract the other user's name
+            const parts = key.split('_');
+            const otherUser = parts[0] === username ? parts[1] : parts[0];
+            if (otherUser && otherUser !== username) {
+                chattedUsers.add(otherUser);
+            }
+        }
+    }
+    // Add current online users (if not already in chattedUsers and not yourself)
+    users.filter(u => u !== username && !chattedUsers.has(u)).forEach(user => {
+        chattedUsers.add(user);
+    });
+    const chatUsersArray = Array.from(chattedUsers);
     usersList.innerHTML = '';
-    if (allUsers.length === 0) {
+    if (chatUsersArray.length === 0) {
         noUsersMsg.style.display = 'block';
         return;
     }
     noUsersMsg.style.display = 'none';
-    allUsers.forEach(user => {
+    chatUsersArray.forEach(user => {
+        const isOnline = users.includes(user);
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-item';
         chatItem.dataset.user = user;
         chatItem.onclick = () => switchToPrivateChat(user);
+        // Get last message for this user - check both key formats
+        let lastMessage = null;
+        const key1 = `${username}_${user}`;
+        const key2 = `${user}_${username}`;
+        const messages = chatHistories.private[key1] || chatHistories.private[key2] || [];
+        if (messages.length > 0) {
+            lastMessage = messages[messages.length - 1];
+        }
+        const lastMsgText = lastMessage ? lastMessage.content.substring(0, 30) + (lastMessage.content.length > 30 ? '...' : '') : 'No messages yet';
         chatItem.innerHTML = `
             <div class="chat-avatar">👤</div>
             <div class="chat-info">
-                <div class="chat-name">${user}</div>
-                <div class="chat-last-msg">Available</div>
+                <div class="chat-name">${user} ${isOnline ? '🟢' : '⚫'}</div>
+                <div class="chat-last-msg">${lastMsgText}</div>
             </div>
+            <button class="chat-menu-btn" onclick="event.stopPropagation(); showChatContextMenu(event, '${user}')">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+            </button>
         `;
         usersList.appendChild(chatItem);
     });
 }
 
 function updateGroupsList(groups) {
+    // Get all groups we've chatted in (including inactive ones)
+    const chattedGroupIds = new Set();
+    for (const groupId in chatHistories.group) {
+        const messages = chatHistories.group[groupId];
+        if (messages.some(msg => msg.sender === username || (msg.members && msg.members.includes(username)))) {
+            chattedGroupIds.add(groupId);
+        }
+    }
+    // Add current active groups (if not already in chattedGroupIds)
     const userGroups = groups.filter(g => g.members.includes(username));
+    userGroups.forEach(group => {
+        chattedGroupIds.add(group.id);
+    });
+    const groupIds = Array.from(chattedGroupIds);
     groupsList.innerHTML = '';
-    
-    if (userGroups.length === 0) {
+    if (groupIds.length === 0) {
         noGroupsMsg.style.display = 'block';
         return;
     }
-    
     noGroupsMsg.style.display = 'none';
-    
-    userGroups.forEach(group => {
+    groupIds.forEach(groupId => {
+        let groupInfo = userGroups.find(g => g.id === groupId);
+        if (!groupInfo) {
+            groupInfo = {
+                id: groupId,
+                name: `Group ${groupId.substring(0, 8)}`,
+                members: []
+            };
+        }
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-item';
-        chatItem.dataset.groupId = group.id;
-        chatItem.onclick = () => switchToGroupChat(group.id, group.name);
-        
+        chatItem.dataset.groupId = groupInfo.id;
+        chatItem.onclick = () => switchToGroupChat(groupInfo.id, groupInfo.name);
+        // Get last message for this group
+        const lastMessage = chatHistories.group[groupInfo.id]?.slice(-1)[0];
+        const lastMsgText = lastMessage ? lastMessage.content.substring(0, 30) + (lastMessage.content.length > 30 ? '...' : '') : 'No messages yet';
         chatItem.innerHTML = `
             <div class="chat-avatar">👥</div>
             <div class="chat-info">
-                <div class="chat-name">${group.name}</div>
-                <div class="chat-last-msg">${group.members.length} members</div>
+                <div class="chat-name">${groupInfo.name}</div>
+                <div class="chat-last-msg">${lastMsgText}</div>
             </div>
         `;
         groupsList.appendChild(chatItem);
@@ -781,15 +861,34 @@ async function switchToPrivateChat(user) {
     currentChatTarget = user;
     chatHeaderName.textContent = user;
     chatHeaderStatus.textContent = 'Private Chat';
-    
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     document.querySelector(`.chat-item[data-user="${user}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
     addToRecentChats(user);
-    
     // Render local history first
-    renderCurrentChat();
-    
+    // Only show messages where current user is sender or receiver and other user is the selected user
+    const history = [];
+    for (const key in chatHistories.private) {
+        let userA, userB;
+        try {
+            if (key.startsWith('[')) {
+                const arr = JSON.parse(key.replace(/'/g, '"'));
+                userA = arr[0];
+                userB = arr[1];
+            } else {
+                [userA, userB] = key.split('_');
+            }
+        } catch {
+            [userA, userB] = key.split('_');
+        }
+        if ((userA === user && userB === username) || (userA === username && userB === user)) {
+            chatHistories.private[key].forEach(msg => {
+                history.push(msg);
+            });
+        }
+    }
+    messagesContainer.innerHTML = '';
+    history.forEach(msg => addMessage(msg));
     // Then request updated history from server
     await eel.send_message('request_private_history', '', {target_user: user})();
     await eel.set_current_chat('private', user)();
@@ -1146,11 +1245,6 @@ window.addEventListener('beforeunload', function() {
 
 // ===== SETTINGS =====
 document.addEventListener('DOMContentLoaded', function() {
-    const settingsBtn = document.getElementById('settingsBtn');
-    const settingsModal = document.getElementById('settingsModal');
-    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-    const themeOptions = document.querySelectorAll('.theme-option');
-    
     // Open settings modal
     if (settingsBtn) {
         settingsBtn.addEventListener('click', function(e) {
@@ -1220,11 +1314,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Settings toggles
-    const notificationsToggle = document.getElementById('notificationsToggle');
-    const soundsToggle = document.getElementById('soundsToggle');
-    const onlineStatusToggle = document.getElementById('onlineStatusToggle');
+    // Remove duplicate variable declarations in DOMContentLoaded
+    // notificationsToggle, soundsToggle, onlineStatusToggle are already declared above
     
-    // Load saved settings
     if (notificationsToggle) {
         if (localStorage.getItem('notifications') === 'false') {
             notificationsToggle.checked = false;
@@ -1315,6 +1407,331 @@ function getCurrentTime() {
     const now = new Date();
     return now.getHours().toString().padStart(2, '0') + ':' + 
            now.getMinutes().toString().padStart(2, '0');
+}
+
+function getCurrentChatMessages() {
+    if (currentChatType === 'global') {
+        return chatHistories.global || [];
+    } else if (currentChatType === 'private' && currentChatTarget) {
+        return chatHistories[currentChatTarget] || [];
+    } else if (currentChatType === 'group' && currentChatTarget) {
+        return chatHistories.groups?.[currentChatTarget] || [];
+    }
+    return [];
+}
+
+// ===== CONTEXT MENUS =====
+function showChatContextMenu(event, user) {
+    const menu = document.getElementById('chatContextMenu');
+    menu.style.left = event.pageX + 'px';
+    menu.style.top = event.pageY + 'px';
+    menu.classList.add('show');
+    menu.dataset.user = user;
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', function closeMenu() {
+            menu.classList.remove('show');
+            document.removeEventListener('click', closeMenu);
+        });
+    }, 0);
+}
+
+function showMessageContextMenu(event, messageElement) {
+    const menu = document.getElementById('messageContextMenu');
+    menu.style.left = event.pageX + 'px';
+    menu.style.top = event.pageY + 'px';
+    menu.classList.add('show');
+    menu.dataset.messageId = messageElement.dataset.messageId;
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', function closeMenu() {
+            menu.classList.remove('show');
+            document.removeEventListener('click', closeMenu);
+        });
+    }, 0);
+}
+
+// Handle context menu actions
+document.addEventListener('click', (e) => {
+    if (e.target.closest('.context-menu-item')) {
+        const action = e.target.closest('.context-menu-item').dataset.action;
+        const menu = e.target.closest('.context-menu');
+        
+        if (menu.id === 'chatContextMenu') {
+            handleChatContextAction(action, menu.dataset.user);
+        } else if (menu.id === 'messageContextMenu') {
+            handleMessageContextAction(action, menu.dataset.messageId);
+        }
+        
+        menu.classList.remove('show');
+    }
+});
+
+function handleChatContextAction(action, user) {
+    switch (action) {
+        case 'archive':
+            archiveChat(user);
+            break;
+        case 'delete-chat':
+            deleteChat(user);
+            break;
+    }
+}
+
+function handleMessageContextAction(action, messageId) {
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) return;
+    
+    switch (action) {
+        case 'reply':
+            replyToMessage(messageElement);
+            break;
+        case 'copy':
+            copyMessage(messageElement);
+            break;
+        case 'forward':
+            forwardMessage(messageElement);
+            break;
+        case 'star':
+            starMessage(messageElement);
+            break;
+        case 'pin':
+            pinMessage(messageElement);
+            break;
+        case 'delete':
+            deleteMessage(messageElement);
+            break;
+        case 'select':
+            selectMessage(messageElement);
+            break;
+        case 'share':
+            shareMessage(messageElement);
+            break;
+    }
+}
+
+// Context menu action implementations
+function archiveChat(user) {
+    showNotification(`Chat with ${user} archived`, 'info');
+    // TODO: Implement archive functionality
+}
+
+function deleteChat(user) {
+    if (confirm(`Delete chat with ${user}? This action cannot be undone.`)) {
+        delete chatHistories[user];
+        updateUsersList(Object.keys(chatHistories).filter(key => key !== 'global' && key !== 'groups'));
+        showNotification(`Chat with ${user} deleted`, 'success');
+    }
+}
+
+function replyToMessage(messageElement) {
+    const messageText = messageElement.querySelector('.message-bubble').textContent;
+    const messageInput = document.getElementById('messageInput');
+    messageInput.value = `Replying to: ${messageText}`;
+    messageInput.focus();
+}
+
+function copyMessage(messageElement) {
+    const messageText = messageElement.querySelector('.message-bubble').textContent;
+    navigator.clipboard.writeText(messageText).then(() => {
+        showNotification('Message copied to clipboard', 'success');
+    });
+}
+
+function forwardMessage(messageElement) {
+    showNotification('Forward message functionality coming soon', 'info');
+    // TODO: Implement forward functionality
+}
+
+function starMessage(messageElement) {
+    messageElement.classList.toggle('starred');
+    showNotification('Message starred', 'success');
+}
+
+function pinMessage(messageElement) {
+    messageElement.classList.toggle('pinned');
+    showNotification('Message pinned', 'success');
+}
+
+function deleteMessage(messageElement) {
+    if (confirm('Delete this message?')) {
+        messageElement.remove();
+        showNotification('Message deleted', 'success');
+    }
+}
+
+function selectMessage(messageElement) {
+    messageElement.classList.toggle('selected');
+    showNotification('Message selected', 'info');
+}
+
+function shareMessage(messageElement) {
+    const messageText = messageElement.querySelector('.message-bubble').textContent;
+    if (navigator.share) {
+        navigator.share({
+            title: 'Shared Message',
+            text: messageText
+        });
+    } else {
+        navigator.clipboard.writeText(messageText).then(() => {
+            showNotification('Message copied to clipboard', 'success');
+        });
+    }
+}
+
+// ===== EMOJI PICKER =====
+function showEmojiPicker() {
+    const picker = document.getElementById('emojiPicker');
+    picker.classList.add('show');
+}
+
+function hideEmojiPicker() {
+    const picker = document.getElementById('emojiPicker');
+    picker.classList.remove('show');
+}
+
+function insertEmoji(emoji) {
+    const messageInput = document.getElementById('messageInput');
+    const cursorPos = messageInput.selectionStart;
+    const textBefore = messageInput.value.substring(0, cursorPos);
+    const textAfter = messageInput.value.substring(messageInput.selectionEnd);
+    
+    messageInput.value = textBefore + emoji + textAfter;
+    messageInput.focus();
+    messageInput.setSelectionRange(cursorPos + emoji.length, cursorPos + emoji.length);
+    
+    hideEmojiPicker();
+}
+
+// ===== SEARCH FUNCTIONALITY =====
+function searchMessages(query) {
+    if (!query.trim()) {
+        renderCurrentChat();
+        return;
+    }
+    
+    const currentMessages = getCurrentChatMessages();
+    const filteredMessages = currentMessages.filter(message => 
+        message.content.toLowerCase().includes(query.toLowerCase()) ||
+        message.sender.toLowerCase().includes(query.toLowerCase())
+    );
+    
+    renderSearchResults(filteredMessages, query);
+}
+
+function renderSearchResults(messages, query) {
+    messagesContainer.innerHTML = '';
+    
+    if (messages.length === 0) {
+        const noResults = document.createElement('div');
+        noResults.className = 'no-results';
+        noResults.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--text-dim);">
+                <div style="font-size: 48px; margin-bottom: 16px;">🔍</div>
+                <div style="font-size: 18px; margin-bottom: 8px;">No results found</div>
+                <div style="font-size: 14px;">No messages match "${query}"</div>
+            </div>
+        `;
+        messagesContainer.appendChild(noResults);
+        return;
+    }
+    
+    messages.forEach(message => {
+        const messageDiv = addMessage(message);
+        // Highlight search terms
+        highlightSearchTerms(messageDiv, query);
+    });
+}
+
+function highlightSearchTerms(messageElement, query) {
+    const messageBubble = messageElement.querySelector('.message-bubble');
+    if (messageBubble) {
+        const text = messageBubble.textContent;
+        const highlightedText = text.replace(
+            new RegExp(query, 'gi'),
+            `<mark style="background: var(--accent-cyan); color: var(--bg-deep); padding: 2px 4px; border-radius: 3px;">$&</mark>`
+        );
+        messageBubble.innerHTML = highlightedText;
+    }
+}
+
+// ===== EVENT LISTENERS =====
+document.addEventListener('DOMContentLoaded', () => {
+    // Emoji picker
+    const emojiBtn = document.getElementById('emojiBtn');
+    const emojiPicker = document.getElementById('emojiPicker');
+    const closeEmojiBtn = document.getElementById('closeEmojiBtn');
+    
+    if (emojiBtn) {
+        emojiBtn.addEventListener('click', showEmojiPicker);
+    }
+    
+    if (closeEmojiBtn) {
+        closeEmojiBtn.addEventListener('click', hideEmojiPicker);
+    }
+    
+    // Close emoji picker when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
+            hideEmojiPicker();
+        }
+    });
+    
+    // Emoji selection
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('emoji')) {
+            const emoji = e.target.dataset.emoji;
+            insertEmoji(emoji);
+        }
+    });
+    
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            searchMessages(e.target.value);
+        });
+        
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchMessages(e.target.value);
+            }
+        });
+    }
+    
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            searchMessages(searchInput.value);
+        });
+    }
+    
+    // Add message menu buttons to existing messages
+    addMessageMenuButtons();
+});
+
+function addMessageMenuButtons() {
+    const messages = document.querySelectorAll('.message');
+    messages.forEach((message, index) => {
+        if (!message.querySelector('.message-menu-btn')) {
+            const menuBtn = document.createElement('button');
+            menuBtn.className = 'message-menu-btn';
+            menuBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+            `;
+            menuBtn.onclick = (e) => {
+                e.stopPropagation();
+                message.dataset.messageId = `msg_${Date.now()}_${index}`;
+                showMessageContextMenu(e, message);
+            };
+            message.appendChild(menuBtn);
+        }
+    });
 }
 
 console.log('Shadow Nexus initialized');

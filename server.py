@@ -234,6 +234,33 @@ class CollaborationServer:
         self.send_user_list_to_client(client_socket)
         print(f"[SERVER] Sent user list to {username}")
         
+        # Send any private chat histories involving this user so the client can populate local state
+        try:
+            print(f"[SERVER] Sending private chat histories to {username} if any exist")
+            # storage.private_chats keys are tuples (user1, user2)
+            for key, msgs in getattr(storage, 'private_chats', {}).items():
+                try:
+                    userA, userB = key
+                except Exception:
+                    # If keys are serialized strings like 'a_b', handle that
+                    if isinstance(key, str) and '_' in key:
+                        parts = key.split('_')
+                        userA, userB = parts[0], parts[1]
+                    else:
+                        continue
+                if username == userA or username == userB:
+                    other = userB if username == userA else userA
+                    messages = storage.get_private_chat(username, other, 200)
+                    history_msg = {
+                        'type': 'private_history',
+                        'target_user': other,
+                        'messages': messages
+                    }
+                    self._send_to_client(client_socket, history_msg)
+            print(f"[SERVER] Finished sending private chat histories to {username}")
+        except Exception as e:
+            print(f"[SERVER] Error sending private histories: {e}")
+
         # Send all group messages to the new user
         with self.lock:
             for group_id in self.groups.keys():

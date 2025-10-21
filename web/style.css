@@ -1699,3 +1699,280 @@ textarea {
     user-select: text;
     -webkit-user-select: text;
 }
+
+/* ===== SEARCH SECTION ===== */
+.search-section {
+    padding: 15px;
+    border-bottom: 1px solid var(--border-main);
+}
+
+.search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-input {
+    width: 100%;
+    padding: 8px 35px 8px 12px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border-main);
+    border-radius: 8px;
+    color: var(--text-normal);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.search-input:focus {
+    border-color: var(--accent-cyan);
+}
+
+.search-btn {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s ease;
+}
+
+.search-btn:hover {
+    color: var(--accent-cyan);
+}
+
+/* ===== EMOJI PICKER ===== */
+.emoji-picker {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-card);
+    border: 1px solid var(--border-main);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    width: 400px;
+    max-height: 500px;
+    display: none;
+    flex-direction: column;
+}
+
+.emoji-picker.show {
+    display: flex;
+}
+
+.emoji-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-main);
+}
+
+.emoji-picker-header span {
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.close-emoji-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s ease;
+}
+
+.close-emoji-btn:hover {
+    color: var(--text-normal);
+}
+
+.emoji-grid {
+    padding: 15px;
+    overflow-y: auto;
+    max-height: 400px;
+}
+
+.emoji-category {
+    margin-bottom: 20px;
+}
+
+.emoji-category h4 {
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.emoji-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.emoji {
+    display: inline-block;
+    font-size: 24px;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    user-select: none;
+}
+
+.emoji:hover {
+    background: var(--bg-deep);
+}
+
+/* ===== CONTEXT MENUS ===== */
+.context-menu {
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-main);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    min-width: 180px;
+    padding: 8px 0;
+    display: none;
+}
+
+.context-menu.show {
+    display: block;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    color: var(--text-normal);
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+}
+
+.context-menu-item:hover {
+    background: var(--bg-deep);
+}
+
+.context-menu-item svg {
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+
+.context-menu-divider {
+    height: 1px;
+    background: var(--border-main);
+    margin: 4px 0;
+}
+
+/* ===== CHAT ITEMS WITH THREE DOTS ===== */
+.chat-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid var(--border-main);
+}
+
+.chat-item:hover {
+    background: var(--bg-deep);
+}
+
+.chat-item:hover .chat-menu-btn {
+    opacity: 1;
+}
+
+.chat-menu-btn {
+    position: absolute;
+    right: 15px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: all 0.2s ease;
+}
+
+.chat-menu-btn:hover {
+    color: var(--text-normal);
+    background: var(--bg-deep);
+}
+
+.chat-menu-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ===== MESSAGE HOVER EFFECTS ===== */
+.message {
+    position: relative;
+}
+
+.message:hover .message-menu-btn {
+    opacity: 1;
+}
+
+.message-menu-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--bg-card);
+    border: 1px solid var(--border-main);
+    border-radius: 4px;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 4px;
+    opacity: 0;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.message-menu-btn:hover {
+    color: var(--text-normal);
+    background: var(--bg-deep);
+}
+
+.message-menu-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: auto;
+        max-height: 200px;
+        border-right: none;
+        border-bottom: 1px solid var(--border-main);
+    }
+    
+    .chat-area {
+        width: 100%;
+        height: calc(100vh - 200px);
+    }
+    
+    .emoji-picker {
+        width: 90%;
+        max-width: 350px;
+    }
+}
