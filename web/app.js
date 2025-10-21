@@ -71,7 +71,53 @@ connectBtn.addEventListener('click', async () => {
             userName.textContent = user;
             connectionScreen.classList.remove('active');
             mainApp.classList.add('active');
+            
+            // Ensure we're in global chat mode when connecting
+            currentChatType = 'global';
+            currentChatTarget = null;
+            chatHeaderName.textContent = 'Global Network';
+            chatHeaderStatus.textContent = 'Secure broadcast channel';
+            
+            // Highlight the global network item
+            document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
+            globalNetworkItem.classList.add('active');
+            
             showNotification('Connected!', 'success');
+            
+            // Start polling for data if Eel bridge is not working
+            setTimeout(() => {
+                console.log('===== STARTING DATA POLLING =====');
+                pollForData();
+            }, 2000);
+            
+            // Test Eel bridge first
+            setTimeout(() => {
+                console.log('===== TESTING EEL BRIDGE =====');
+                try {
+                    eel.test_connection()().then(result => {
+                        console.log('Eel bridge test result:', result);
+                    }).catch(err => {
+                        console.log('Eel bridge test failed:', err);
+                    });
+                } catch (e) {
+                    console.log('Eel bridge not available:', e);
+                }
+            }, 500);
+            
+            // Force render after a short delay to ensure data is received
+            setTimeout(() => {
+                console.log('===== FORCE RENDERING AFTER CONNECT =====');
+                console.log('Global history length:', chatHistories.global.length);
+                
+                // If we still don't have data, request it explicitly
+                if (chatHistories.global.length === 0) {
+                    console.log('No chat history received, requesting explicitly...');
+                    eel.send_message('request_chat_history', '', {})();
+                    eel.refresh_user_list()();
+                }
+                
+                renderCurrentChat();
+            }, 1000);
         } else {
             showNotification(result.message, 'error');
             connectBtn.disabled = false;
@@ -121,6 +167,8 @@ function handleMessage(message) {
     console.log('===== MESSAGE RECEIVED =====');
     console.log('Type:', message.type);
     console.log('Current chat:', currentChatType, currentChatTarget);
+    console.log('Message data:', message);
+    console.log('Message keys:', Object.keys(message));
     
     const msgType = message.type;
 
@@ -188,9 +236,16 @@ function handleMessage(message) {
         addSystemMessage(message.content);
     }
     else if (msgType === 'chat_history') {
+        console.log('===== PROCESSING CHAT HISTORY =====');
+        console.log('Received messages:', message.messages?.length || 0);
         chatHistories.global = message.messages || [];
+        console.log('Stored in chatHistories.global:', chatHistories.global.length);
+        console.log('Current chat type:', currentChatType);
         if (currentChatType === 'global') {
+            console.log('Rendering global chat...');
             renderCurrentChat();
+        } else {
+            console.log('Not in global chat, not rendering yet');
         }
     }
     else if (msgType === 'private_history') {
@@ -208,6 +263,8 @@ function handleMessage(message) {
         }
     }
     else if (msgType === 'user_list') {
+        console.log('===== PROCESSING USER LIST =====');
+        console.log('Received users:', message.users);
         updateUsersList(message.users);
     }
     else if (msgType === 'group_list') {
@@ -326,6 +383,11 @@ function handleMessage(message) {
 }
 
 function renderCurrentChat() {
+    console.log('===== RENDERING CURRENT CHAT =====');
+    console.log('Chat type:', currentChatType);
+    console.log('Global history length:', chatHistories.global.length);
+    console.log('Global history:', chatHistories.global);
+    
     messagesContainer.innerHTML = '';
     
     if (currentChatType === 'global') {
@@ -637,7 +699,13 @@ function addSystemMessage(content) {
 
 // ===== USER & GROUP LISTS =====
 function updateUsersList(users) {
+    console.log('===== UPDATING USER LIST =====');
+    console.log('Received users:', users);
+    console.log('Current username:', username);
+    
     allUsers = users.filter(u => u !== username);
+    console.log('Filtered users:', allUsers);
+    
     usersList.innerHTML = '';
     if (allUsers.length === 0) {
         noUsersMsg.style.display = 'block';
@@ -990,6 +1058,90 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 refreshUsersBtn.addEventListener('click', () => {
     eel.refresh_user_list()();
+});
+
+// ===== DATA POLLING =====
+let pollingInterval = null;
+
+function pollForData() {
+    console.log('===== POLLING FOR DATA =====');
+    
+    // Request chat history from server
+    eel.send_message('request_chat_history', '', {})();
+    
+    // Request user list from server
+    eel.refresh_user_list()();
+    
+    // Also try to get data directly from client
+    setTimeout(() => {
+        console.log('===== GETTING DATA DIRECTLY =====');
+        eel.get_chat_history()().then(result => {
+            console.log('Direct chat history result:', result);
+            if (result.success && result.messages && result.messages.length > 0) {
+                console.log('Got chat history directly:', result.messages.length, 'messages');
+                chatHistories.global = result.messages;
+                renderCurrentChat();
+            }
+        }).catch(err => {
+            console.log('Direct chat history failed:', err);
+        });
+        
+        eel.get_user_list()().then(result => {
+            console.log('Direct user list result:', result);
+            if (result.success && result.users) {
+                console.log('Got user list directly:', result.users.length, 'users');
+                updateUsersList(result.users);
+            }
+        }).catch(err => {
+            console.log('Direct user list failed:', err);
+        });
+    }, 1000);
+    
+    // Set up periodic polling
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+    
+    pollingInterval = setInterval(() => {
+        console.log('===== PERIODIC POLL =====');
+        eel.send_message('request_chat_history', '', {})();
+        eel.refresh_user_list()();
+        
+        // Also get data directly
+        eel.get_chat_history()().then(result => {
+            if (result.success && result.messages && result.messages.length > 0) {
+                chatHistories.global = result.messages;
+                renderCurrentChat();
+            }
+        }).catch(err => {
+            console.log('Periodic chat history failed:', err);
+        });
+        
+        eel.get_user_list()().then(result => {
+            if (result.success && result.users) {
+                updateUsersList(result.users);
+            }
+        }).catch(err => {
+            console.log('Periodic user list failed:', err);
+        });
+    }, 3000); // Poll every 3 seconds
+}
+
+function stopPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('===== STOPPED POLLING =====');
+    }
+}
+
+// ===== CLEANUP =====
+window.addEventListener('beforeunload', function() {
+    // Clean disconnect when closing
+    stopPolling();
+    if (typeof eel !== 'undefined') {
+        eel.disconnect();
+    }
 });
 
 // ===== SETTINGS =====

@@ -133,7 +133,7 @@ class CollaborationServer:
         
         try:
             client_socket.settimeout(10.0)
-            username = self._receive_username(client_socket)
+            username, leftover = self._receive_username_with_buffer(client_socket)
             if not username:
                 return
             
@@ -150,6 +150,13 @@ class CollaborationServer:
             
             # Update in storage
             storage.update_user(username, str(address[0]))
+            
+            # Prime buffer with any leftover data that arrived alongside the username
+            recv_buffer = leftover or ""
+
+            # Small delay to ensure client receive thread is ready
+            import time
+            time.sleep(0.2)
             
             self._send_welcome_messages(client_socket, username)
             
@@ -177,21 +184,22 @@ class CollaborationServer:
         finally:
             self.handle_disconnect(client_socket, username)
 
-    def _receive_username(self, client_socket: socket.socket) -> Optional[str]:
-        """Receive and parse username from client"""
+    def _receive_username_with_buffer(self, client_socket: socket.socket) -> Tuple[Optional[str], str]:
+        """Receive username line and return (username, leftover_buffer)."""
         buffer = ""
         while '\n' not in buffer:
             chunk = client_socket.recv(1024).decode('utf-8')
             if not chunk:
-                return None
+                return None, ""
             buffer += chunk
-        
+
+        first_line, remainder = buffer.split('\n', 1)
         try:
-            username_line = buffer.split('\n')[0]
-            data = json.loads(username_line)
-            return data.get('username', f"User_{int(time.time())}")
+            data = json.loads(first_line)
+            username = data.get('username', f"User_{int(time.time())}")
+            return username, remainder
         except (json.JSONDecodeError, ValueError):
-            return None
+            return None, remainder
 
     def _send_welcome_messages(self, client_socket: socket.socket, username: str):
         # SKIP welcome messages for system users like VideoServer
@@ -204,18 +212,27 @@ class CollaborationServer:
             return
         
         print(f"[SERVER] Sending welcome messages to {username}")
+        print(f"[SERVER] Client socket: {client_socket}")
         
         # First, send chat history to the NEW user (so they see old messages)
+        print(f"[SERVER] About to send chat history to {username}")
         self.send_chat_history(client_socket)
         print(f"[SERVER] Sent chat history to {username}")
         
         # Send file metadata
+        print(f"[SERVER] About to send file metadata to {username}")
         self.send_file_metadata(client_socket)
         print(f"[SERVER] Sent file metadata to {username}")
         
         # Send group list
+        print(f"[SERVER] About to send group list to {username}")
         self.send_group_list(client_socket)
         print(f"[SERVER] Sent group list to {username}")
+        
+        # Also send a tailored user list directly to this client
+        print(f"[SERVER] About to send user list to {username}")
+        self.send_user_list_to_client(client_socket)
+        print(f"[SERVER] Sent user list to {username}")
         
         # Send all group messages to the new user
         with self.lock:
@@ -1097,16 +1114,19 @@ class CollaborationServer:
     def send_chat_history(self, client_socket: socket.socket):
         """Send recent chat history to client"""
         try:
-            # GET FROM STORAGE
-            messages = storage.get_global_chat(100)
+            # GET FROM STORAGE (send a larger slice to feel buffered even after idle)
+            messages = storage.get_global_chat(300)
             
             print(f"📜 Sending {len(messages)} chat history messages to client")
+            print(f"📜 First few messages: {messages[:3] if messages else 'No messages'}")
             
             history_msg = {
                 'type': 'chat_history',
                 'messages': messages
             }
+            print(f"📜 History message: {history_msg}")
             self._send_to_client(client_socket, history_msg)
+            print(f"📜 Successfully sent history to client")
         except Exception as e:
             print(f"❌ Error sending chat history: {e}")
 
@@ -1167,6 +1187,7 @@ class CollaborationServer:
                          if not (info['username'].startswith('_') and info['username'].endswith('_System_'))
                          and info['username'] != requester]
 
+            # Send outside the lock to avoid deadlock
             self._send_to_client(client_socket, {
                 'type': 'user_list',
                 'users': sorted(users)
@@ -1242,40 +1263,54 @@ class CollaborationServer:
 
     def handle_disconnect(self, client_socket: socket.socket, username: Optional[str] = None):
         """Handle client disconnection"""
+        print(f"[SERVER] Handling disconnect for socket: {client_socket}")
+        
+        # First, remove from clients list
         with self.lock:
             if client_socket in self.clients:
                 if username is None:
                     username = self.clients[client_socket]['username']
                 del self.clients[client_socket]
-                
                 print(f"👋 User '{username}' disconnected")
-                
-                # Don't announce system users disconnecting
-                if not (username.startswith('_') and username.endswith('_System_')):
-                    # Send disconnect message to remaining clients
-                    disconnect_msg = {
-                        'type': 'system',
-                        'sender': 'Server',
-                        'content': f"{username} left the chat",
-                        'timestamp': self._timestamp()
-                    }
-                    # Broadcast to all remaining clients
-                    self.broadcast(json.dumps(disconnect_msg))
-                    
-                    # Update user list for all remaining clients
-                    self.broadcast_user_list()
+            else:
+                print(f"[SERVER] Socket not found in clients list")
+                return
+        
+        # Then handle broadcasts outside the lock to avoid deadlock
+        if username and not (username.startswith('_') and username.endswith('_System_')):
+            # Send disconnect message to remaining clients
+            disconnect_msg = {
+                'type': 'system',
+                'sender': 'Server',
+                'content': f"{username} left the chat",
+                'timestamp': self._timestamp()
+            }
+            print(f"[SERVER] Broadcasting disconnect message for {username}")
+            self.broadcast(json.dumps(disconnect_msg))
+            
+            # Update user list for all remaining clients
+            print(f"[SERVER] Broadcasting updated user list after {username} disconnect")
+            self.broadcast_user_list()
+        
+        print(f"[SERVER] Disconnect handling complete for {username}")
         
         try:
             client_socket.close()
-        except:
-            pass
+            print(f"[SERVER] Closed socket for {username}")
+        except Exception as e:
+            print(f"[SERVER] Error closing socket for {username}: {e}")
 
     def _send_to_client(self, client_socket: socket.socket, message: Dict):
         """Send message to a specific client"""
         try:
-            client_socket.send((json.dumps(message) + '\n').encode('utf-8'))
+            message_str = json.dumps(message) + '\n'
+            print(f"[SERVER] Sending to client: {message.get('type')} ({len(message_str)} bytes)")
+            client_socket.send(message_str.encode('utf-8'))
+            print(f"[SERVER] Successfully sent {message.get('type')} to client")
         except Exception as e:
             print(f"❌ Error sending to client: {e}")
+            print(f"❌ Message type: {message.get('type')}")
+            print(f"❌ Client socket: {client_socket}")
 
     def _send_error(self, client_socket: socket.socket, error_message: str):
         """Send error message to client"""

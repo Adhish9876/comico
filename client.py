@@ -44,13 +44,21 @@ state = ClientState()
 def receive_messages():
     """Background thread to receive messages"""
     state.buffer = b""
-    while state.running:
+    print(f"[CLIENT] Starting receive thread for {state.username}")
+    
+    while state.running and state.connected:
         try:
+            if not state.socket:
+                print("[CLIENT] No socket, breaking receive loop")
+                break
+                
             data = state.socket.recv(4096)
             if not data:
+                print("[CLIENT] No data received, connection closed")
                 break
             
             state.buffer += data
+            print(f"[CLIENT] Received {len(data)} bytes, buffer now {len(state.buffer)} bytes")
             
             while b'\n' in state.buffer:
                 message_data, state.buffer = state.buffer.split(b'\n', 1)
@@ -58,21 +66,39 @@ def receive_messages():
                 if message_data.strip():
                     try:
                         message = json.loads(message_data.decode('utf-8'))
-                        print(f"[CLIENT] Received: {message.get('type')}")
-                        # Send to frontend
-                        eel.handleMessage(message)
+                        print(f"[CLIENT] Received message type: {message.get('type')}")
+                        print(f"[CLIENT] Message content: {message}")
+                        
+                        # Store data locally for frontend to retrieve
+                        msg_type = message.get('type')
+                        if msg_type == 'chat_history':
+                            state.last_chat_history = message.get('messages', [])
+                            print(f"[CLIENT] Stored {len(state.last_chat_history)} chat messages")
+                        elif msg_type == 'user_list':
+                            state.last_user_list = message.get('users', [])
+                            print(f"[CLIENT] Stored {len(state.last_user_list)} users")
+                        
+                        # Try to send to frontend (this might fail)
+                        try:
+                            eel.handleMessage(message)
+                            print(f"[CLIENT] Successfully sent to frontend: {message.get('type')}")
+                        except Exception as eel_error:
+                            print(f"[CLIENT] Eel error (expected): {eel_error}")
                     except json.JSONDecodeError as e:
-                        print(f"Invalid JSON: {e}")
+                        print(f"[CLIENT] Invalid JSON: {e}")
+                        print(f"[CLIENT] Raw data: {message_data}")
         
-        except (ConnectionResetError, BrokenPipeError):
+        except (ConnectionResetError, BrokenPipeError) as e:
+            print(f"[CLIENT] Connection lost: {e}")
             if state.running:
                 eel.showError("Connection lost")
             break
         except Exception as e:
+            print(f"[CLIENT] Receive error: {e}")
             if state.running:
-                print(f"Receive error: {e}")
-            break
+                break
     
+    print(f"[CLIENT] Receive thread ending for {state.username}")
     state.running = False
     state.connected = False
     eel.onDisconnected()
@@ -81,22 +107,40 @@ def receive_messages():
 def connect_to_server(username: str, host: str, port: int):
     """Connect to the collaboration server"""
     try:
+        # Clean up any existing connection
+        if state.socket:
+            try:
+                state.socket.close()
+            except:
+                pass
+            state.socket = None
+        
         state.username = username
         state.server_host = host
         state.server_port = port
+        state.running = False
+        state.connected = False
+        
+        print(f"[CLIENT] Connecting to {host}:{port} as {username}")
         
         state.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        state.socket.settimeout(5.0)
+        state.socket.settimeout(10.0)  # Increased timeout
         state.socket.connect((host, port))
         
+        print(f"[CLIENT] Socket connected, sending username...")
+        
         # Send username
-        state.socket.send((json.dumps({
-            'username': username
-        }) + '\n').encode('utf-8'))
+        username_msg = json.dumps({'username': username}) + '\n'
+        state.socket.send(username_msg.encode('utf-8'))
+        
+        print(f"[CLIENT] Username sent, setting up connection...")
         
         state.socket.settimeout(None)
         state.running = True
         state.connected = True
+        
+        # Small delay to ensure socket is ready
+        time.sleep(0.1)
         
         # Initialize audio engine
         state.audio_engine = AudioEngine(username, host, state.audio_port)
@@ -111,49 +155,51 @@ def connect_to_server(username: str, host: str, port: int):
         
         print(f"[CLIENT] Connected as {username}")
         
-        # Wait a moment for connection to stabilize
-        time.sleep(0.2)
+        # Wait for server to send initial data (chat history, user list, groups)
+        # The server automatically sends these during welcome, so we don't need to request them
+        print("[CLIENT] Waiting for server welcome data...")
+        time.sleep(1.0)  # Give more time for welcome data
         
-        # Request chat history with proper parameters
-        request_chat_history_msg = {
-            'type': 'request_chat_history',
-            'sender': username,
-            'chat_type': 'global',
-            'timestamp': datetime.now().strftime("%H:%M:%S")
-        }
-        state.socket.send((json.dumps(request_chat_history_msg) + '\n').encode('utf-8'))
-        print("[CLIENT] Requested global chat history")
+        # Check if we received any data
+        if hasattr(state, 'last_chat_history') and state.last_chat_history:
+            print(f"[CLIENT] Received {len(state.last_chat_history)} messages during welcome")
+        else:
+            print("[CLIENT] No welcome data received, will rely on polling")
         
-        # Wait a moment before requesting user list
-        time.sleep(0.1)
-        
-        # Request online users list
-        user_list_request = {
-            'type': 'get_users',
-            'sender': username,
-            'timestamp': datetime.now().strftime("%H:%M:%S")
-        }
-        state.socket.send((json.dumps(user_list_request) + '\n').encode('utf-8'))
-        print("[CLIENT] Requested user list")
-        
-        # Request groups list
-        time.sleep(0.1)
-        groups_request = {
-            'type': 'request_groups',
-            'sender': username,
-            'timestamp': datetime.now().strftime("%H:%M:%S")
-        }
-        state.socket.send((json.dumps(groups_request) + '\n').encode('utf-8'))
-        print("[CLIENT] Requested groups list")
+        print("[CLIENT] Connection established, ready for use")
         
         return {'success': True, 'message': 'Connected successfully'}
     
     except socket.timeout:
+        print(f"[CLIENT] Connection timeout to {host}:{port}")
         return {'success': False, 'message': 'Connection timeout'}
     except ConnectionRefusedError:
+        print(f"[CLIENT] Connection refused to {host}:{port}")
         return {'success': False, 'message': 'Connection refused. Is the server running?'}
     except Exception as e:
+        print(f"[CLIENT] Connection failed: {e}")
         return {'success': False, 'message': f'Connection error: {str(e)}'}
+
+@eel.expose
+def disconnect():
+    """Disconnect from server"""
+    print(f"[CLIENT] Disconnecting {state.username}")
+    state.running = False
+    state.connected = False
+    
+    if state.socket:
+        try:
+            state.socket.close()
+        except:
+            pass
+        state.socket = None
+    
+    if state.audio_engine:
+        try:
+            state.audio_engine.cleanup()
+        except:
+            pass
+        state.audio_engine = None
 
 @eel.expose
 def send_message(message_type: str, content: str, extra_params: dict = None):
@@ -470,6 +516,26 @@ def start_video_call(chat_type, chat_id):
     except Exception as e:
         print(f"[CLIENT] Video call error: {e}")
         return {'success': False, 'error': str(e)}
+
+@eel.expose
+def get_chat_history():
+    """Get current chat history"""
+    print("[CLIENT] get_chat_history called")
+    # Return the last few messages we received
+    return {'success': True, 'messages': getattr(state, 'last_chat_history', [])}
+
+@eel.expose
+def get_user_list():
+    """Get current user list"""
+    print("[CLIENT] get_user_list called")
+    # Return the last user list we received
+    return {'success': True, 'users': getattr(state, 'last_user_list', [])}
+
+@eel.expose
+def test_connection():
+    """Test if Eel bridge is working"""
+    print("[CLIENT] Eel bridge test called")
+    return {'success': True, 'message': 'Eel bridge is working', 'username': state.username}
 
 @eel.expose
 def refresh_user_list():
