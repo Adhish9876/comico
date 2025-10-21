@@ -13,6 +13,39 @@ const chatHistories = {
     group: {}     // groupId -> messages[]
 };
 
+// Store unread counts
+const unreadCounts = {
+    global: 0,
+    private: {},  // username -> count
+    group: {},    // groupId -> count
+    total: 0
+};
+
+
+// Clear unread count for current chat
+function clearUnreadForCurrentChat() {
+    if (currentChatType === 'global') {
+        unreadCounts.global = 0;
+    } else if (currentChatType === 'private' && currentChatTarget) {
+        unreadCounts.private[currentChatTarget] = 0;
+    } else if (currentChatType === 'group' && currentChatTarget) {
+        unreadCounts.group[currentChatTarget] = 0;
+    }
+    updateTotalUnreadCount();
+    updateUnreadCountsUI();
+}
+
+function updateTotalUnreadCount() {
+    unreadCounts.total = unreadCounts.global +
+        Object.values(unreadCounts.private).reduce((a, b) => a + b, 0) +
+        Object.values(unreadCounts.group).reduce((a, b) => a + b, 0);
+}
+
+// Track window focus
+let isWindowFocused = true;
+window.addEventListener('focus', () => isWindowFocused = true);
+window.addEventListener('blur', () => isWindowFocused = false);
+
 // DOM Elements
 const connectionScreen = document.getElementById('connectionScreen');
 const mainApp = document.getElementById('mainApp');
@@ -24,6 +57,21 @@ const userName = document.getElementById('userName');
 const messagesContainer = document.getElementById('messagesContainer');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
+// Dynamically add mic button next to message input if not present
+if (!document.getElementById('audioRecordBtn')) {
+    const micBtn = document.createElement('button');
+    micBtn.id = 'audioRecordBtn';
+    micBtn.title = 'Record Audio';
+    micBtn.style.cssText = 'margin-left: 8px; background: #8B0000; color: white; border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer;';
+    micBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zm5 9a1 1 0 0 1 2 0c0 4.418-3.582 8-8 8s-8-3.582-8-8a1 1 0 0 1 2 0c0 3.314 2.686 6 6 6s6-2.686 6-6z"/></svg>';
+    // Insert after message input
+    messageInput.parentNode.insertBefore(micBtn, sendBtn);
+    micBtn.addEventListener('click', () => {
+        if (!isRecording) {
+            startRecording();
+        }
+    });
+}
 const usersList = document.getElementById('usersList');
 const groupsList = document.getElementById('groupsList');
 const filesPanel = document.getElementById('filesPanel');
@@ -49,6 +97,7 @@ const themeOptions = document.querySelectorAll('.theme-option');
 const notificationsToggle = document.getElementById('notificationsToggle');
 const soundsToggle = document.getElementById('soundsToggle');
 const onlineStatusToggle = document.getElementById('onlineStatusToggle');
+const audioRecordBtn = document.getElementById('audioRecordBtn');
 
 // ===== CONNECTION =====
 connectBtn.addEventListener('click', async () => {
@@ -68,7 +117,14 @@ connectBtn.addEventListener('click', async () => {
         const result = await eel.connect_to_server(user, host, port)();
         if (result.success) {
             username = user;
-            userName.textContent = user;
+            userName.textContent = user + ' ';
+            const statusIcon = document.createElement('span');
+            statusIcon.innerHTML = '🟢';
+            statusIcon.style.color = '#2ecc71';
+            statusIcon.style.fontSize = '12px';  // CHANGE THIS
+            statusIcon.style.verticalAlign = 'middle';
+            userName.appendChild(statusIcon);
+            
             connectionScreen.classList.remove('active');
             mainApp.classList.add('active');
             
@@ -163,12 +219,91 @@ async function sendMessage() {
 }
 
 eel.expose(handleMessage);
+function updateUnreadCount(type, target = null) {
+    // Update specific chat unread count
+    if (type === 'global') {
+        unreadCounts.global++;
+    } else if (type === 'private' && target) {
+        unreadCounts.private[target] = (unreadCounts.private[target] || 0) + 1;
+    } else if (type === 'group' && target) {
+        unreadCounts.group[target] = (unreadCounts.group[target] || 0) + 1;
+    }
+    
+    // Update total count
+    unreadCounts.total++;
+    
+    // Update UI
+    updateUnreadCountsUI();
+}
+
+function updateUnreadCountsUI() {
+    // Update tab title
+    if (unreadCounts.total > 0) {
+        document.title = `(${unreadCounts.total}) Shadow Nexus`;
+    } else {
+        document.title = 'Shadow Nexus';
+    }
+    
+    // Update chat list items
+    Object.entries(unreadCounts.private).forEach(([user, count]) => {
+        const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
+        if (chatItem) {
+            const unreadBadge = chatItem.querySelector('.unread-count');
+            if (unreadBadge) {
+                if (count > 0) {
+                    unreadBadge.textContent = count;
+                    unreadBadge.style.display = 'inline-block';
+                } else {
+                    unreadBadge.style.display = 'none';
+                }
+            }
+        }
+    });
+    
+    // Update global chat badge
+    const globalBadge = document.querySelector('#globalNetworkItem .unread-count');
+    if (globalBadge) {
+        if (unreadCounts.global > 0) {
+            globalBadge.textContent = unreadCounts.global;
+            globalBadge.style.display = 'inline-block';
+        } else {
+            globalBadge.style.display = 'none';
+        }
+    }
+    
+    // Update total badges
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        const type = btn.dataset.tab;
+        let count = 0;
+        if (type === 'chats') {
+            count = Object.values(unreadCounts.private).reduce((a, b) => a + b, 0);
+        } else if (type === 'groups') {
+            count = Object.values(unreadCounts.group).reduce((a, b) => a + b, 0);
+        }
+        const badge = btn.querySelector('.unread-total');
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    });
+}
+
 function handleMessage(message) {
     console.log('===== MESSAGE RECEIVED =====');
     console.log('Type:', message.type);
     console.log('Current chat:', currentChatType, currentChatTarget);
     console.log('Message data:', message);
     console.log('Message keys:', Object.keys(message));
+    
+    // Check if message should trigger notification
+    const shouldNotify = !isWindowFocused || 
+        (currentChatType !== message.type) ||
+        (message.type === 'private' && currentChatTarget !== message.sender) ||
+        (message.type === 'group' && currentChatTarget !== message.group_id);
     
     const msgType = message.type;
 
@@ -387,11 +522,15 @@ function handleMessage(message) {
     }
 }
 
-function renderCurrentChat() {
+function renderCurrentChat(preserveScroll = true) {
     console.log('===== RENDERING CURRENT CHAT =====');
     console.log('Chat type:', currentChatType);
     console.log('Global history length:', chatHistories.global.length);
     console.log('Global history:', chatHistories.global);
+    
+    // Store current scroll position and check if we're at bottom
+    const wasAtBottom = isAtBottom();
+    const scrollPosition = messagesContainer.scrollTop;
     
     messagesContainer.innerHTML = '';
     
@@ -400,7 +539,7 @@ function renderCurrentChat() {
             if (msg.type === 'video_invite') {
                 handleVideoInvite(msg);
             } else {
-                addMessage(msg);
+                addMessage(msg, false); // Don't auto-scroll for each message
             }
         });
     } else if (currentChatType === 'private' && currentChatTarget) {
@@ -430,10 +569,28 @@ function renderCurrentChat() {
     }
 }
 
-function addMessage(message) {
+// Helper function to check if scroll is at bottom
+function isAtBottom() {
+    const threshold = 50; // pixels from bottom to consider "at bottom"
+    return messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <= threshold;
+}
+
+function addMessage(message, autoScroll = true) {
     const isOwn = message.sender === username;
     const messageDiv = document.createElement('div');
     messageDiv.className = isOwn ? 'message own' : 'message';
+    messageDiv.style.position = 'relative';
+    
+    // Show menu button on hover
+    messageDiv.addEventListener('mouseenter', () => {
+        const menuBtn = messageDiv.querySelector('.message-menu-btn');
+        if (menuBtn) menuBtn.style.opacity = '1';
+    });
+    
+    messageDiv.addEventListener('mouseleave', () => {
+        const menuBtn = messageDiv.querySelector('.message-menu-btn');
+        if (menuBtn) menuBtn.style.opacity = '0';
+    });
     
     // Add different-user class if this message is from a different user than the previous one
     const messages = messagesContainer.children;
@@ -543,8 +700,24 @@ function addMessage(message) {
     // Add message menu button
     const menuBtn = document.createElement('button');
     menuBtn.className = 'message-menu-btn';
+    // Position menu button based on message owner
+    const menuPosition = isOwn ? 'left: -24px;' : 'right: -24px;';
+    menuBtn.style.cssText = `
+        position: absolute; 
+        ${menuPosition}
+        top: 50%; 
+        transform: translateY(-50%); 
+        opacity: 0; 
+        transition: opacity 0.2s;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 50%;
+        z-index: 2;
+    `;
     menuBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="currentColor">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
             <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
         </svg>
     `;
@@ -559,103 +732,202 @@ function addMessage(message) {
     messageDiv.appendChild(menuBtn);
     
     messagesContainer.appendChild(messageDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    // Only auto-scroll if specified or if we're at the bottom
+    if (autoScroll && isAtBottom()) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
     
     return messageDiv;
 }
 
-function handleVideoInvite(message) {
-    const { sender, link, session_id } = message;
+
+function createMenuButton(messageElement, isOwn) {
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'message-menu-btn';
+    menuBtn.style.cssText = `
+        position: absolute;
+        ${isOwn ? 'left: 8px;' : 'right: 8px;'}
+        top: 50%;
+        transform: translateY(-50%);
+        opacity: 0;
+        transition: opacity 0.2s;
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        cursor: pointer;
+        padding: 6px;
+        border-radius: 50%;
+        z-index: 10;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+    menuBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+        </svg>
+    `;
     
-    console.log('[VIDEO] Handling video invite from', sender);
-    
-    // Check if this invite is already marked as missed
-    const isMissed = message.is_missed || false;
-    const missedTime = message.missed_at || '';
-    
-    const videoMessage = document.createElement('div');
-    videoMessage.className = 'message system-message';
-    if (session_id) videoMessage.dataset.sessionId = session_id;
-    
-    if (isMissed) {
-        // Show missed call message
-        videoMessage.innerHTML = `
-            <div style="background: linear-gradient(135deg, rgba(85, 85, 85, 0.2), rgba(119, 119, 119, 0.2)); 
-                        border: 2px solid rgba(119, 119, 119, 0.5); 
-                        border-radius: 12px; 
-                        padding: 15px 20px; 
-                        margin: 10px 0;
-                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                    <div style="font-size: 28px;">📵</div>
-                    <div>
-                        <div style="font-weight: 600; font-size: 16px; color: #999; margin-bottom: 4px;">
-                            ${sender} started a video call
-                        </div>
-                        <div style="font-size: 13px; color: #777;">
-                            ${message.timestamp || new Date().toLocaleTimeString()}
-                        </div>
-                    </div>
-                </div>
-                <button class="join-call-btn" disabled
-                        style="width: 100%; 
-                               background: linear-gradient(135deg, #555, #777); 
-                               border: none; 
-                               border-radius: 8px; 
-                               padding: 12px 20px; 
-                               color: white; 
-                               font-weight: 600; 
-                               font-size: 15px; 
-                               cursor: default; 
-                               font-family: 'Rajdhani', sans-serif;
-                               text-transform: uppercase;
-                               letter-spacing: 1px;">
-                    📵 Missed Call (${missedTime})
-                </button>
-            </div>
-        `;
-    } else {
-        // Show active call invitation
-        videoMessage.innerHTML = `
-            <div style="background: linear-gradient(135deg, rgba(124, 77, 255, 0.2), rgba(0, 212, 255, 0.2)); 
-                        border: 2px solid rgba(124, 77, 255, 0.5); 
-                        border-radius: 12px; 
-                        padding: 15px 20px; 
-                        margin: 10px 0;
-                        box-shadow: 0 4px 20px rgba(124, 77, 255, 0.3);">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                    <div style="font-size: 28px;">📹</div>
-                    <div>
-                        <div style="font-weight: 600; font-size: 16px; color: #7c4dff; margin-bottom: 4px;">
-                            ${sender} started a video call
-                        </div>
-                        <div style="font-size: 13px; color: #9ca3af;">
-                            ${message.timestamp || new Date().toLocaleTimeString()}
-                        </div>
-                    </div>
-                </div>
-                <button class="join-call-btn" onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'video_call', 'width=1200,height=800')" 
-                        style="width: 100%; 
-                               background: linear-gradient(135deg, #7c4dff, #00d4ff); 
-                               border: none; 
-                               border-radius: 8px; 
-                               padding: 12px 20px; 
-                               color: white; 
-                               font-weight: 600; 
-                               font-size: 15px; 
-                               cursor: pointer; 
-                               transition: all 0.3s;
-                               font-family: 'Rajdhani', sans-serif;
-                               text-transform: uppercase;
-                               letter-spacing: 1px;"
-                        onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 25px rgba(124, 77, 255, 0.5)';"
-                        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">
-                    🎥 Join Video Call
-                </button>
-            </div>
-        `;
+    const parentBubble = menuBtn.closest('.message-bubble') || menuBtn.closest('.message-content');
+    if (parentBubble) {
+        parentBubble.addEventListener('mouseenter', () => {
+            menuBtn.style.opacity = '1';
+        });
+        parentBubble.addEventListener('mouseleave', () => {
+            menuBtn.style.opacity = '0';
+        });
     }
     
+    menuBtn.onclick = (e) => {
+        e.stopPropagation();
+        messageElement.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        showMessageContextMenu(e, messageElement);
+    };
+    
+    return menuBtn;
+}
+
+
+
+function handleVideoInvite(message) {
+    const { sender, link, session_id } = message;
+    console.log('[VIDEO] Handling video invite from', sender);
+    const isMissed = message.is_missed || false;
+    const missedTime = message.missed_at || '';
+    const videoMessage = document.createElement('div');
+    if (session_id) videoMessage.dataset.sessionId = session_id;
+
+    if (isMissed) {
+        // Reduced size and updated styling for missed call message
+        videoMessage.innerHTML = `
+       <div style="background: #2a2828;
+            border: 1px solid #3d3838; 
+            border-radius: 8px; 
+            padding: 16px; 
+            margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            max-width: 380px;
+            width: fit-content;
+            min-width: 320px;">
+    <div style="display: flex; 
+                align-items: center; 
+                gap: 12px; 
+                margin-bottom: 12px;">
+        <div style="font-size: 26px; 
+                    line-height: 1; 
+                    flex-shrink: 0;
+                    filter: grayscale(40%) brightness(0.7);
+                    opacity: 0.8;">📵</div>
+        <div style="flex: 1; 
+                    min-width: 0;">
+            <div style="font-weight: 500; 
+                        font-size: 14px; 
+                        color: #c4c0c0; 
+                        margin-bottom: 4px; 
+                        line-height: 1.4;">
+                ${sender} started a video call
+            </div>
+            <div style="font-size: 11px; 
+                        color: #857f7f; 
+                        line-height: 1.3;">
+                ${message.timestamp || new Date().toLocaleTimeString()}
+            </div>
+        </div>
+    </div>
+    <button class="join-call-btn" 
+            disabled
+            style="width: 100%; 
+                   background: #484444; 
+                   border: 1px solid #524e4e; 
+                   border-radius: 6px; 
+                   padding: 10px 12px; 
+                   color: #908a8a; 
+                   font-weight: 500; 
+                   font-size: 13px; 
+                   cursor: not-allowed; 
+                   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                   text-transform: uppercase;
+                   letter-spacing: 0.8px;
+                   display: flex;
+                   align-items: center;
+                   justify-content: center;
+                   gap: 8px;
+                   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+                   opacity: 0.7;">
+        <span style="filter: grayscale(40%) brightness(0.7);">📵</span>
+        <span>Missed Call (${missedTime})</span>
+    </button>
+</div>
+
+        `;
+    } else {
+        // Reduced size and updated styling for active video call invitation
+        videoMessage.innerHTML = `
+       <div style="background: #2a2828;
+            border: 1px solid #3d3838; 
+            border-radius: 8px; 
+            padding: 16px; 
+            margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            max-width: 380px;
+            width: fit-content;
+            min-width: 320px;">
+    <div style="display: flex; 
+                align-items: center; 
+                gap: 12px; 
+                margin-bottom: 12px;">
+        <div style="font-size: 26px; 
+                    line-height: 1; 
+                    flex-shrink: 0;
+                    filter: grayscale(20%) brightness(0.9);">📹</div>
+        <div style="flex: 1; 
+                    min-width: 0;">
+            <div style="font-weight: 500; 
+                        font-size: 14px; 
+                        color: #e0dede; 
+                        margin-bottom: 4px; 
+                        line-height: 1.4;">
+                ${sender} started a video call
+            </div>
+            <div style="font-size: 11px; 
+                        color: #9a9696; 
+                        line-height: 1.3;">
+                ${message.timestamp || new Date().toLocaleTimeString()}
+            </div>
+        </div>
+    </div>
+    <button class="join-call-btn" 
+            onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'video_call', 'width=1200,height=800')"
+            style="width: 100%; 
+                   background: #6b4646; 
+                   border: 1px solid #7a5252; 
+                   border-radius: 6px; 
+                   padding: 10px 12px; 
+                   color: #e8e4e4; 
+                   font-weight: 500; 
+                   font-size: 13px; 
+                   cursor: pointer; 
+                   transition: all 0.2s ease;
+                   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                   text-transform: uppercase;
+                   letter-spacing: 0.8px;
+                   display: flex;
+                   align-items: center;
+                   justify-content: center;
+                   gap: 8px;
+                   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);"
+            onmouseover="this.style.background='#7a5252'; this.style.borderColor='#8a6060';"
+            onmouseout="this.style.background='#6b4646'; this.style.borderColor='#7a5252';">
+        <span style="filter: grayscale(20%) brightness(0.9);">🎥</span>
+        <span>Join Video Call</span>
+    </button>
+</div>
+
+
+        `;
+    }
     messagesContainer.appendChild(videoMessage);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
@@ -775,7 +1047,10 @@ function updateUsersList(users) {
         chatItem.innerHTML = `
             <div class="chat-avatar">👤</div>
             <div class="chat-info">
-                <div class="chat-name">${user} ${isOnline ? '🟢' : '⚫'}</div>
+                <div class="chat-name">${user} 
+                    <span style="font-size: 14px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 4px;">●</span>
+                    <span class="unread-count" style="display: none; background: #2ecc71; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;">0</span>
+                </div>
                 <div class="chat-last-msg">${lastMsgText}</div>
             </div>
             <button class="chat-menu-btn" onclick="event.stopPropagation(); showChatContextMenu(event, '${user}')">
@@ -1043,6 +1318,220 @@ function addFileToList(file) {
     filesList.appendChild(fileItem);
 }
 
+// Audio Recording functionality
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let recordingTimer = null;
+let recordingDuration = 0;
+
+async function startRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        isRecording = true;
+        recordingDuration = 0;
+
+        // Create and show the recording UI
+        const recordingUI = document.createElement('div');
+        recordingUI.id = 'recordingUI';
+        recordingUI.innerHTML = `
+            <div style="
+                position: fixed;
+                bottom: 80px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: linear-gradient(135deg, #8B0000, #000000);
+                padding: 15px 25px;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                box-shadow: 0 4px 20px rgba(139, 0, 0, 0.5);
+                z-index: 1000;
+            ">
+                <div style="
+                    width: 12px;
+                    height: 12px;
+                    background: #FF4500;
+                    border-radius: 50%;
+                    animation: pulse 1s infinite;
+                "></div>
+                <span id="recordingTime" style="
+                    color: white;
+                    font-family: 'Rajdhani', sans-serif;
+                    font-size: 16px;
+                    min-width: 50px;
+                ">0:00</span>
+                <button id="stopRecording" style="
+                    background: rgba(255, 255, 255, 0.2);
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 15px;
+                    color: white;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    font-family: 'Rajdhani', sans-serif;
+                ">Stop Recording</button>
+            </div>
+        `;
+        document.body.appendChild(recordingUI);
+
+        // Update the timer
+        recordingTimer = setInterval(() => {
+            recordingDuration++;
+            const minutes = Math.floor(recordingDuration / 60);
+            const seconds = recordingDuration % 60;
+            document.getElementById('recordingTime').textContent = 
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }, 1000);
+
+        // Handle the recording
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            showAudioPreview(audioBlob);
+        };
+
+        document.getElementById('stopRecording').onclick = stopRecording;
+        mediaRecorder.start();
+
+    } catch (error) {
+        console.error('Error starting recording:', error);
+        showNotification('Could not start recording', 'error');
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+        clearInterval(recordingTimer);
+        document.getElementById('recordingUI')?.remove();
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    }
+}
+
+function showAudioPreview(audioBlob) {
+    const previewUI = document.createElement('div');
+    previewUI.id = 'audioPreview';
+    previewUI.innerHTML = `
+        <div style="
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #8B0000, #000000);
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 4px 20px rgba(139, 0, 0, 0.5);
+            z-index: 1000;
+        ">
+            <audio id="audioPreviewPlayer" controls style="
+                width: 250px;
+                height: 40px;
+                border-radius: 20px;
+            "></audio>
+            <div style="
+                display: flex;
+                gap: 10px;
+            ">
+                <button id="discardAudio" style="
+                    background: rgba(255, 255, 255, 0.2);
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 15px;
+                    color: white;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    font-family: 'Rajdhani', sans-serif;
+                ">Discard</button>
+                <button id="sendAudio" style="
+                    background: linear-gradient(135deg, #FF4500, #8B0000);
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 15px;
+                    color: white;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    font-family: 'Rajdhani', sans-serif;
+                ">Send</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(previewUI);
+
+    // Set up the audio preview
+    const audioURL = URL.createObjectURL(audioBlob);
+    const audioPlayer = document.getElementById('audioPreviewPlayer');
+    audioPlayer.src = audioURL;
+    audioPlayer.style.background = 'rgba(255, 255, 255, 0.1)';
+
+    // Handle buttons
+    document.getElementById('discardAudio').onclick = () => {
+        previewUI.remove();
+        URL.revokeObjectURL(audioURL);
+    };
+
+    document.getElementById('sendAudio').onclick = async () => {
+        // Convert blob to base64
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const base64Audio = reader.result.split(',')[1];
+            
+            try {
+                // Send the audio message based on current chat type
+                if (currentChatType === 'private' && currentChatTarget) {
+                    await eel.send_message('private_audio', '', {
+                        receiver: currentChatTarget,
+                        audio_data: base64Audio,
+                        duration: recordingDuration
+                    })();
+                } else if (currentChatType === 'group' && currentChatTarget) {
+                    await eel.send_message('group_audio', '', {
+                        group_id: currentChatTarget,
+                        audio_data: base64Audio,
+                        duration: recordingDuration
+                    })();
+                } else {
+                    await eel.send_message('audio_message', '', {
+                        audio_data: base64Audio,
+                        duration: recordingDuration
+                    })();
+                }
+                
+                showNotification('Audio message sent', 'success');
+            } catch (error) {
+                console.error('Error sending audio:', error);
+                showNotification('Failed to send audio message', 'error');
+            }
+            
+            previewUI.remove();
+            URL.revokeObjectURL(audioURL);
+        };
+        reader.readAsDataURL(audioBlob);
+    };
+}
+
+// Add keyboard shortcuts for recording
+// Add audio record button
+if (audioRecordBtn) {
+    audioRecordBtn.addEventListener('click', () => {
+        if (!isRecording) {
+            startRecording();
+        }
+    });
+}
+
+// Original download file function
 async function downloadFile(file) {
     try {
         const result = await eel.download_file(file.file_id)();
@@ -1065,11 +1554,23 @@ function formatFileSize(bytes) {
 
 // ===== GROUP CREATION =====
 newGroupBtn.addEventListener('click', async () => {
-    if (allUsers.length === 0) {
-        showNotification('No other users online', 'warning');
-        return;
+    // Get latest user list first
+    try {
+        const result = await eel.get_user_list()();
+        if (result.success && result.users) {
+            const otherUsers = result.users.filter(u => u !== username);
+            if (otherUsers.length === 0) {
+                showNotification('No other users online', 'warning');
+                return;
+            }
+            showGroupModal(otherUsers);
+        } else {
+            showNotification('Failed to get user list', 'error');
+        }
+    } catch (error) {
+        console.error('Error getting user list:', error);
+        showNotification('Error getting user list', 'error');
     }
-    showGroupModal(allUsers);
 });
 
 function showGroupModal(users) {
@@ -1159,11 +1660,18 @@ refreshUsersBtn.addEventListener('click', () => {
     eel.refresh_user_list()();
 });
 
+
+
+
 // ===== DATA POLLING =====
 let pollingInterval = null;
 
 function pollForData() {
     console.log('===== POLLING FOR DATA =====');
+    
+    // Store current scroll position before polling
+    const wasAtBottom = isAtBottom();
+    const scrollPosition = messagesContainer.scrollTop;
     
     // Request chat history from server
     eel.send_message('request_chat_history', '', {})();
@@ -1178,8 +1686,17 @@ function pollForData() {
             console.log('Direct chat history result:', result);
             if (result.success && result.messages && result.messages.length > 0) {
                 console.log('Got chat history directly:', result.messages.length, 'messages');
+                const oldLength = chatHistories.global.length;
                 chatHistories.global = result.messages;
-                renderCurrentChat();
+                
+                // Only force scroll if new messages arrived and we were at bottom
+                const forceScroll = wasAtBottom && result.messages.length > oldLength;
+                renderCurrentChat(!forceScroll);
+                
+                // Restore scroll position if we weren't at bottom
+                if (!forceScroll) {
+                    messagesContainer.scrollTop = scrollPosition;
+                }
             }
         }).catch(err => {
             console.log('Direct chat history failed:', err);
@@ -1196,21 +1713,46 @@ function pollForData() {
         });
     }, 1000);
     
-    // Set up periodic polling
+    // Set up periodic polling with exponential backoff
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
     
+    let pollInterval = 5000; // Start with 5 seconds
+    const maxInterval = 15000; // Max interval of 15 seconds
+    
     pollingInterval = setInterval(() => {
         console.log('===== PERIODIC POLL =====');
-        eel.send_message('request_chat_history', '', {})();
-        eel.refresh_user_list()();
+        
+        // Only poll if the tab is visible
+        if (!document.hidden) {
+            eel.send_message('request_chat_history', '', {})();
+            eel.refresh_user_list()();
+            
+            // Increase polling interval gradually
+            if (pollInterval < maxInterval) {
+                clearInterval(pollingInterval);
+                pollInterval = Math.min(pollInterval * 1.5, maxInterval);
+                pollingInterval = setInterval(arguments.callee, pollInterval);
+            }
+        }
         
         // Also get data directly
         eel.get_chat_history()().then(result => {
             if (result.success && result.messages && result.messages.length > 0) {
+                const wasAtBottom = isAtBottom();
+                const scrollPosition = messagesContainer.scrollTop;
+                const oldLength = chatHistories.global.length;
                 chatHistories.global = result.messages;
-                renderCurrentChat();
+                
+                // Only force scroll if new messages arrived and we were at bottom
+                const forceScroll = wasAtBottom && result.messages.length > oldLength;
+                renderCurrentChat(!forceScroll);
+                
+                // Restore scroll position if we weren't at bottom
+                if (!forceScroll) {
+                    messagesContainer.scrollTop = scrollPosition;
+                }
             }
         }).catch(err => {
             console.log('Periodic chat history failed:', err);
@@ -1379,8 +1921,8 @@ function showNotification(message, type = 'info') {
     const notification = document.createElement('div');
     notification.style.cssText = `
         position: fixed;
-        top: 80px;
-        right: 20px;
+        top: 20px;
+        left: 20px;
         background: var(--bg-secondary);
         border: 1px solid ${colors[type]};
         border-radius: 6px;
@@ -1514,15 +2056,46 @@ function handleMessageContextAction(action, messageId) {
 
 // Context menu action implementations
 function archiveChat(user) {
-    showNotification(`Chat with ${user} archived`, 'info');
-    // TODO: Implement archive functionality
+    if (confirm(`Archive chat with ${user}?`)) {
+        // Store archived state
+        const chatKey = Object.keys(chatHistories.private).find(key => 
+            key.includes(user) && key.includes(username)
+        );
+        
+        if (chatKey) {
+            localStorage.setItem(`archived_${chatKey}`, 'true');
+            // Hide the chat item
+            const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
+            if (chatItem) {
+                chatItem.style.opacity = '0.5';
+            }
+            showNotification(`Chat with ${user} archived`, 'success');
+        }
+    }
 }
 
 function deleteChat(user) {
     if (confirm(`Delete chat with ${user}? This action cannot be undone.`)) {
-        delete chatHistories[user];
-        updateUsersList(Object.keys(chatHistories).filter(key => key !== 'global' && key !== 'groups'));
-        showNotification(`Chat with ${user} deleted`, 'success');
+        // Find the correct chat key
+        const chatKey = Object.keys(chatHistories.private).find(key => 
+            key.includes(user) && key.includes(username)
+        );
+        
+        if (chatKey) {
+            delete chatHistories.private[chatKey];
+            // Remove from localStorage
+            localStorage.removeItem(`archived_${chatKey}`);
+            // Remove chat item from UI
+            const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
+            if (chatItem) {
+                chatItem.remove();
+            }
+            // If this was the current chat, switch to global
+            if (currentChatType === 'private' && currentChatTarget === user) {
+                globalNetworkItem.click();
+            }
+            showNotification(`Chat with ${user} deleted`, 'success');
+        }
     }
 }
 
@@ -1534,31 +2107,142 @@ function replyToMessage(messageElement) {
 }
 
 function copyMessage(messageElement) {
-    const messageText = messageElement.querySelector('.message-bubble').textContent;
-    navigator.clipboard.writeText(messageText).then(() => {
-        showNotification('Message copied to clipboard', 'success');
-    });
+    const messageText = messageElement.querySelector('.message-bubble')?.textContent;
+    if (messageText) {
+        navigator.clipboard.writeText(messageText).then(() => {
+            showNotification('Message copied to clipboard', 'success');
+        }).catch(() => {
+            // Fallback for clipboard API failure
+            const textArea = document.createElement('textarea');
+            textArea.value = messageText;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showNotification('Message copied to clipboard', 'success');
+        });
+    }
 }
 
 function forwardMessage(messageElement) {
-    showNotification('Forward message functionality coming soon', 'info');
-    // TODO: Implement forward functionality
+    const messageText = messageElement.querySelector('.message-bubble')?.textContent;
+    if (messageText) {
+        // Create forward dialog
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-overlay';
+        dialog.innerHTML = `
+            <div class="modal-content" style="width: 300px;">
+                <h3>Forward Message</h3>
+                <div class="user-select-list" style="max-height: 200px; overflow-y: auto;">
+                    ${Object.keys(chatHistories.private).map(key => {
+                        const otherUser = key.split('_').find(u => u !== username);
+                        return `
+                            <div class="user-forward-option" data-user="${otherUser}">
+                                <span>${otherUser}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+                <div class="modal-buttons">
+                    <button class="modal-btn cancel">Cancel</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(dialog);
+        
+        // Handle forward selection
+        dialog.querySelectorAll('.user-forward-option').forEach(option => {
+            option.onclick = async () => {
+                const targetUser = option.dataset.user;
+                await eel.send_message('private', messageText, {receiver: targetUser})();
+                dialog.remove();
+                showNotification('Message forwarded', 'success');
+            };
+        });
+        
+        // Handle cancel
+        dialog.querySelector('.cancel').onclick = () => dialog.remove();
+    }
 }
 
 function starMessage(messageElement) {
-    messageElement.classList.toggle('starred');
-    showNotification('Message starred', 'success');
+    const messageId = messageElement.dataset.messageId;
+    const isStarred = messageElement.classList.toggle('starred');
+    
+    // Add star icon if not exists
+    let starIcon = messageElement.querySelector('.star-icon');
+    if (!starIcon && isStarred) {
+        starIcon = document.createElement('span');
+        starIcon.className = 'star-icon';
+        starIcon.innerHTML = '⭐';
+        starIcon.style.position = 'absolute';
+        starIcon.style.right = '4px';
+        starIcon.style.top = '4px';
+        starIcon.style.fontSize = '12px';
+        messageElement.appendChild(starIcon);
+    } else if (starIcon && !isStarred) {
+        starIcon.remove();
+    }
+    
+    // Store starred state
+    const starredMessages = JSON.parse(localStorage.getItem('starredMessages') || '{}');
+    if (isStarred) {
+        starredMessages[messageId] = true;
+    } else {
+        delete starredMessages[messageId];
+    }
+    localStorage.setItem('starredMessages', JSON.stringify(starredMessages));
+    
+    showNotification(isStarred ? 'Message starred' : 'Message unstarred', 'success');
 }
 
 function pinMessage(messageElement) {
-    messageElement.classList.toggle('pinned');
-    showNotification('Message pinned', 'success');
+    const messageId = messageElement.dataset.messageId;
+    const isPinned = messageElement.classList.toggle('pinned');
+    
+    // Add pin icon if not exists
+    let pinIcon = messageElement.querySelector('.pin-icon');
+    if (!pinIcon && isPinned) {
+        pinIcon = document.createElement('span');
+        pinIcon.className = 'pin-icon';
+        pinIcon.innerHTML = '📌';
+        pinIcon.style.position = 'absolute';
+        pinIcon.style.left = '-20px';
+        pinIcon.style.top = '50%';
+        pinIcon.style.transform = 'translateY(-50%)';
+        pinIcon.style.fontSize = '14px';
+        messageElement.appendChild(pinIcon);
+        
+        // Move pinned message to top
+        messagesContainer.insertBefore(messageElement, messagesContainer.firstChild);
+    } else if (pinIcon && !isPinned) {
+        pinIcon.remove();
+    }
+    
+    // Store pinned state
+    const pinnedMessages = JSON.parse(localStorage.getItem('pinnedMessages') || '{}');
+    if (isPinned) {
+        pinnedMessages[messageId] = true;
+    } else {
+        delete pinnedMessages[messageId];
+    }
+    localStorage.setItem('pinnedMessages', JSON.stringify(pinnedMessages));
+    
+    showNotification(isPinned ? 'Message pinned' : 'Message unpinned', 'success');
 }
 
 function deleteMessage(messageElement) {
-    if (confirm('Delete this message?')) {
-        messageElement.remove();
-        showNotification('Message deleted', 'success');
+    if (confirm('Delete this message? This action cannot be undone.')) {
+        // Fade out animation
+        messageElement.style.transition = 'opacity 0.3s, transform 0.3s';
+        messageElement.style.opacity = '0';
+        messageElement.style.transform = 'translateX(-20px)';
+        
+        setTimeout(() => {
+            messageElement.remove();
+            showNotification('Message deleted', 'success');
+        }, 300);
     }
 }
 
@@ -1657,8 +2341,34 @@ function highlightSearchTerms(messageElement, query) {
     }
 }
 
+// Function to reset polling interval on user activity
+function resetPollingInterval() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollInterval = 5000; // Reset to initial interval
+        pollingInterval = setInterval(() => {
+            if (!document.hidden) {
+                eel.send_message('request_chat_history', '', {})();
+                eel.refresh_user_list()();
+            }
+        }, pollInterval);
+    }
+}
+
 // ===== EVENT LISTENERS =====
 document.addEventListener('DOMContentLoaded', () => {
+    // Reset polling on user activity
+    ['click', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+        document.addEventListener(event, resetPollingInterval, { passive: true });
+    });
+    
+    // Reset polling when tab becomes visible
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            resetPollingInterval();
+        }
+    });
+
     // Emoji picker
     const emojiBtn = document.getElementById('emojiBtn');
     const emojiPicker = document.getElementById('emojiPicker');

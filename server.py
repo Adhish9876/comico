@@ -583,7 +583,7 @@ class CollaborationServer:
             error_msg = {
                 'type': 'system',
                 'sender': 'Server',
-                'content': f"User {receiver} is offline. Message saved.",
+                #'content': f"User {receiver} is offline. Message saved.",
                 'timestamp': self._timestamp()
             }
             self._send_to_client(client_socket, error_msg)
