@@ -1,0 +1,6 @@
+eel
+flask
+opencv-python
+pyaudio
+numpy
+requests

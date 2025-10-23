@@ -33,6 +33,52 @@ function clearUnreadForCurrentChat() {
     }
     updateTotalUnreadCount();
     updateUnreadCountsUI();
+    
+    // Clear any persistent banner when switching to the relevant chat
+    const banner = document.getElementById('inAppBanner');
+    if (banner) banner.remove();
+}
+
+// Native/browser notifications helper
+function notifySystem(title, body) {
+    try {
+        if (localStorage.getItem('notifications') === 'false') return;
+        if (!('Notification' in window)) return;
+        const show = () => {
+            try { new Notification(title, { body }); } catch (e) { /* ignore */ }
+        };
+        if (Notification.permission === 'granted') {
+            show();
+        } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(p => { if (p === 'granted') show(); });
+        }
+    } catch (e) { /* noop */ }
+}
+
+// In-app persistent banner (no auto-remove)
+function showInAppBanner(text) {
+    const existing = document.getElementById('inAppBanner');
+    if (existing) existing.remove();
+    const banner = document.createElement('div');
+    banner.id = 'inAppBanner';
+    banner.style.cssText = `
+        position: fixed;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--bg-secondary);
+        border: 1px solid #8b0000;
+        color: #e8e4e4;
+        padding: 10px 14px;
+        border-radius: 8px;
+        box-shadow: 0 6px 20px rgba(0,0,0,.35);
+        z-index: 10000;
+        font-weight: 600;
+        cursor: pointer;
+    `;
+    banner.textContent = text;
+    banner.onclick = () => banner.remove();
+    document.body.appendChild(banner);
 }
 
 function updateTotalUnreadCount() {
@@ -99,6 +145,30 @@ const soundsToggle = document.getElementById('soundsToggle');
 const onlineStatusToggle = document.getElementById('onlineStatusToggle');
 const audioRecordBtn = document.getElementById('audioRecordBtn');
 
+// Ensure badge elements exist for totals and global
+function ensureBadges() {
+    try {
+        // Tab total badges
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            if (!btn.querySelector('.unread-total')) {
+                const span = document.createElement('span');
+                span.className = 'unread-total';
+                span.style.cssText = 'margin-left:6px; display:none; background:#2ecc71; color:#fff; padding:1px 6px; border-radius:10px; font-size:12px;';
+                btn.appendChild(span);
+            }
+        });
+        // Global badge (RED for global)
+        const globalBadgeParent = document.querySelector('#globalNetworkItem .chat-info .chat-name');
+        if (globalBadgeParent && !document.querySelector('#globalNetworkItem .unread-count')) {
+            const span = document.createElement('span');
+            span.className = 'unread-count';
+            span.style.cssText = 'display:none; background:#8b0000; color:white; padding:2px 6px; border-radius:10px; font-size:12px; margin-left:8px;';
+            span.textContent = '0';
+            globalBadgeParent.appendChild(span);
+        }
+    } catch (e) { /* noop */ }
+}
+
 // ===== CONNECTION =====
 connectBtn.addEventListener('click', async () => {
     const user = usernameInput.value.trim();
@@ -139,6 +209,9 @@ connectBtn.addEventListener('click', async () => {
             globalNetworkItem.classList.add('active');
             
             showNotification('Connected!', 'success');
+            
+            // Ensure badges are created
+            ensureBadges();
             
             // Start polling for data if Eel bridge is not working
             setTimeout(() => {
@@ -244,15 +317,53 @@ function updateUnreadCountsUI() {
         document.title = 'Shadow Nexus';
     }
     
-    // Update chat list items
+    // Update chat list items (private)
     Object.entries(unreadCounts.private).forEach(([user, count]) => {
         const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
         if (chatItem) {
-            const unreadBadge = chatItem.querySelector('.unread-count');
+            let unreadBadge = chatItem.querySelector('.unread-count');
+            if (!unreadBadge) {
+                const nameEl = chatItem.querySelector('.chat-name');
+                if (nameEl) {
+                    unreadBadge = document.createElement('span');
+                    unreadBadge.className = 'unread-count';
+                    unreadBadge.style.cssText = 'display:none; background:#2ecc71; color:white; padding:2px 6px; border-radius:10px; font-size:12px; margin-left:8px;';
+                    nameEl.appendChild(unreadBadge);
+                }
+            }
             if (unreadBadge) {
                 if (count > 0) {
                     unreadBadge.textContent = count;
                     unreadBadge.style.display = 'inline-block';
+                    unreadBadge.style.background = '#2ecc71'; // Green for private
+                    unreadBadge.style.color = '#fff';
+                } else {
+                    unreadBadge.style.display = 'none';
+                }
+            }
+        }
+    });
+
+    // Update group list items
+    Object.entries(unreadCounts.group).forEach(([gid, count]) => {
+        const chatItem = document.querySelector(`.chat-item[data-group-id="${gid}"]`);
+        if (chatItem) {
+            let unreadBadge = chatItem.querySelector('.unread-count');
+            if (!unreadBadge) {
+                const nameEl = chatItem.querySelector('.chat-name');
+                if (nameEl) {
+                    unreadBadge = document.createElement('span');
+                    unreadBadge.className = 'unread-count';
+                    unreadBadge.style.cssText = 'display:none; background:#2ecc71; color:white; padding:2px 6px; border-radius:10px; font-size:12px; margin-left:8px;';
+                    nameEl.appendChild(unreadBadge);
+                }
+            }
+            if (unreadBadge) {
+                if (count > 0) {
+                    unreadBadge.textContent = count;
+                    unreadBadge.style.display = 'inline-block';
+                    unreadBadge.style.background = '#2ecc71'; // Green for groups
+                    unreadBadge.style.color = '#fff';
                 } else {
                     unreadBadge.style.display = 'none';
                 }
@@ -260,14 +371,25 @@ function updateUnreadCountsUI() {
         }
     });
     
-    // Update global chat badge
+    // Update global chat badge (RED for global only)
     const globalBadge = document.querySelector('#globalNetworkItem .unread-count');
     if (globalBadge) {
         if (unreadCounts.global > 0) {
             globalBadge.textContent = unreadCounts.global;
             globalBadge.style.display = 'inline-block';
+            globalBadge.style.background = '#8b0000'; // RED for global
+            globalBadge.style.color = '#fff';
         } else {
             globalBadge.style.display = 'none';
+        }
+    } else {
+        // If badge doesn't exist, create it
+        const globalName = document.querySelector('#globalNetworkItem .chat-name');
+        if (globalName && !globalName.querySelector('.unread-count')) {
+            const badge = document.createElement('span');
+            badge.className = 'unread-count';
+            badge.style.cssText = 'display: none; background: #8b0000; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;';
+            globalName.appendChild(badge);
         }
     }
     
@@ -299,19 +421,27 @@ function handleMessage(message) {
     console.log('Message data:', message);
     console.log('Message keys:', Object.keys(message));
     
-    // Check if message should trigger notification
-    const shouldNotify = !isWindowFocused || 
-        (currentChatType !== message.type) ||
-        (message.type === 'private' && currentChatTarget !== message.sender) ||
-        (message.type === 'group' && currentChatTarget !== message.group_id);
+    // Determine active-view status per chat context
+    const isViewingGlobal = currentChatType === 'global';
+    const isViewingPrivateWith = (u) => currentChatType === 'private' && currentChatTarget === u;
+    const isViewingGroup = (g) => currentChatType === 'group' && currentChatTarget === g;
     
     const msgType = message.type;
 
     // Store messages in appropriate history and display if in correct chat
     if (msgType === 'chat') {
         chatHistories.global.push(message);
-        if (currentChatType === 'global') {
+        if (isViewingGlobal) {
             addMessage(message);
+        } else {
+            unreadCounts.global = (unreadCounts.global || 0) + 1;
+            updateTotalUnreadCount();
+            updateUnreadCountsUI();
+            if (isWindowFocused) {
+                showInAppBanner(`New message in Global Network`);
+            } else {
+                notifySystem('New message', 'New message in Global Network');
+            }
         }
     }
     else if (msgType === 'private') {
@@ -321,8 +451,18 @@ function handleMessage(message) {
         }
         chatHistories.private[otherUser].push(message);
         
-        if (currentChatType === 'private' && currentChatTarget === otherUser) {
+        if (isViewingPrivateWith(otherUser)) {
             addMessage(message);
+        } else if (message.sender !== username) {
+            unreadCounts.private[otherUser] = (unreadCounts.private[otherUser] || 0) + 1;
+            updateTotalUnreadCount();
+            updateUnreadCountsUI();
+            const preview = (message.content || '').slice(0, 40);
+            if (isWindowFocused) {
+                showInAppBanner(`New message from ${message.sender}${preview ? ': ' + preview : ''}`);
+            } else {
+                notifySystem(`Message from ${message.sender}`, preview || 'New message');
+            }
         }
         
         if (message.receiver === username) {
@@ -352,8 +492,18 @@ function handleMessage(message) {
         }
         chatHistories.group[message.group_id].push(message);
         
-        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+        if (isViewingGroup(message.group_id)) {
             addMessage(message);
+        } else if (message.sender !== username) {
+            unreadCounts.group[message.group_id] = (unreadCounts.group[message.group_id] || 0) + 1;
+            updateTotalUnreadCount();
+            updateUnreadCountsUI();
+            const preview = (message.content || '').slice(0, 40);
+            if (isWindowFocused) {
+                showInAppBanner(`New message in group`);
+            } else {
+                notifySystem('Group message', preview || 'New group message');
+            }
         }
     }
     else if (msgType === 'group_file') {
@@ -362,7 +512,7 @@ function handleMessage(message) {
         }
         chatHistories.group[message.group_id].push(message);
         
-        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+        if (isViewingGroup(message.group_id)) {
             addMessage(message);
             addFileToList(message);
         }
@@ -376,7 +526,7 @@ function handleMessage(message) {
         chatHistories.global = message.messages || [];
         console.log('Stored in chatHistories.global:', chatHistories.global.length);
         console.log('Current chat type:', currentChatType);
-        if (currentChatType === 'global') {
+        if (isViewingGlobal) {
             console.log('Rendering global chat...');
             renderCurrentChat();
         } else {
@@ -733,8 +883,10 @@ function addMessage(message, autoScroll = true) {
     
     messagesContainer.appendChild(messageDiv);
     
-    // Only auto-scroll if specified or if we're at the bottom
-    if (autoScroll && isAtBottom()) {
+    // Auto-scroll logic: always scroll for new messages, or if we're at bottom
+    if (autoScroll) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    } else if (isAtBottom()) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
     
@@ -1103,7 +1255,9 @@ function updateGroupsList(groups) {
         chatItem.innerHTML = `
             <div class="chat-avatar">👥</div>
             <div class="chat-info">
-                <div class="chat-name">${groupInfo.name}</div>
+                <div class="chat-name">${groupInfo.name}
+                    <span class="unread-count" style="display: none; background: #2ecc71; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;">0</span>
+                </div>
                 <div class="chat-last-msg">${lastMsgText}</div>
             </div>
         `;
@@ -1167,6 +1321,7 @@ async function switchToPrivateChat(user) {
     // Then request updated history from server
     await eel.send_message('request_private_history', '', {target_user: user})();
     await eel.set_current_chat('private', user)();
+    clearUnreadForCurrentChat();
 }
 
 async function switchToGroupChat(groupId, groupName) {
@@ -1185,6 +1340,7 @@ async function switchToGroupChat(groupId, groupName) {
     // Then request updated history from server
     await eel.send_message('request_group_history', '', {group_id: groupId})();
     await eel.set_current_chat('group', groupId)();
+    clearUnreadForCurrentChat();
 }
 
 globalNetworkItem.addEventListener('click', async function() {
@@ -1202,6 +1358,7 @@ globalNetworkItem.addEventListener('click', async function() {
     // Then request updated history from server
     await eel.send_message('request_chat_history', '', {})();
     await eel.set_current_chat('global', null)();
+    clearUnreadForCurrentChat();
 });
 
 // ===== VIDEO CALL =====

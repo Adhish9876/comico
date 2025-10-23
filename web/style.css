@@ -397,12 +397,15 @@ body {
     font-weight: 700;
     color: var(--text-bright);
     margin-bottom: 2px;
+    letter-spacing: 0.5px;
+    word-spacing: 0.3px;
 }
 
 .chat-last-msg {
     font-size: 11px;
     color: var(--text-muted);
     font-weight: 600;
+    letter-spacing: 0.2px;
 }
 
 .sidebar-tabs {
