@@ -21,18 +21,86 @@ const unreadCounts = {
     total: 0
 };
 
+// Track last seen message index for each chat (to determine where divider goes)
+const lastSeenMessageIndex = {
+    global: -1,  // -1 means never seen before
+    private: {},  // username -> index
+    group: {}     // groupId -> index
+};
 
-// Clear unread count for current chat
+// Load last seen indices from localStorage on startup
+try {
+    const saved = localStorage.getItem('lastSeenMessageIndex');
+    if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.global !== undefined) lastSeenMessageIndex.global = parsed.global;
+        if (parsed.private) lastSeenMessageIndex.private = parsed.private;
+        if (parsed.group) lastSeenMessageIndex.group = parsed.group;
+    }
+} catch (e) {
+    console.log('Could not load last seen indices:', e);
+}
+
+// Track offline notifications shown to avoid repetition
+const offlineNotificationsShown = new Set();
+
+// Track recent chat switches to prevent immediate re-render
+let lastChatSwitchTime = 0;
+let lastChatSwitchTarget = null;
+
+// Insert "new messages" divider
+function insertNewMessagesDivider() {
+    const divider = document.createElement('div');
+    divider.className = 'new-messages-divider';
+    divider.innerHTML = `
+        <div style="
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            padding: 0 20px;
+        ">
+            <div style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #8b0000, transparent);"></div>
+            <span style="
+                padding: 0 15px;
+                color: #8b0000;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                white-space: nowrap;
+            ">New Messages</span>
+            <div style="flex: 1; height: 1px; background: linear-gradient(to left, transparent, #8b0000, transparent);"></div>
+        </div>
+    `;
+    messagesContainer.appendChild(divider);
+}
+
+// Clear unread count for current chat and update last seen index
 function clearUnreadForCurrentChat() {
     if (currentChatType === 'global') {
         unreadCounts.global = 0;
+        // Update last seen index to the last message in global chat
+        lastSeenMessageIndex.global = chatHistories.global.length - 1;
     } else if (currentChatType === 'private' && currentChatTarget) {
         unreadCounts.private[currentChatTarget] = 0;
+        // Update last seen index for this private chat
+        const history = chatHistories.private[currentChatTarget] || [];
+        lastSeenMessageIndex.private[currentChatTarget] = history.length - 1;
     } else if (currentChatType === 'group' && currentChatTarget) {
         unreadCounts.group[currentChatTarget] = 0;
+        // Update last seen index for this group
+        const history = chatHistories.group[currentChatTarget] || [];
+        lastSeenMessageIndex.group[currentChatTarget] = history.length - 1;
     }
     updateTotalUnreadCount();
     updateUnreadCountsUI();
+    
+    // Save to localStorage
+    try {
+        localStorage.setItem('lastSeenMessageIndex', JSON.stringify(lastSeenMessageIndex));
+    } catch (e) {
+        console.log('Could not save last seen indices:', e);
+    }
     
     // Clear any persistent banner when switching to the relevant chat
     const banner = document.getElementById('inAppBanner');
@@ -245,7 +313,8 @@ connectBtn.addEventListener('click', async () => {
                     eel.refresh_user_list()();
                 }
                 
-                renderCurrentChat();
+                // Render and scroll to appropriate position
+                renderCurrentChat(false); // Don't preserve scroll, will auto-position
             }, 1000);
         } else {
             showNotification(result.message, 'error');
@@ -282,6 +351,12 @@ async function sendMessage() {
     messageInput.focus();
     
     if (currentChatType === 'private' && currentChatTarget) {
+        // Check if user is offline and show notification only once
+        if (!allUsers.includes(currentChatTarget) && !offlineNotificationsShown.has(currentChatTarget)) {
+            showNotification(`${currentChatTarget} is offline. They will receive your message when they come online.`, 'warning');
+            offlineNotificationsShown.add(currentChatTarget);
+        }
+        
         addToRecentChats(currentChatTarget);
         await eel.send_message('private', content, {receiver: currentChatTarget})();
     } else if (currentChatType === 'group') {
@@ -523,12 +598,26 @@ function handleMessage(message) {
     else if (msgType === 'chat_history') {
         console.log('===== PROCESSING CHAT HISTORY =====');
         console.log('Received messages:', message.messages?.length || 0);
-        chatHistories.global = message.messages || [];
+        const oldMessageCount = chatHistories.global.length;
+        const newMessages = message.messages || [];
+        chatHistories.global = newMessages;
         console.log('Stored in chatHistories.global:', chatHistories.global.length);
         console.log('Current chat type:', currentChatType);
+        
         if (isViewingGlobal) {
             console.log('Rendering global chat...');
-            renderCurrentChat();
+            
+            // Check if we just switched to global chat (within 2 seconds)
+            const timeSinceSwitch = Date.now() - lastChatSwitchTime;
+            const isRecentSwitch = lastChatSwitchTarget === 'global' && timeSinceSwitch < 2000;
+            
+            // Only skip re-render if it's a recent switch AND message count is the same
+            const shouldSkipRender = isRecentSwitch && (oldMessageCount === newMessages.length);
+            
+            if (!shouldSkipRender) {
+                // Re-render (will use last seen index for divider)
+                renderCurrentChat(true);
+            }
         } else {
             console.log('Not in global chat, not rendering yet');
         }
@@ -537,9 +626,23 @@ function handleMessage(message) {
         // Server may send the field as 'receiver' or 'target_user' depending on source
         const targetUser = message.target_user || message.receiver || message.target || message.user;
         if (targetUser) {
-            chatHistories.private[targetUser] = message.messages || [];
+            const oldMessageCount = (chatHistories.private[targetUser] || []).length;
+            const newMessages = message.messages || [];
+            chatHistories.private[targetUser] = newMessages;
+            
             if (currentChatType === 'private' && currentChatTarget === targetUser) {
-                renderCurrentChat();
+                // Check if we just switched to this chat (within 2 seconds)
+                const timeSinceSwitch = Date.now() - lastChatSwitchTime;
+                const isRecentSwitch = lastChatSwitchTarget === targetUser && timeSinceSwitch < 2000;
+                
+                // Only skip re-render if it's a recent switch AND message count is the same
+                // If message count changed, we need to re-render to show new messages
+                const shouldSkipRender = isRecentSwitch && (oldMessageCount === newMessages.length);
+                
+                if (!shouldSkipRender) {
+                    // Re-render (will use last seen index for divider)
+                    renderCurrentChat(true);
+                }
             }
         } else {
             console.log('WARN: private_history received without target user', message);
@@ -547,9 +650,22 @@ function handleMessage(message) {
     }
     else if (msgType === 'group_history') {
         const groupId = message.group_id;
-        chatHistories.group[groupId] = message.messages || [];
+        const oldMessageCount = (chatHistories.group[groupId] || []).length;
+        const newMessages = message.messages || [];
+        chatHistories.group[groupId] = newMessages;
+        
         if (currentChatType === 'group' && currentChatTarget === groupId) {
-            renderCurrentChat();
+            // Check if we just switched to this chat (within 2 seconds)
+            const timeSinceSwitch = Date.now() - lastChatSwitchTime;
+            const isRecentSwitch = lastChatSwitchTarget === groupId && timeSinceSwitch < 2000;
+            
+            // Only skip re-render if it's a recent switch AND message count is the same
+            const shouldSkipRender = isRecentSwitch && (oldMessageCount === newMessages.length);
+            
+            if (!shouldSkipRender) {
+                // Re-render (will use last seen index for divider)
+                renderCurrentChat(true);
+            }
         }
     }
     else if (msgType === 'user_list') {
@@ -676,16 +792,62 @@ function renderCurrentChat(preserveScroll = true) {
     console.log('===== RENDERING CURRENT CHAT =====');
     console.log('Chat type:', currentChatType);
     console.log('Global history length:', chatHistories.global.length);
-    console.log('Global history:', chatHistories.global);
     
     // Store current scroll position and check if we're at bottom
     const wasAtBottom = isAtBottom();
     const scrollPosition = messagesContainer.scrollTop;
+    const scrollHeight = messagesContainer.scrollHeight;
     
     messagesContainer.innerHTML = '';
     
+    // Determine if we should show "new messages" divider based on last seen index
+    let showNewMessagesDivider = false;
+    let newMessageStartIndex = -1;
+    
     if (currentChatType === 'global') {
-        chatHistories.global.forEach(msg => {
+        const lastSeenIdx = lastSeenMessageIndex.global;
+        const totalMessages = chatHistories.global.length;
+        
+        // Show divider if there are messages after last seen index
+        if (lastSeenIdx >= 0 && lastSeenIdx < totalMessages - 1) {
+            showNewMessagesDivider = true;
+            newMessageStartIndex = lastSeenIdx + 1; // Divider goes after last seen message
+        } else if (lastSeenIdx === -1 && totalMessages > 0) {
+            // First time user - no divider (or could put at beginning)
+            showNewMessagesDivider = false;
+        }
+    } else if (currentChatType === 'private' && currentChatTarget) {
+        const history = chatHistories.private[currentChatTarget] || [];
+        const lastSeenIdx = lastSeenMessageIndex.private[currentChatTarget] ?? -1;
+        const totalMessages = history.length;
+        
+        if (lastSeenIdx >= 0 && lastSeenIdx < totalMessages - 1) {
+            showNewMessagesDivider = true;
+            newMessageStartIndex = lastSeenIdx + 1;
+        } else if (lastSeenIdx === -1 && totalMessages > 0) {
+            showNewMessagesDivider = false;
+        }
+    } else if (currentChatType === 'group' && currentChatTarget) {
+        const history = chatHistories.group[currentChatTarget] || [];
+        const lastSeenIdx = lastSeenMessageIndex.group[currentChatTarget] ?? -1;
+        const totalMessages = history.length;
+        
+        if (lastSeenIdx >= 0 && lastSeenIdx < totalMessages - 1) {
+            showNewMessagesDivider = true;
+            newMessageStartIndex = lastSeenIdx + 1;
+        } else if (lastSeenIdx === -1 && totalMessages > 0) {
+            showNewMessagesDivider = false;
+        }
+    }
+    
+    // Render messages with divider
+    if (currentChatType === 'global') {
+        chatHistories.global.forEach((msg, index) => {
+            // Insert new messages divider
+            if (showNewMessagesDivider && index === newMessageStartIndex) {
+                insertNewMessagesDivider();
+            }
+            
             if (msg.type === 'video_invite') {
                 handleVideoInvite(msg);
             } else {
@@ -694,11 +856,16 @@ function renderCurrentChat(preserveScroll = true) {
         });
     } else if (currentChatType === 'private' && currentChatTarget) {
         const history = chatHistories.private[currentChatTarget] || [];
-        history.forEach(msg => {
+        history.forEach((msg, index) => {
+            // Insert new messages divider
+            if (showNewMessagesDivider && index === newMessageStartIndex) {
+                insertNewMessagesDivider();
+            }
+            
             if (msg.type === 'video_invite_private') {
                 handleVideoInvite(msg);
             } else {
-                addMessage(msg);
+                addMessage(msg, false);
                 if (msg.type === 'private_file') {
                     addFileToList(msg);
                 }
@@ -706,16 +873,55 @@ function renderCurrentChat(preserveScroll = true) {
         });
     } else if (currentChatType === 'group' && currentChatTarget) {
         const history = chatHistories.group[currentChatTarget] || [];
-        history.forEach(msg => {
+        history.forEach((msg, index) => {
+            // Insert new messages divider
+            if (showNewMessagesDivider && index === newMessageStartIndex) {
+                insertNewMessagesDivider();
+            }
+            
             if (msg.type === 'video_invite_group') {
                 handleVideoInvite(msg);
             } else {
-                addMessage(msg);
+                addMessage(msg, false);
                 if (msg.type === 'group_file') {
                     addFileToList(msg);
                 }
             }
         });
+    }
+    
+    // Handle scroll position restoration
+    if (preserveScroll) {
+        if (showNewMessagesDivider) {
+            // Scroll to new messages divider
+            setTimeout(() => {
+                const divider = messagesContainer.querySelector('.new-messages-divider');
+                if (divider) {
+                    divider.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
+        } else if (wasAtBottom) {
+            // Scroll to bottom if we were at bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        } else {
+            // Try to maintain relative scroll position
+            const newScrollHeight = messagesContainer.scrollHeight;
+            const heightDiff = newScrollHeight - scrollHeight;
+            messagesContainer.scrollTop = scrollPosition + heightDiff;
+        }
+    } else {
+        // When not preserving scroll (initial render), scroll to bottom or divider
+        if (showNewMessagesDivider) {
+            setTimeout(() => {
+                const divider = messagesContainer.querySelector('.new-messages-divider');
+                if (divider) {
+                    divider.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
+        } else {
+            // Scroll to bottom for new users or when no divider
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
     }
 }
 
@@ -1148,9 +1354,16 @@ function updateUsersList(users) {
     console.log('===== UPDATING USER LIST =====');
     console.log('Received users:', users);
     console.log('Current username:', username);
-    console.log('===== UPDATING USER LIST =====');
-    console.log('Received users:', users);
-    console.log('Current username:', username);
+    
+    // Update global allUsers list
+    allUsers = users || [];
+    
+    // Clear offline notification tracking for users who came back online
+    offlineNotificationsShown.forEach(user => {
+        if (allUsers.includes(user)) {
+            offlineNotificationsShown.delete(user);
+        }
+    });
     // Get all users we've chatted with privately from storage
     const chattedUsers = new Set();
     // Check private_chats.json format: keys like "user1_user2"
@@ -1294,8 +1507,12 @@ async function switchToPrivateChat(user) {
     document.querySelector(`.chat-item[data-user="${user}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
     addToRecentChats(user);
-    // Render local history first
-    // Only show messages where current user is sender or receiver and other user is the selected user
+    
+    // Track this chat switch to prevent immediate re-render
+    lastChatSwitchTime = Date.now();
+    lastChatSwitchTarget = user;
+    
+    // Consolidate private chat history for this user
     const history = [];
     for (const key in chatHistories.private) {
         let userA, userB;
@@ -1316,12 +1533,19 @@ async function switchToPrivateChat(user) {
             });
         }
     }
-    messagesContainer.innerHTML = '';
-    history.forEach(msg => addMessage(msg));
+    
+    // Store consolidated history
+    chatHistories.private[user] = history;
+    
+    // Render (will use last seen index to show divider)
+    renderCurrentChat(false);
+    
+    // Clear unread count and update last seen AFTER rendering
+    clearUnreadForCurrentChat();
+    
     // Then request updated history from server
     await eel.send_message('request_private_history', '', {target_user: user})();
     await eel.set_current_chat('private', user)();
-    clearUnreadForCurrentChat();
 }
 
 async function switchToGroupChat(groupId, groupName) {
@@ -1334,13 +1558,19 @@ async function switchToGroupChat(groupId, groupName) {
     document.querySelector(`.chat-item[data-group-id="${groupId}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
     
-    // Render local history first
-    renderCurrentChat();
+    // Track this chat switch to prevent immediate re-render
+    lastChatSwitchTime = Date.now();
+    lastChatSwitchTarget = groupId;
+    
+    // Render (will use last seen index to show divider)
+    renderCurrentChat(false);
+    
+    // Clear unread count and update last seen AFTER rendering
+    clearUnreadForCurrentChat();
     
     // Then request updated history from server
     await eel.send_message('request_group_history', '', {group_id: groupId})();
     await eel.set_current_chat('group', groupId)();
-    clearUnreadForCurrentChat();
 }
 
 globalNetworkItem.addEventListener('click', async function() {
@@ -1352,13 +1582,19 @@ globalNetworkItem.addEventListener('click', async function() {
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     this.classList.add('active');
     
-    // Render local history first
-    renderCurrentChat();
+    // Track this chat switch
+    lastChatSwitchTime = Date.now();
+    lastChatSwitchTarget = 'global';
+    
+    // Render (will use last seen index to show divider)
+    renderCurrentChat(false);
+    
+    // Clear unread count and update last seen AFTER rendering
+    clearUnreadForCurrentChat();
     
     // Then request updated history from server
     await eel.send_message('request_chat_history', '', {})();
     await eel.set_current_chat('global', null)();
-    clearUnreadForCurrentChat();
 });
 
 // ===== VIDEO CALL =====
@@ -1919,21 +2155,20 @@ function pollForData() {
             }
         }
         
-        // Also get data directly
+        // Also get data directly (but only update if we're viewing global chat)
         eel.get_chat_history()().then(result => {
             if (result.success && result.messages && result.messages.length > 0) {
-                const wasAtBottom = isAtBottom();
-                const scrollPosition = messagesContainer.scrollTop;
                 const oldLength = chatHistories.global.length;
+                const hasNewMessages = result.messages.length > oldLength;
+                
+                // Update stored history
                 chatHistories.global = result.messages;
                 
-                // Only force scroll if new messages arrived and we were at bottom
-                const forceScroll = wasAtBottom && result.messages.length > oldLength;
-                renderCurrentChat(!forceScroll);
-                
-                // Restore scroll position if we weren't at bottom
-                if (!forceScroll) {
-                    messagesContainer.scrollTop = scrollPosition;
+                // Only re-render if we're viewing global chat AND there are new messages OR we haven't rendered yet
+                if (currentChatType === 'global' && (hasNewMessages || messagesContainer.children.length === 0)) {
+                    const wasAtBottom = isAtBottom();
+                    // Preserve scroll position - only auto-scroll if we were already at bottom
+                    renderCurrentChat(true);
                 }
             }
         }).catch(err => {
