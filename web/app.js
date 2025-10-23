@@ -1368,6 +1368,28 @@ videoCallBtn.addEventListener('click', async () => {
         return;
     }
     
+    // Validate that we have the required chat target for non-global calls
+    if (currentChatType === 'private' && !currentChatTarget) {
+        showNotification('Please select a user for private video call', 'warning');
+        return;
+    }
+    
+    if (currentChatType === 'group' && !currentChatTarget) {
+        showNotification('Please select a group for group video call', 'warning');
+        return;
+    }
+    
+    // Determine chat ID to pass to video server
+    let chatId;
+    if (currentChatType === 'global') {
+        chatId = 'global';
+    } else if (currentChatType === 'private' || currentChatType === 'group') {
+        chatId = currentChatTarget;
+    } else {
+        showNotification('Invalid chat type', 'error');
+        return;
+    }
+    
     const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' : 
                            currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
                            `Group chat`;
@@ -1376,8 +1398,10 @@ videoCallBtn.addEventListener('click', async () => {
         return;
     }
     
+    console.log(`[VIDEO] Starting ${currentChatType} video call with chat_id: ${chatId}`);
+    
     try {
-        const result = await eel.start_video_call(currentChatType, currentChatTarget || 'global')();
+        const result = await eel.start_video_call(currentChatType, chatId)();
         
         if (result.success) {
             // Open video call window
@@ -1387,6 +1411,7 @@ videoCallBtn.addEventListener('click', async () => {
             showNotification(`Failed to start call: ${result.error}`, 'error');
         }
     } catch (error) {
+        console.error('[VIDEO] Error starting video call:', error);
         showNotification('Error starting video call', 'error');
     }
 });

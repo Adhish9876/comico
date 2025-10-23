@@ -938,19 +938,49 @@ class CollaborationServer:
         session_id = message.get('session_id')
         link = message.get('link')
         
+        print(f"[SERVER] ========== GROUP VIDEO INVITE ==========")
         print(f"[SERVER] Received group video invite from {sender} for group {group_id}")
         print(f"[SERVER] Session ID: {session_id}")
         print(f"[SERVER] Link: {link}")
+        print(f"[SERVER] Available groups: {list(self.groups.keys())}")
         
-        if group_id not in self.groups or not session_id or not link:
-            print(f"[SERVER] ERROR: Invalid group_id, missing session_id or link in group video invite")
+        # Validate group_id
+        if not group_id:
+            print(f"[SERVER] ERROR: group_id is None or empty!")
+            self._send_to_client(client_socket, {
+                'type': 'system',
+                'content': 'Error: Invalid group ID for video call'
+            })
+            return
+            
+        if group_id not in self.groups:
+            print(f"[SERVER] ERROR: Group {group_id} does not exist!")
+            print(f"[SERVER] Available groups: {list(self.groups.keys())}")
+            self._send_to_client(client_socket, {
+                'type': 'system',
+                'content': f'Error: Group {group_id} not found'
+            })
+            return
+        
+        if not session_id or not link:
+            print(f"[SERVER] ERROR: Missing session_id or link in group video invite")
+            self._send_to_client(client_socket, {
+                'type': 'system',
+                'content': 'Error: Invalid video session data'
+            })
             return
         
         if sender not in self.groups[group_id]['members']:
             print(f"[SERVER] ERROR: Sender {sender} is not a member of group {group_id}")
+            print(f"[SERVER] Group members: {self.groups[group_id]['members']}")
+            self._send_to_client(client_socket, {
+                'type': 'system',
+                'content': 'Error: You are not a member of this group'
+            })
             return
         
         print(f"📹 Group video invite from {sender} in group {group_id}")
+        print(f"[SERVER] Group has {len(self.groups[group_id]['members'])} members")
         
         # Create the primary video invite message
         video_invite_message = {
@@ -967,13 +997,19 @@ class CollaborationServer:
         
         # Persist to group history (single message for all)
         storage.add_group_message(group_id, video_invite_message)
+        print(f"[SERVER] Persisted video invite to group history")
 
         # Send to all group members including sender
+        sent_count = 0
         with self.lock:
             for sock, info in self.clients.items():
                 if info['username'] in self.groups[group_id]['members']:
                     print(f"[SERVER] Sending video invite to group member: {info['username']}")
                     self._send_to_client(sock, video_invite_message)
+                    sent_count += 1
+        
+        print(f"[SERVER] Successfully sent video invite to {sent_count} members")
+        print(f"[SERVER] ========================================")
 
     def _handle_video_missed(self, client_socket: socket.socket, message: Dict):
         """Handle missed video call notifications"""
