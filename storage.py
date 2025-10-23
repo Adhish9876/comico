@@ -54,6 +54,16 @@ class Storage:
             processed_history.append(msg)
         return processed_history
 
+    def delete_global_message(self, message_id: str) -> bool:
+        """Delete a message from global chat by ID"""
+        for i, msg in enumerate(self.global_chat):
+            if msg.get('id') == message_id or msg.get('timestamp') == message_id:
+                self.global_chat[i]['content'] = '🚫 This message was deleted'
+                self.global_chat[i]['deleted'] = True
+                self.save_global_chat()
+                return True
+        return False
+
     def save_global_chat(self) -> None:
         """Save global chat to file"""
         try:
@@ -89,6 +99,18 @@ class Storage:
         key = tuple(sorted([user1, user2]))
         messages = self.private_chats.get(key, [])
         return messages[-limit:]
+
+    def delete_private_message(self, user1: str, user2: str, message_id: str) -> bool:
+        """Delete a message from private chat by ID"""
+        key = tuple(sorted([user1, user2]))
+        if key in self.private_chats:
+            for i, msg in enumerate(self.private_chats[key]):
+                if msg.get('id') == message_id or msg.get('timestamp') == message_id:
+                    self.private_chats[key][i]['content'] = '🚫 This message was deleted'
+                    self.private_chats[key][i]['deleted'] = True
+                    self.save_private_chats()
+                    return True
+        return False
 
     def save_private_chats(self) -> None:
         """Save all private chats"""
@@ -131,6 +153,17 @@ class Storage:
         """Get group chat history"""
         messages = self.group_chats.get(group_id, [])
         return messages[-limit:]
+
+    def delete_group_message(self, group_id: str, message_id: str) -> bool:
+        """Delete a message from group chat by ID"""
+        if group_id in self.group_chats:
+            for i, msg in enumerate(self.group_chats[group_id]):
+                if msg.get('id') == message_id or msg.get('timestamp') == message_id:
+                    self.group_chats[group_id][i]['content'] = '🚫 This message was deleted'
+                    self.group_chats[group_id][i]['deleted'] = True
+                    self.save_group_chats()
+                    return True
+        return False
 
     def save_group_chats(self) -> None:
         """Save all group chats"""

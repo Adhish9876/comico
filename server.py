@@ -346,8 +346,9 @@ class CollaborationServer:
             'video_invite_private': self._handle_video_invite_private,
             'video_invite_group': self._handle_video_invite_group,
             'video_missed': self._handle_video_missed,
-            'get_users': self._handle_get_users,  # NEW HANDLER
-            'request_groups': self._handle_request_groups,  # NEW HANDLER
+            'get_users': self._handle_get_users,
+            'request_groups': self._handle_request_groups,
+            'delete_message': self._handle_delete_message,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -1431,14 +1432,62 @@ class CollaborationServer:
             size /= 1024.0
         return f"{size:.1f} TB"
 
-    def cleanup(self):
-        """Clean up resources"""
-        print("\n🧹 Cleaning up resources...")
+    def _handle_delete_message(self, client_socket: socket.socket, message: Dict):
+        """Handle message deletion request"""
+        message_id = message.get('message_id')
+        chat_type = message.get('chat_type')
+        chat_target = message.get('chat_target')
+        sender = message.get('sender')
         
+        print(f"🗑️ Delete message request from {sender}: {message_id} in {chat_type}")
+        
+        success = False
+        
+        # Delete from storage based on chat type
+        if chat_type == 'global':
+            success = storage.delete_global_message(message_id)
+        elif chat_type == 'private' and chat_target:
+            success = storage.delete_private_message(sender, chat_target, message_id)
+        elif chat_type == 'group' and chat_target:
+            success = storage.delete_group_message(chat_target, message_id)
+        
+        if success:
+            # Broadcast delete notification to all relevant clients
+            delete_notification = {
+                'type': 'message_deleted',
+                'message_id': message_id,
+                'chat_type': chat_type,
+                'chat_target': chat_target,
+                'timestamp': self._timestamp()
+            }
+            
+            if chat_type == 'global':
+                # Broadcast to all clients
+                self.broadcast(json.dumps(delete_notification))
+            elif chat_type == 'private' and chat_target:
+                # Send to both sender and receiver
+                receiver_socket = self._find_client_socket(chat_target)
+                if receiver_socket:
+                    self._send_to_client(receiver_socket, delete_notification)
+                self._send_to_client(client_socket, delete_notification)
+            elif chat_type == 'group' and chat_target:
+                # Send to all group members
+                if chat_target in self.groups:
+                    with self.lock:
+                        for sock, info in self.clients.items():
+                            if info['username'] in self.groups[chat_target]['members']:
+                                self._send_to_client(sock, delete_notification)
+            
+            print(f"   ✓ Message deleted successfully")
+        else:
+            print(f"   ❌ Failed to delete message")
+
+    def cleanup(self):
+        """Clean up server resources"""
         with self.lock:
-            for sock in list(self.clients.keys()):
+            for client_socket in list(self.clients.keys()):
                 try:
-                    sock.close()
+                    client_socket.close()
                 except:
                     pass
             self.clients.clear()

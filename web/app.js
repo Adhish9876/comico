@@ -595,6 +595,31 @@ function handleMessage(message) {
     else if (msgType === 'system') {
         addSystemMessage(message.content);
     }
+    else if (msgType === 'message_deleted') {
+        // Handle message deletion notification
+        const messageId = message.message_id;
+        const chatType = message.chat_type;
+        const chatTarget = message.chat_target;
+        
+        console.log('Message deleted notification:', messageId, chatType, chatTarget);
+        
+        // Update the message in the UI if it's visible
+        const messageElements = document.querySelectorAll('.message');
+        messageElements.forEach(msgEl => {
+            const bubble = msgEl.querySelector('.message-bubble');
+            if (bubble && bubble.textContent.includes(messageId)) {
+                bubble.innerHTML = '<span class="message-deleted">🚫 This message was deleted</span>';
+                bubble.style.fontStyle = 'italic';
+                bubble.style.opacity = '0.6';
+                
+                // Remove menu button
+                const menuBtn = msgEl.querySelector('.message-menu-btn');
+                if (menuBtn) menuBtn.remove();
+            }
+        });
+        
+        showNotification('Message deleted', 'info');
+    }
     else if (msgType === 'chat_history') {
         console.log('===== PROCESSING CHAT HISTORY =====');
         console.log('Received messages:', message.messages?.length || 0);
@@ -1051,41 +1076,30 @@ function addMessage(message, autoScroll = true) {
         bubble.className = 'message-bubble';
         bubble.textContent = message.content;
         content.appendChild(bubble);
+        
+        // Add message menu button to the bubble
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'message-menu-btn';
+        menuBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+            </svg>
+        `;
+        menuBtn.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!messageDiv.dataset.messageId) {
+                messageDiv.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            }
+            showMessageContextMenu(e, messageDiv);
+        };
+        
+        // Append menu button to the message bubble instead of message div
+        bubble.appendChild(menuBtn);
     }
-    
-    // Add message menu button
-    const menuBtn = document.createElement('button');
-    menuBtn.className = 'message-menu-btn';
-    // Position menu button based on message owner
-    const menuPosition = isOwn ? 'left: -24px;' : 'right: -24px;';
-    menuBtn.style.cssText = `
-        position: absolute; 
-        ${menuPosition}
-        top: 50%; 
-        transform: translateY(-50%); 
-        opacity: 0; 
-        transition: opacity 0.2s;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 50%;
-        z-index: 2;
-    `;
-    menuBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-        </svg>
-    `;
-    menuBtn.onclick = (e) => {
-        e.stopPropagation();
-        messageDiv.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        showMessageContextMenu(e, messageDiv);
-    };
     
     messageDiv.appendChild(avatar);
     messageDiv.appendChild(content);
-    messageDiv.appendChild(menuBtn);
     
     messagesContainer.appendChild(messageDiv);
     
@@ -2397,19 +2411,36 @@ function showChatContextMenu(event, user) {
 }
 
 function showMessageContextMenu(event, messageElement) {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    // Close any existing modals first
+    const existingModals = document.querySelectorAll('.modal-overlay');
+    existingModals.forEach(modal => modal.remove());
+    
     const menu = document.getElementById('messageContextMenu');
+    
+    // If menu is already shown, hide it
+    if (menu.classList.contains('show')) {
+        menu.classList.remove('show');
+        return;
+    }
+    
     menu.style.left = event.pageX + 'px';
     menu.style.top = event.pageY + 'px';
     menu.classList.add('show');
     menu.dataset.messageId = messageElement.dataset.messageId;
     
-    // Close menu when clicking outside
+    // Close menu when clicking outside - with proper delay
     setTimeout(() => {
-        document.addEventListener('click', function closeMenu() {
-            menu.classList.remove('show');
-            document.removeEventListener('click', closeMenu);
-        });
-    }, 0);
+        const closeMenu = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.classList.remove('show');
+                document.removeEventListener('click', closeMenu);
+            }
+        };
+        document.addEventListener('click', closeMenu);
+    }, 100);
 }
 
 // Handle context menu actions
@@ -2517,10 +2548,41 @@ function deleteChat(user) {
 }
 
 function replyToMessage(messageElement) {
-    const messageText = messageElement.querySelector('.message-bubble').textContent;
-    const messageInput = document.getElementById('messageInput');
-    messageInput.value = `Replying to: ${messageText}`;
-    messageInput.focus();
+    const messageText = messageElement.querySelector('.message-bubble')?.textContent;
+    if (!messageText) return;
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-overlay';
+    dialog.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Reply to Message</h3>
+            <div class="modal-message">${messageText}</div>
+            <textarea id="replyInput" placeholder="Type your reply..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-main); background: var(--bg-deep); color: var(--text-normal); min-height: 80px; font-family: inherit; resize: vertical;"></textarea>
+            <div class="modal-buttons">
+                <button class="modal-btn cancel">Cancel</button>
+                <button class="modal-btn primary">Send Reply</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    const replyInput = dialog.querySelector('#replyInput');
+    replyInput.focus();
+    
+    dialog.querySelector('.primary').onclick = () => {
+        const replyText = replyInput.value.trim();
+        if (replyText) {
+            const messageInput = document.getElementById('messageInput');
+            messageInput.value = `↩️ "${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}"\n${replyText}`;
+            messageInput.focus();
+            dialog.remove();
+            showNotification('Reply added', 'success');
+        }
+    };
+    
+    dialog.querySelector('.cancel').onclick = () => dialog.remove();
+    dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
 }
 
 function copyMessage(messageElement) {
@@ -2543,44 +2605,55 @@ function copyMessage(messageElement) {
 
 function forwardMessage(messageElement) {
     const messageText = messageElement.querySelector('.message-bubble')?.textContent;
-    if (messageText) {
-        // Create forward dialog
-        const dialog = document.createElement('div');
-        dialog.className = 'modal-overlay';
-        dialog.innerHTML = `
-            <div class="modal-content" style="width: 300px;">
-                <h3>Forward Message</h3>
-                <div class="user-select-list" style="max-height: 200px; overflow-y: auto;">
-                    ${Object.keys(chatHistories.private).map(key => {
-                        const otherUser = key.split('_').find(u => u !== username);
-                        return `
-                            <div class="user-forward-option" data-user="${otherUser}">
-                                <span>${otherUser}</span>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-                <div class="modal-buttons">
-                    <button class="modal-btn cancel">Cancel</button>
-                </div>
+    if (!messageText) return;
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-overlay';
+    
+    // Get list of users to forward to
+    const users = [];
+    Object.keys(chatHistories.private).forEach(key => {
+        const otherUser = key.split('_').find(u => u !== username);
+        if (otherUser && !users.includes(otherUser)) {
+            users.push(otherUser);
+        }
+    });
+    
+    dialog.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Forward Message To</h3>
+            <div class="modal-message">${messageText}</div>
+            <div class="user-select-list">
+                ${users.length > 0 ? users.map(user => `
+                    <div class="user-forward-option" data-user="${user}">
+                        <span>${user}</span>
+                    </div>
+                `).join('') : '<p style="text-align: center; color: var(--text-dim); padding: 20px;">No users available</p>'}
             </div>
-        `;
-        
-        document.body.appendChild(dialog);
-        
-        // Handle forward selection
-        dialog.querySelectorAll('.user-forward-option').forEach(option => {
-            option.onclick = async () => {
-                const targetUser = option.dataset.user;
-                await eel.send_message('private', messageText, {receiver: targetUser})();
+            <div class="modal-buttons">
+                <button class="modal-btn cancel">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    // Handle forward selection
+    dialog.querySelectorAll('.user-forward-option').forEach(option => {
+        option.onclick = async () => {
+            const targetUser = option.dataset.user;
+            try {
+                await eel.send_message('private', `📩 Forwarded: ${messageText}`, {receiver: targetUser})();
                 dialog.remove();
-                showNotification('Message forwarded', 'success');
-            };
-        });
-        
-        // Handle cancel
-        dialog.querySelector('.cancel').onclick = () => dialog.remove();
-    }
+                showNotification(`Message forwarded to ${targetUser}`, 'success');
+            } catch (error) {
+                showNotification('Failed to forward message', 'error');
+            }
+        };
+    });
+    
+    dialog.querySelector('.cancel').onclick = () => dialog.remove();
+    dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
 }
 
 function starMessage(messageElement) {
@@ -2615,52 +2688,146 @@ function starMessage(messageElement) {
 }
 
 function pinMessage(messageElement) {
+    const messageText = messageElement.querySelector('.message-bubble')?.textContent;
     const messageId = messageElement.dataset.messageId;
-    const isPinned = messageElement.classList.toggle('pinned');
+    const isPinned = messageElement.classList.contains('pinned');
     
-    // Add pin icon if not exists
-    let pinIcon = messageElement.querySelector('.pin-icon');
-    if (!pinIcon && isPinned) {
-        pinIcon = document.createElement('span');
-        pinIcon.className = 'pin-icon';
-        pinIcon.innerHTML = '📌';
-        pinIcon.style.position = 'absolute';
-        pinIcon.style.left = '-20px';
-        pinIcon.style.top = '50%';
-        pinIcon.style.transform = 'translateY(-50%)';
-        pinIcon.style.fontSize = '14px';
-        messageElement.appendChild(pinIcon);
+    if (!isPinned) {
+        // Show pin confirmation modal
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-overlay';
+        dialog.innerHTML = `
+            <div class="modal-content" style="max-width: 400px;">
+                <h3>📌 Pin Message</h3>
+                <div class="modal-message">${messageText}</div>
+                <p style="color: var(--text-dim); font-size: 14px; margin: 10px 0;">This message will be pinned to the top of the chat.</p>
+                <div class="modal-buttons">
+                    <button class="modal-btn cancel">Cancel</button>
+                    <button class="modal-btn primary">Pin</button>
+                </div>
+            </div>
+        `;
         
-        // Move pinned message to top
-        messagesContainer.insertBefore(messageElement, messagesContainer.firstChild);
-    } else if (pinIcon && !isPinned) {
-        pinIcon.remove();
-    }
-    
-    // Store pinned state
-    const pinnedMessages = JSON.parse(localStorage.getItem('pinnedMessages') || '{}');
-    if (isPinned) {
-        pinnedMessages[messageId] = true;
+        document.body.appendChild(dialog);
+        
+        dialog.querySelector('.primary').onclick = () => {
+            messageElement.classList.add('pinned');
+            
+            // Add pin icon
+            let pinIcon = messageElement.querySelector('.pin-icon');
+            if (!pinIcon) {
+                pinIcon = document.createElement('span');
+                pinIcon.className = 'pin-icon';
+                pinIcon.innerHTML = '📌';
+                pinIcon.style.position = 'absolute';
+                pinIcon.style.right = '8px';
+                pinIcon.style.top = '8px';
+                pinIcon.style.fontSize = '14px';
+                messageElement.appendChild(pinIcon);
+            }
+            
+            // Store pinned state
+            const pinnedMessages = JSON.parse(localStorage.getItem('pinnedMessages') || '{}');
+            pinnedMessages[messageId] = true;
+            localStorage.setItem('pinnedMessages', JSON.stringify(pinnedMessages));
+            
+            dialog.remove();
+            showNotification('Message pinned', 'success');
+        };
+        
+        dialog.querySelector('.cancel').onclick = () => dialog.remove();
+        dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
     } else {
+        // Unpin
+        messageElement.classList.remove('pinned');
+        const pinIcon = messageElement.querySelector('.pin-icon');
+        if (pinIcon) pinIcon.remove();
+        
+        const pinnedMessages = JSON.parse(localStorage.getItem('pinnedMessages') || '{}');
         delete pinnedMessages[messageId];
+        localStorage.setItem('pinnedMessages', JSON.stringify(pinnedMessages));
+        
+        showNotification('Message unpinned', 'success');
     }
-    localStorage.setItem('pinnedMessages', JSON.stringify(pinnedMessages));
-    
-    showNotification(isPinned ? 'Message pinned' : 'Message unpinned', 'success');
 }
 
-function deleteMessage(messageElement) {
-    if (confirm('Delete this message? This action cannot be undone.')) {
-        // Fade out animation
-        messageElement.style.transition = 'opacity 0.3s, transform 0.3s';
-        messageElement.style.opacity = '0';
-        messageElement.style.transform = 'translateX(-20px)';
-        
-        setTimeout(() => {
-            messageElement.remove();
-            showNotification('Message deleted', 'success');
-        }, 300);
+async function deleteMessage(messageElement) {
+    const messageText = messageElement.querySelector('.message-bubble')?.textContent;
+    const messageId = messageElement.dataset.messageId;
+    const isOwnMessage = messageElement.classList.contains('own');
+    
+    // Show delete confirmation modal with different options based on message ownership
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-overlay';
+    
+    if (isOwnMessage) {
+        // Own message - can delete for everyone
+        dialog.innerHTML = `
+            <div class="modal-content" style="max-width: 400px;">
+                <h3>🗑️ Delete Message</h3>
+                <div class="modal-message">${messageText}</div>
+                <p style="color: var(--text-dim); font-size: 14px; margin: 10px 0;">This message will be permanently deleted for everyone. This action cannot be undone.</p>
+                <div class="modal-buttons">
+                    <button class="modal-btn cancel">Cancel</button>
+                    <button class="modal-btn danger">Delete for Everyone</button>
+                </div>
+            </div>
+        `;
+    } else {
+        // Others' message - can only remove from own chat
+        dialog.innerHTML = `
+            <div class="modal-content" style="max-width: 400px;">
+                <h3>🗑️ Remove Message</h3>
+                <div class="modal-message">${messageText}</div>
+                <p style="color: var(--text-dim); font-size: 14px; margin: 10px 0;">This message will be removed from your chat only. Other users will still see it.</p>
+                <div class="modal-buttons">
+                    <button class="modal-btn cancel">Cancel</button>
+                    <button class="modal-btn danger">Remove from Chat</button>
+                </div>
+            </div>
+        `;
     }
+    
+    document.body.appendChild(dialog);
+    
+    dialog.querySelector('.danger').onclick = async () => {
+        if (isOwnMessage) {
+            // Permanent delete for own messages
+            try {
+                const result = await eel.delete_message(messageId, currentChatType, currentChatTarget)();
+                
+                if (result && result.success) {
+                    // Replace message content with "Message deleted"
+                    const bubble = messageElement.querySelector('.message-bubble');
+                    if (bubble) {
+                        bubble.innerHTML = '<span class="message-deleted">🚫 This message was deleted</span>';
+                        bubble.style.fontStyle = 'italic';
+                        bubble.style.opacity = '0.6';
+                    }
+                    
+                    // Remove menu button
+                    const menuBtn = messageElement.querySelector('.message-menu-btn');
+                    if (menuBtn) menuBtn.remove();
+                    
+                    dialog.remove();
+                    showNotification('Message deleted for everyone', 'success');
+                } else {
+                    showNotification('Failed to delete message', 'error');
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                showNotification('Failed to delete message', 'error');
+            }
+        } else {
+            // Local removal for others' messages
+            messageElement.style.display = 'none';
+            dialog.remove();
+            showNotification('Message removed from your chat', 'success');
+        }
+    };
+    
+    dialog.querySelector('.cancel').onclick = () => dialog.remove();
+    dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
 }
 
 function selectMessage(messageElement) {

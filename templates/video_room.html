@@ -1076,9 +1076,9 @@
             remoteWrappers[0].className = 'video-wrapper featured';
             localVideoWrapper.className = 'video-wrapper local-pip';
         } else {
-            // 3+ people - grid layout
-            videosContainer.classList.add(`layout-${totalParticipants}`);
-            localVideoWrapper.className = 'video-wrapper grid-item';
+            // 3+ people - remote users in grid, local user stays in PiP (bottom right)
+            videosContainer.classList.add(`layout-${remoteWrappers.length}`);
+            localVideoWrapper.className = 'video-wrapper local-pip';
             remoteWrappers.forEach(w => {
                 w.className = 'video-wrapper grid-item';
             });

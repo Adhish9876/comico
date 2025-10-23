@@ -556,6 +556,29 @@ def refresh_user_list():
             return {'success': False, 'message': str(e)}
     return {'success': False, 'message': 'Not connected'}
 
+@eel.expose
+def delete_message(message_id: str, chat_type: str, chat_target: str = None):
+    """Delete a message for everyone"""
+    if not state.connected or not state.socket:
+        return {'success': False, 'message': 'Not connected'}
+    
+    try:
+        # Send delete request to server
+        request = {
+            'type': 'delete_message',
+            'message_id': message_id,
+            'chat_type': chat_type,
+            'chat_target': chat_target,
+            'sender': state.username,
+            'timestamp': datetime.now().strftime("%H:%M:%S")
+        }
+        state.socket.send((json.dumps(request) + '\n').encode('utf-8'))
+        print(f"[CLIENT] Delete message request sent: {message_id}")
+        return {'success': True}
+    except Exception as e:
+        print(f"Delete message error: {e}")
+        return {'success': False, 'message': str(e)}
+
 # Start the Eel app
 if __name__ == '__main__':
     import sys
