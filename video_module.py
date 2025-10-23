@@ -203,6 +203,20 @@ def handle_reaction(data):
         'emoji': emoji
     }, room=session_id, skip_sid=request.sid)
 
+@socketio.on('audio_level')
+def handle_audio_level(data):
+    session_id = data['session_id']
+    user_id = data['user_id']
+    level = data['level']
+    is_speaking = data['is_speaking']
+    
+    # Broadcast audio level to other participants for speaking indicator
+    emit('audio_level', {
+        'user_id': user_id,
+        'level': level,
+        'is_speaking': is_speaking
+    }, room=session_id, skip_sid=request.sid)
+
 def create_video_session(session_type: str, session_name: str, creator: str, chat_id: str) -> str:
     """Create a new video session"""
     session_id = str(uuid.uuid4())[:8]

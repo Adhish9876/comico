@@ -13,6 +13,9 @@ const chatHistories = {
     group: {}     // groupId -> messages[]
 };
 
+// Store groups persistently
+const persistentGroups = JSON.parse(localStorage.getItem('persistentGroups') || '{}');
+
 // Store unread counts
 const unreadCounts = {
     global: 0,
@@ -48,6 +51,29 @@ const offlineNotificationsShown = new Set();
 let lastChatSwitchTime = 0;
 let lastChatSwitchTarget = null;
 
+// Track which chats have had their new messages divider viewed
+const viewedChats = new Set();
+
+// Clean up viewed chats that have no unread messages
+function cleanupViewedChats() {
+    // Remove viewed state for chats with zero unread count
+    if (unreadCounts.global === 0) {
+        viewedChats.delete('global');
+    }
+    
+    for (const user in unreadCounts.private) {
+        if (unreadCounts.private[user] === 0) {
+            viewedChats.delete(`private_${user}`);
+        }
+    }
+    
+    for (const groupId in unreadCounts.group) {
+        if (unreadCounts.group[groupId] === 0) {
+            viewedChats.delete(`group_${groupId}`);
+        }
+    }
+}
+
 // Insert "new messages" divider
 function insertNewMessagesDivider() {
     const divider = document.createElement('div');
@@ -77,6 +103,10 @@ function insertNewMessagesDivider() {
 
 // Clear unread count for current chat and update last seen index
 function clearUnreadForCurrentChat() {
+    // Mark this chat as viewed so we don't scroll to divider again
+    const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
+    viewedChats.add(chatKey);
+    
     if (currentChatType === 'global') {
         unreadCounts.global = 0;
         // Update last seen index to the last message in global chat
@@ -868,8 +898,8 @@ function renderCurrentChat(preserveScroll = true) {
     // Render messages with divider
     if (currentChatType === 'global') {
         chatHistories.global.forEach((msg, index) => {
-            // Insert new messages divider
-            if (showNewMessagesDivider && index === newMessageStartIndex) {
+            // Insert new messages divider ONLY if not our own message
+            if (showNewMessagesDivider && index === newMessageStartIndex && msg.sender !== username) {
                 insertNewMessagesDivider();
             }
             
@@ -915,14 +945,20 @@ function renderCurrentChat(preserveScroll = true) {
         });
     }
     
+    // Check if this chat has been viewed already
+    const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
+    const hasBeenViewed = viewedChats.has(chatKey);
+    
     // Handle scroll position restoration
     if (preserveScroll) {
-        if (showNewMessagesDivider) {
-            // Scroll to new messages divider
+        if (showNewMessagesDivider && !hasBeenViewed) {
+            // Only scroll to divider if chat hasn't been viewed yet
             setTimeout(() => {
                 const divider = messagesContainer.querySelector('.new-messages-divider');
                 if (divider) {
                     divider.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Mark as viewed after scrolling
+                    viewedChats.add(chatKey);
                 }
             }, 100);
         } else if (wasAtBottom) {
@@ -936,11 +972,14 @@ function renderCurrentChat(preserveScroll = true) {
         }
     } else {
         // When not preserving scroll (initial render), scroll to bottom or divider
-        if (showNewMessagesDivider) {
+        if (showNewMessagesDivider && !hasBeenViewed) {
+            // Only scroll to divider on first view
             setTimeout(() => {
                 const divider = messagesContainer.querySelector('.new-messages-divider');
                 if (divider) {
                     divider.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Mark as viewed after scrolling
+                    viewedChats.add(chatKey);
                 }
             }, 100);
         } else {
@@ -957,21 +996,25 @@ function isAtBottom() {
 }
 
 function addMessage(message, autoScroll = true) {
+    // Check if this message was deleted by the user
+    const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
+    if (deletedMessages[message.id || message.timestamp]) {
+        return null; // Skip this message if it was deleted
+    }
+    
+    // Check if this is a reply to another message
+    const isReply = message.replyTo || (message.metadata && message.metadata.replyTo);
+    const replyInfo = message.replyTo || (message.metadata && message.metadata.replyTo);
+    
     const isOwn = message.sender === username;
     const messageDiv = document.createElement('div');
     messageDiv.className = isOwn ? 'message own' : 'message';
-    messageDiv.style.position = 'relative';
     
-    // Show menu button on hover
-    messageDiv.addEventListener('mouseenter', () => {
-        const menuBtn = messageDiv.querySelector('.message-menu-btn');
-        if (menuBtn) menuBtn.style.opacity = '1';
-    });
-    
-    messageDiv.addEventListener('mouseleave', () => {
-        const menuBtn = messageDiv.querySelector('.message-menu-btn');
-        if (menuBtn) menuBtn.style.opacity = '0';
-    });
+    // Ensure every message has a unique ID
+    const messageId = message.id || message.timestamp || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    messageDiv.dataset.messageId = messageId;
+    messageDiv.dataset.sender = message.sender;
+    messageDiv.dataset.timestamp = message.timestamp;
     
     // Add different-user class if this message is from a different user than the previous one
     const messages = messagesContainer.children;
@@ -990,22 +1033,30 @@ function addMessage(message, autoScroll = true) {
     const content = document.createElement('div');
     content.className = 'message-content';
     
-    if (!isOwn) {
-        const header = document.createElement('div');
-        header.className = 'message-header';
-        
-        const sender = document.createElement('span');
-        sender.className = 'message-sender';
-        sender.textContent = message.sender;
-        
-        const time = document.createElement('span');
-        time.className = 'message-time';
-        time.textContent = message.timestamp || getCurrentTime();
-        
-        header.appendChild(sender);
-        header.appendChild(time);
-        content.appendChild(header);
+    // Create message header (sender and time)
+    const header = document.createElement('div');
+    header.className = 'message-header';
+    
+    // Add reply indicator if this is a reply
+    if (isReply && replyInfo) {
+        const replyIndicator = document.createElement('div');
+        replyIndicator.className = 'message-reply';
+        replyIndicator.title = 'Replying to: ' + (replyInfo.text || '').substring(0, 100);
+        replyIndicator.textContent = `Replying to ${replyInfo.sender || 'user'}: ${(replyInfo.text || '').substring(0, 50)}${(replyInfo.text || '').length > 50 ? '...' : ''}`;
+        content.appendChild(replyIndicator);
     }
+    
+    const sender = document.createElement('span');
+    sender.className = 'message-sender';
+    sender.textContent = isOwn ? 'You' : message.sender;
+    
+    const time = document.createElement('span');
+    time.className = 'message-time';
+    time.textContent = message.timestamp || getCurrentTime();
+    
+    header.appendChild(sender);
+    header.appendChild(time);
+    content.appendChild(header);
     
     // Handle different message types
     if ((message.type === 'file_share' || message.type === 'file_notification' || message.type === 'private_file' || message.type === 'group_file') && message.file_id) {
@@ -1166,8 +1217,13 @@ function createMenuButton(messageElement, isOwn) {
 function handleVideoInvite(message) {
     const { sender, link, session_id } = message;
     console.log('[VIDEO] Handling video invite from', sender);
-    const isMissed = message.is_missed || false;
-    const missedTime = message.missed_at || '';
+    
+    // Check if this call was marked as missed in localStorage
+    const missedCalls = JSON.parse(localStorage.getItem('missedVideoCalls') || '{}');
+    const wasMissed = missedCalls[session_id];
+    
+    const isMissed = message.is_missed || wasMissed || false;
+    const missedTime = message.missed_at || (wasMissed ? wasMissed.timestamp : '');
     const videoMessage = document.createElement('div');
     if (session_id) videoMessage.dataset.sessionId = session_id;
 
@@ -1311,6 +1367,15 @@ function handleVideoMissed(message) {
 
     console.log('[VIDEO] Handling missed call for session:', sessionId);
 
+    // Store missed call state in localStorage to persist across tab switches
+    const missedCalls = JSON.parse(localStorage.getItem('missedVideoCalls') || '{}');
+    missedCalls[sessionId] = {
+        timestamp: timestamp,
+        session_type: message.session_type,
+        chat_id: message.chat_id
+    };
+    localStorage.setItem('missedVideoCalls', JSON.stringify(missedCalls));
+
     // Find all video invite messages with this session ID
     const selectors = document.querySelectorAll(`[data-session-id="${sessionId}"]`);
     console.log('[VIDEO] Found', selectors.length, 'invite messages to update');
@@ -1352,6 +1417,34 @@ function updateVideoInviteInHistory(history, sessionId, timestamp) {
             msg.missed_at = timestamp;
             console.log('[VIDEO] Marked invite as missed in history');
         }
+    }
+}
+
+function restoreVideoCallStates() {
+    // Restore missed call states from localStorage when tab becomes visible
+    console.log('[VIDEO] Restoring video call states from localStorage');
+    const missedCalls = JSON.parse(localStorage.getItem('missedVideoCalls') || '{}');
+    
+    for (const sessionId in missedCalls) {
+        const missedInfo = missedCalls[sessionId];
+        const selectors = document.querySelectorAll(`[data-session-id="${sessionId}"]`);
+        
+        selectors.forEach(el => {
+            const btn = el.querySelector('.join-call-btn');
+            if (btn && !btn.disabled) {
+                console.log('[VIDEO] Restoring missed call state for session:', sessionId);
+                btn.disabled = true;
+                btn.textContent = `📵 Missed Call (${missedInfo.timestamp})`;
+                btn.style.background = '#484444';
+                btn.style.borderColor = '#524e4e';
+                btn.style.color = '#908a8a';
+                btn.style.cursor = 'not-allowed';
+                btn.style.opacity = '0.7';
+                btn.onmouseover = null;
+                btn.onmouseout = null;
+                btn.onclick = null;
+            }
+        });
     }
 }
 
@@ -1442,7 +1535,22 @@ function updateUsersList(users) {
     });
 }
 
-function updateGroupsList(groups) {
+function updateGroupsList(groups = []) {
+    // Combine server groups with persistent groups
+    const allGroups = {};
+    
+    // Add persistent groups first
+    for (const groupId in persistentGroups) {
+        allGroups[groupId] = persistentGroups[groupId];
+    }
+    
+    // Add/update with server groups
+    if (groups && groups.length > 0) {
+        groups.forEach(group => {
+            allGroups[group.id] = group;
+        });
+    }
+    
     // Get all groups we've chatted in (including inactive ones)
     const chattedGroupIds = new Set();
     for (const groupId in chatHistories.group) {
@@ -1451,11 +1559,22 @@ function updateGroupsList(groups) {
             chattedGroupIds.add(groupId);
         }
     }
+    
+    // Add ALL persistent groups (even if no messages yet)
+    for (const groupId in persistentGroups) {
+        const group = persistentGroups[groupId];
+        // Only add if current user is a member
+        if (group.members && group.members.includes(username)) {
+            chattedGroupIds.add(groupId);
+        }
+    }
+    
     // Add current active groups (if not already in chattedGroupIds)
-    const userGroups = groups.filter(g => g.members.includes(username));
+    const userGroups = groups.filter(g => g.members && g.members.includes(username));
     userGroups.forEach(group => {
         chattedGroupIds.add(group.id);
     });
+    
     const groupIds = Array.from(chattedGroupIds);
     groupsList.innerHTML = '';
     if (groupIds.length === 0) {
@@ -1464,7 +1583,15 @@ function updateGroupsList(groups) {
     }
     noGroupsMsg.style.display = 'none';
     groupIds.forEach(groupId => {
+        // Try to find group info from server groups first
         let groupInfo = userGroups.find(g => g.id === groupId);
+        
+        // If not found in server groups, check persistent groups
+        if (!groupInfo && allGroups[groupId]) {
+            groupInfo = allGroups[groupId];
+        }
+        
+        // Fallback if still not found
         if (!groupInfo) {
             groupInfo = {
                 id: groupId,
@@ -1513,6 +1640,9 @@ function displayRecentChats() {
 }
 
 async function switchToPrivateChat(user) {
+    // Clean up viewed state for chats with no unread messages when leaving
+    cleanupViewedChats();
+    
     currentChatType = 'private';
     currentChatTarget = user;
     chatHeaderName.textContent = user;
@@ -1563,6 +1693,9 @@ async function switchToPrivateChat(user) {
 }
 
 async function switchToGroupChat(groupId, groupName) {
+    // Clean up viewed state for chats with no unread messages when leaving
+    cleanupViewedChats();
+    
     currentChatType = 'group';
     currentChatTarget = groupId;
     chatHeaderName.textContent = groupName;
@@ -1588,6 +1721,9 @@ async function switchToGroupChat(groupId, groupName) {
 }
 
 globalNetworkItem.addEventListener('click', async function() {
+    // Clean up viewed state for chats with no unread messages when leaving
+    cleanupViewedChats();
+    
     currentChatType = 'global';
     currentChatTarget = null;
     chatHeaderName.textContent = 'Global Network';
@@ -2065,14 +2201,31 @@ function showGroupModal(users) {
         members.push(admin);
         const uniqueMembers = [...new Set(members)];
         
+        // Generate a unique group ID
+        const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Save group to persistent storage
+        persistentGroups[groupId] = {
+            id: groupId,
+            name: groupName,
+            members: uniqueMembers,
+            admin: admin,
+            created_at: new Date().toISOString()
+        };
+        localStorage.setItem('persistentGroups', JSON.stringify(persistentGroups));
+        
         await eel.send_message('group_create', `Created group: ${groupName}`, {
+            group_id: groupId,
             group_name: groupName,
             members: uniqueMembers,
             admin: admin
         })();
         
         modal.remove();
-        showNotification(`Group created`, 'success');
+        showNotification(`Group "${groupName}" created`, 'success');
+        
+        // Update groups list immediately
+        updateGroupsList();
     };
 }
 
@@ -2098,105 +2251,118 @@ refreshUsersBtn.addEventListener('click', () => {
 // ===== DATA POLLING =====
 let pollingInterval = null;
 
-function pollForData() {
-    console.log('===== POLLING FOR DATA =====');
+// Function to refresh chat data
+function refreshChatData(force = false) {
+    console.log('===== REFRESHING CHAT DATA =====');
     
-    // Store current scroll position before polling
+    // Store current scroll position before refreshing
     const wasAtBottom = isAtBottom();
     const scrollPosition = messagesContainer.scrollTop;
     
-    // Request chat history from server
-    eel.send_message('request_chat_history', '', {})();
+    // Show loading indicator
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
     
-    // Request user list from server
-    eel.refresh_user_list()();
+    // Request fresh data from server
+    const promises = [
+        eel.get_chat_history()().catch(err => {
+            console.error('Failed to fetch chat history:', err);
+            return { success: false };
+        }),
+        eel.get_user_list()().catch(err => {
+            console.error('Failed to fetch user list:', err);
+            return { success: false };
+        })
+    ];
     
-    // Also try to get data directly from client
-    setTimeout(() => {
-        console.log('===== GETTING DATA DIRECTLY =====');
-        eel.get_chat_history()().then(result => {
-            console.log('Direct chat history result:', result);
-            if (result.success && result.messages && result.messages.length > 0) {
-                console.log('Got chat history directly:', result.messages.length, 'messages');
-                const oldLength = chatHistories.global.length;
-                chatHistories.global = result.messages;
+    Promise.all(promises).then(([chatResult, userResult]) => {
+        // Process chat history
+        if (chatResult.success && chatResult.messages) {
+            const oldLength = chatHistories.global.length;
+            const hasNewMessages = chatResult.messages.length > oldLength;
+            
+            // Only update if forced or there are new messages
+            if (force || hasNewMessages) {
+                // Get deleted messages from localStorage
+                const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
                 
-                // Only force scroll if new messages arrived and we were at bottom
-                const forceScroll = wasAtBottom && result.messages.length > oldLength;
-                renderCurrentChat(!forceScroll);
+                // Filter out deleted messages
+                const filteredMessages = chatResult.messages.filter(msg => {
+                    return !deletedMessages[msg.id || msg.timestamp];
+                });
                 
-                // Restore scroll position if we weren't at bottom
-                if (!forceScroll) {
-                    messagesContainer.scrollTop = scrollPosition;
+                chatHistories.global = filteredMessages;
+                
+                // Only re-render if we're in the global chat
+                if (currentChatType === 'global') {
+                    renderCurrentChat(!wasAtBottom);
+                    
+                    // Restore scroll position if needed
+                    if (!wasAtBottom) {
+                        messagesContainer.scrollTop = scrollPosition;
+                    }
+                }
+                
+                if (hasNewMessages) {
+                    showNotification(`Loaded ${filteredMessages.length - oldLength} new messages`, 'info');
                 }
             }
-        }).catch(err => {
-            console.log('Direct chat history failed:', err);
-        });
+        }
         
-        eel.get_user_list()().then(result => {
-            console.log('Direct user list result:', result);
-            if (result.success && result.users) {
-                console.log('Got user list directly:', result.users.length, 'users');
-                updateUsersList(result.users);
-            }
-        }).catch(err => {
-            console.log('Direct user list failed:', err);
-        });
-    }, 1000);
+        // Process user list
+        if (userResult.success && userResult.users) {
+            updateUsersList(userResult.users);
+        }
+        
+        // Reset refresh button
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+        }
+        
+        // Show success message if this was a manual refresh
+        if (force) {
+            showNotification('Chat refreshed', 'success');
+        }
+    });
+}
+
+// Main polling function
+function pollForData() {
+    console.log('===== STARTING POLLING =====');
     
-    // Set up periodic polling with exponential backoff
+    // Initial refresh
+    refreshChatData();
+    
+    // Set up periodic polling
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
     
-    let pollInterval = 5000; // Start with 5 seconds
-    const maxInterval = 15000; // Max interval of 15 seconds
-    
+    // Poll every 10 seconds, but only if tab is active
     pollingInterval = setInterval(() => {
-        console.log('===== PERIODIC POLL =====');
-        
-        // Only poll if the tab is visible
         if (!document.hidden) {
-            eel.send_message('request_chat_history', '', {})();
-            eel.refresh_user_list()();
-            
-            // Increase polling interval gradually
-            if (pollInterval < maxInterval) {
-                clearInterval(pollingInterval);
-                pollInterval = Math.min(pollInterval * 1.5, maxInterval);
-                pollingInterval = setInterval(arguments.callee, pollInterval);
-            }
+            refreshChatData();
         }
-        
-        // Also get data directly (but only update if we're viewing global chat)
-        eel.get_chat_history()().then(result => {
-            if (result.success && result.messages && result.messages.length > 0) {
-                const oldLength = chatHistories.global.length;
-                const hasNewMessages = result.messages.length > oldLength;
-                
-                // Update stored history
-                chatHistories.global = result.messages;
-                
-                // Only re-render if we're viewing global chat AND there are new messages OR we haven't rendered yet
-                if (currentChatType === 'global' && (hasNewMessages || messagesContainer.children.length === 0)) {
-                    const wasAtBottom = isAtBottom();
-                    // Preserve scroll position - only auto-scroll if we were already at bottom
-                    renderCurrentChat(true);
-                }
-            }
-        }).catch(err => {
-            console.log('Periodic chat history failed:', err);
-        });
-        
-        eel.get_user_list()().then(result => {
-            if (result.success && result.users) {
-                updateUsersList(result.users);
-            }
-        }).catch(err => {
-            console.log('Periodic user list failed:', err);
-        });
-    }, 3000); // Poll every 3 seconds
+    }, 10000);
+    
+    // Also poll when tab becomes visible
+    const handleVisibilityChange = () => {
+        if (!document.hidden) {
+            refreshChatData();
+        }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Return cleanup function
+    return () => {
+        if (pollingInterval) clearInterval(pollingInterval);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
 }
 
 function stopPolling() {
@@ -2336,6 +2502,22 @@ function onDisconnected() {
     }, 2000);
 }
 
+// Handle user connection alerts
+eel.expose(onUserConnected);
+function onUserConnected(connectedUser) {
+    if (connectedUser && connectedUser !== username) {
+        showConnectionAlert(`${connectedUser} connected`, 'connected');
+    }
+}
+
+// Handle user disconnection alerts
+eel.expose(onUserDisconnected);
+function onUserDisconnected(disconnectedUser) {
+    if (disconnectedUser && disconnectedUser !== username) {
+        showConnectionAlert(`${disconnectedUser} disconnected`, 'disconnected');
+    }
+}
+
 eel.expose(showError);
 function showError(message) {
     showNotification(message, 'error');
@@ -2353,7 +2535,7 @@ function showNotification(message, type = 'info') {
     notification.style.cssText = `
         position: fixed;
         top: 20px;
-        left: 20px;
+        right: 20px;
         background: var(--bg-secondary);
         border: 1px solid ${colors[type]};
         border-radius: 6px;
@@ -2363,7 +2545,7 @@ function showNotification(message, type = 'info') {
         font-weight: 600;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
         z-index: 10000;
-        animation: slideIn 0.3s ease;
+        animation: slideInRight 0.3s ease;
         font-family: 'Rajdhani', sans-serif;
         max-width: 350px;
     `;
@@ -2371,8 +2553,63 @@ function showNotification(message, type = 'info') {
     document.body.appendChild(notification);
     
     setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease';
+        notification.style.animation = 'slideOutRight 0.3s ease';
         setTimeout(() => notification.remove(), 300);
+    }, 4000);
+}
+
+function showConnectionAlert(message, type = 'connected') {
+    const colors = {
+        connected: '#2ecc71',
+        disconnected: '#e74c3c'
+    };
+    
+    // Find the chat-header element
+    const chatHeader = document.querySelector('.chat-header');
+    if (!chatHeader) return;
+    
+    const alert = document.createElement('div');
+    alert.style.cssText = `
+        position: absolute;
+        top: 50%;
+        right: 20px;
+        transform: translateY(-50%);
+        background: var(--bg-secondary);
+        border: 2px solid ${colors[type]};
+        border-radius: 8px;
+        padding: 10px 16px;
+        color: ${colors[type]};
+        font-size: 13px;
+        font-weight: 700;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 100;
+        animation: slideInRight 0.4s ease;
+        font-family: 'Rajdhani', sans-serif;
+        max-width: 250px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        letter-spacing: 0.5px;
+    `;
+    
+    // Add icon based on type
+    const icon = document.createElement('span');
+    icon.style.cssText = `
+        font-size: 16px;
+        flex-shrink: 0;
+    `;
+    icon.textContent = type === 'connected' ? '✓' : '✕';
+    
+    const text = document.createElement('span');
+    text.textContent = message;
+    
+    alert.appendChild(icon);
+    alert.appendChild(text);
+    chatHeader.appendChild(alert);
+    
+    setTimeout(() => {
+        alert.style.animation = 'slideOutRight 0.4s ease';
+        setTimeout(() => alert.remove(), 400);
     }, 4000);
 }
 
@@ -2396,8 +2633,28 @@ function getCurrentChatMessages() {
 // ===== CONTEXT MENUS =====
 function showChatContextMenu(event, user) {
     const menu = document.getElementById('chatContextMenu');
-    menu.style.left = event.pageX + 'px';
-    menu.style.top = event.pageY + 'px';
+    
+    // Calculate menu position
+    const menuHeight = 150; // Approximate height
+    const menuWidth = 180; // Approximate width
+    const windowHeight = window.innerHeight;
+    const windowWidth = window.innerWidth;
+    
+    let posX = event.pageX;
+    let posY = event.pageY;
+    
+    // Check if menu would go off bottom of screen
+    if (posY + menuHeight > windowHeight - 20) {
+        posY = windowHeight - menuHeight - 20;
+    }
+    
+    // Check if menu would go off right side of screen
+    if (posX + menuWidth > windowWidth - 20) {
+        posX = windowWidth - menuWidth - 20;
+    }
+    
+    menu.style.left = posX + 'px';
+    menu.style.top = posY + 'px';
     menu.classList.add('show');
     menu.dataset.user = user;
     
@@ -2411,23 +2668,38 @@ function showChatContextMenu(event, user) {
 }
 
 function showMessageContextMenu(event, messageElement) {
-    event.stopPropagation();
     event.preventDefault();
+    event.stopPropagation();
     
-    // Close any existing modals first
-    const existingModals = document.querySelectorAll('.modal-overlay');
-    existingModals.forEach(modal => modal.remove());
+    // Hide any existing context menus
+    document.querySelectorAll('.context-menu').forEach(menu => {
+        menu.classList.remove('show');
+    });
     
     const menu = document.getElementById('messageContextMenu');
+    if (!menu) return;
     
-    // If menu is already shown, hide it
-    if (menu.classList.contains('show')) {
-        menu.classList.remove('show');
-        return;
+    // Calculate menu position
+    const menuHeight = 300; // Approximate height of context menu
+    const menuWidth = 200; // Approximate width
+    const windowHeight = window.innerHeight;
+    const windowWidth = window.innerWidth;
+    
+    let posX = event.pageX;
+    let posY = event.pageY;
+    
+    // Check if menu would go off bottom of screen
+    if (posY + menuHeight > windowHeight - 20) {
+        posY = windowHeight - menuHeight - 20;
     }
     
-    menu.style.left = event.pageX + 'px';
-    menu.style.top = event.pageY + 'px';
+    // Check if menu would go off right side of screen
+    if (posX + menuWidth > windowWidth - 20) {
+        posX = windowWidth - menuWidth - 20;
+    }
+    
+    menu.style.left = posX + 'px';
+    menu.style.top = posY + 'px';
     menu.classList.add('show');
     menu.dataset.messageId = messageElement.dataset.messageId;
     
@@ -2548,41 +2820,126 @@ function deleteChat(user) {
 }
 
 function replyToMessage(messageElement) {
-    const messageText = messageElement.querySelector('.message-bubble')?.textContent;
-    if (!messageText) return;
+    const messageBubble = messageElement.querySelector('.message-bubble');
+    if (!messageBubble) return;
     
-    const dialog = document.createElement('div');
-    dialog.className = 'modal-overlay';
-    dialog.innerHTML = `
-        <div class="modal-content" style="max-width: 400px;">
-            <h3>Reply to Message</h3>
-            <div class="modal-message">${messageText}</div>
-            <textarea id="replyInput" placeholder="Type your reply..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-main); background: var(--bg-deep); color: var(--text-normal); min-height: 80px; font-family: inherit; resize: vertical;"></textarea>
-            <div class="modal-buttons">
-                <button class="modal-btn cancel">Cancel</button>
-                <button class="modal-btn primary">Send Reply</button>
+    // Get message content, handling different message types
+    let messageText = '';
+    if (messageBubble.querySelector('.file-item')) {
+        messageText = '📎 File';
+    } else if (messageBubble.querySelector('.audio-item')) {
+        messageText = '🎵 Audio';
+    } else {
+        messageText = messageBubble.textContent.trim();
+    }
+    
+    const sender = messageElement.dataset.sender || messageElement.querySelector('.message-sender')?.textContent || 'User';
+    const messageId = messageElement.dataset.messageId;
+    
+    if (!messageText || !messageId) return;
+    
+    // Create reply preview
+    const replyPreview = document.createElement('div');
+    replyPreview.className = 'reply-preview';
+    replyPreview.innerHTML = `
+        <div class="reply-preview-content">
+            <div class="reply-preview-header">
+                <span class="reply-sender">${sender}</span>
+                <button class="reply-remove-btn">×</button>
+            </div>
+            <div class="reply-message" title="${messageText.replace(/"/g, '&quot;')}">
+                ${messageText.substring(0, 100)}${messageText.length > 100 ? '...' : ''}
             </div>
         </div>
     `;
     
-    document.body.appendChild(dialog);
+    // Get or create reply container
+    let replyContainer = document.querySelector('.reply-container');
+    if (!replyContainer) {
+        replyContainer = document.createElement('div');
+        replyContainer.className = 'reply-container';
+        const inputContainer = document.querySelector('.message-input-container');
+        inputContainer.parentNode.insertBefore(replyContainer, inputContainer);
+    } else {
+        replyContainer.innerHTML = ''; // Clear any existing reply
+    }
     
-    const replyInput = dialog.querySelector('#replyInput');
-    replyInput.focus();
+    // Add reply preview
+    replyContainer.appendChild(replyPreview);
+    replyContainer.style.display = 'block';
     
-    dialog.querySelector('.primary').onclick = () => {
-        const replyText = replyInput.value.trim();
-        if (replyText) {
-            const messageInput = document.getElementById('messageInput');
-            messageInput.value = `↩️ "${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}"\n${replyText}`;
-            messageInput.focus();
-            dialog.remove();
-            showNotification('Reply added', 'success');
+    // Store original message info for reference
+    replyContainer.dataset.replyTo = messageId;
+    replyContainer.dataset.originalSender = sender;
+    replyContainer.dataset.originalText = messageText;
+    
+    // Focus the input
+    const messageInput = document.getElementById('messageInput');
+    messageInput.focus();
+    
+    // Handle remove reply
+    const removeBtn = replyPreview.querySelector('.reply-remove-btn');
+    removeBtn.onclick = () => {
+        replyContainer.style.display = 'none';
+        replyContainer.dataset.replyTo = '';
+        sendBtn.textContent = 'Send';
+        
+        // Restore original send handler
+        if (window.originalSendHandler) {
+            sendBtn.onclick = window.originalSendHandler;
         }
     };
     
-    dialog.querySelector('.cancel').onclick = () => dialog.remove();
-    dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
+    // Store original send handler if not already stored
+    if (!window.originalSendHandler) {
+        window.originalSendHandler = sendBtn.onclick;
+    }
+    
+    // Update send button to handle replies
+    sendBtn.onclick = async function() {
+        const replyText = messageInput.value.trim();
+        if (!replyText) return;
+        
+        try {
+            // Prepare message data with reply info
+            const messageData = {
+                type: currentChatType,
+                target: currentChatTarget,
+                text: replyText,
+                replyTo: {
+                    id: messageId,
+                    sender: sender,
+                    text: messageText.substring(0, 100)
+                }
+            };
+            
+            // Send the message through the existing send flow
+            const result = await eel.send_message('text', replyText, {
+                type: currentChatType,
+                target: currentChatTarget,
+                replyTo: messageId
+            })();
+            
+            if (result && result.success) {
+                // Clear input and reply preview
+                messageInput.value = '';
+                replyContainer.style.display = 'none';
+                replyContainer.dataset.replyTo = '';
+                
+                // Restore original send handler and button text
+                sendBtn.onclick = window.originalSendHandler;
+                sendBtn.textContent = 'Send';
+            } else {
+                showNotification('Failed to send reply', 'error');
+            }
+        } catch (error) {
+            console.error('Error sending reply:', error);
+            showNotification('Error sending reply', 'error');
+        }
+    };
+    
+    // Update send button text
+    sendBtn.textContent = 'Send Reply';
 }
 
 function copyMessage(messageElement) {
@@ -2752,9 +3109,13 @@ function pinMessage(messageElement) {
 }
 
 async function deleteMessage(messageElement) {
-    const messageText = messageElement.querySelector('.message-bubble')?.textContent;
+    const messageBubble = messageElement.querySelector('.message-bubble');
+    if (!messageBubble) return;
+    
+    const messageText = messageBubble.textContent;
     const messageId = messageElement.dataset.messageId;
     const isOwnMessage = messageElement.classList.contains('own');
+    const sender = messageElement.dataset.sender || 'User';
     
     // Show delete confirmation modal with different options based on message ownership
     const dialog = document.createElement('div');
@@ -2765,11 +3126,19 @@ async function deleteMessage(messageElement) {
         dialog.innerHTML = `
             <div class="modal-content" style="max-width: 400px;">
                 <h3>🗑️ Delete Message</h3>
-                <div class="modal-message">${messageText}</div>
-                <p style="color: var(--text-dim); font-size: 14px; margin: 10px 0;">This message will be permanently deleted for everyone. This action cannot be undone.</p>
-                <div class="modal-buttons">
-                    <button class="modal-btn cancel">Cancel</button>
-                    <button class="modal-btn danger">Delete for Everyone</button>
+                <div class="modal-message" style="max-height: 200px; overflow-y: auto; padding: 10px; background: var(--bg-deep); border-radius: 4px; margin: 10px 0;">
+                    ${messageText}
+                </div>
+                <p style="color: var(--text-dim); font-size: 14px; margin: 10px 0;">
+                    This message will be permanently deleted for everyone. This action cannot be undone.
+                </p>
+                <div class="modal-buttons" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                    <button class="modal-btn cancel" style="padding: 8px 16px; background: var(--bg-card); border: 1px solid var(--border-main); border-radius: 4px; cursor: pointer;">
+                        Cancel
+                    </button>
+                    <button class="modal-btn danger" style="padding: 8px 16px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Delete for Everyone
+                    </button>
                 </div>
             </div>
         `;
@@ -2778,11 +3147,20 @@ async function deleteMessage(messageElement) {
         dialog.innerHTML = `
             <div class="modal-content" style="max-width: 400px;">
                 <h3>🗑️ Remove Message</h3>
-                <div class="modal-message">${messageText}</div>
-                <p style="color: var(--text-dim); font-size: 14px; margin: 10px 0;">This message will be removed from your chat only. Other users will still see it.</p>
-                <div class="modal-buttons">
-                    <button class="modal-btn cancel">Cancel</button>
-                    <button class="modal-btn danger">Remove from Chat</button>
+                <div class="modal-message" style="max-height: 200px; overflow-y: auto; padding: 10px; background: var(--bg-deep); border-radius: 4px; margin: 10px 0;">
+                    <div style="font-size: 12px; color: var(--accent-cyan); margin-bottom: 5px;">From: ${sender}</div>
+                    ${messageText}
+                </div>
+                <p style="color: var(--text-dim); font-size: 14px; margin: 10px 0;">
+                    This message will be removed from your chat only. Other users will still see it.
+                </p>
+                <div class="modal-buttons" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                    <button class="modal-btn cancel" style="padding: 8px 16px; background: var(--bg-card); border: 1px solid var(--border-main); border-radius: 4px; cursor: pointer;">
+                        Cancel
+                    </button>
+                    <button class="modal-btn danger" style="padding: 8px 16px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Remove from Chat
+                    </button>
                 </div>
             </div>
         `;
@@ -2790,6 +3168,7 @@ async function deleteMessage(messageElement) {
     
     document.body.appendChild(dialog);
     
+    // Handle delete action
     dialog.querySelector('.danger').onclick = async () => {
         if (isOwnMessage) {
             // Permanent delete for own messages
@@ -2797,17 +3176,23 @@ async function deleteMessage(messageElement) {
                 const result = await eel.delete_message(messageId, currentChatType, currentChatTarget)();
                 
                 if (result && result.success) {
+                    // Mark as deleted in the UI
+                    messageElement.classList.add('deleted');
+                    
                     // Replace message content with "Message deleted"
                     const bubble = messageElement.querySelector('.message-bubble');
                     if (bubble) {
-                        bubble.innerHTML = '<span class="message-deleted">🚫 This message was deleted</span>';
-                        bubble.style.fontStyle = 'italic';
-                        bubble.style.opacity = '0.6';
+                        bubble.innerHTML = '<span class="message-deleted" style="font-style: italic; opacity: 0.7;">🚫 This message was deleted</span>';
                     }
                     
-                    // Remove menu button
+                    // Remove interactive elements
                     const menuBtn = messageElement.querySelector('.message-menu-btn');
                     if (menuBtn) menuBtn.remove();
+                    
+                    // Mark as deleted in localStorage to prevent reappearance
+                    const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
+                    deletedMessages[messageId] = true;
+                    localStorage.setItem('deletedMessages', JSON.stringify(deletedMessages));
                     
                     dialog.remove();
                     showNotification('Message deleted for everyone', 'success');
@@ -2817,17 +3202,57 @@ async function deleteMessage(messageElement) {
             } catch (error) {
                 console.error('Delete error:', error);
                 showNotification('Failed to delete message', 'error');
+                dialog.remove();
             }
         } else {
             // Local removal for others' messages
-            messageElement.style.display = 'none';
-            dialog.remove();
-            showNotification('Message removed from your chat', 'success');
+            try {
+                // Mark as deleted in localStorage to prevent reappearance
+                const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
+                deletedMessages[messageId] = {
+                    id: messageId,
+                    timestamp: Date.now(),
+                    sender: sender,
+                    chatType: currentChatType,
+                    chatTarget: currentChatTarget
+                };
+                localStorage.setItem('deletedMessages', JSON.stringify(deletedMessages));
+                
+                // Remove from DOM with a fade-out animation
+                messageElement.style.transition = 'opacity 0.3s ease';
+                messageElement.style.opacity = '0';
+                
+                // Wait for the animation to complete before removing from DOM
+                setTimeout(() => {
+                    messageElement.remove();
+                    showNotification('Message removed from your chat', 'success');
+                }, 300);
+                
+                dialog.remove();
+            } catch (error) {
+                console.error('Error removing message:', error);
+                showNotification('Failed to remove message', 'error');
+                dialog.remove();
+            }
         }
     };
     
-    dialog.querySelector('.cancel').onclick = () => dialog.remove();
-    dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
+    // Handle cancel action
+    const cancelBtn = dialog.querySelector('.cancel');
+    if (cancelBtn) {
+        cancelBtn.onclick = () => {
+            dialog.style.opacity = '0';
+            setTimeout(() => dialog.remove(), 200);
+        };
+    }
+    
+    // Close on overlay click
+    dialog.onclick = (e) => {
+        if (e.target === dialog) {
+            dialog.style.opacity = '0';
+            setTimeout(() => dialog.remove(), 200);
+        }
+    };
 }
 
 function selectMessage(messageElement) {
@@ -2941,6 +3366,27 @@ function resetPollingInterval() {
 
 // ===== EVENT LISTENERS =====
 document.addEventListener('DOMContentLoaded', () => {
+    // Load persistent groups on startup
+    console.log('===== LOADING PERSISTENT GROUPS ON STARTUP =====');
+    updateGroupsList();
+    
+    // Connect refresh button
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            refreshChatData(true); // Force refresh
+        });
+    }
+    
+    // Add keyboard shortcut for refresh (Ctrl+R)
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+            e.preventDefault();
+            refreshChatData(true); // Force refresh
+        }
+    });
+    
     // Reset polling on user activity
     ['click', 'keypress', 'scroll', 'touchstart'].forEach(event => {
         document.addEventListener(event, resetPollingInterval, { passive: true });
@@ -2950,6 +3396,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
             resetPollingInterval();
+            // Re-check video call states when tab becomes visible
+            restoreVideoCallStates();
         }
     });
 
