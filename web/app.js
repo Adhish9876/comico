@@ -839,6 +839,12 @@ function handleMessage(message) {
         }
     }
     else if (msgType === 'video_missed') {
+        // Only handle the missed call state, don't show VideoServer system message
+        if (message.sender === 'VideoServer') {
+            // Silently update the call states without showing a system message
+            handleVideoMissed(message);
+            return; // Don't add to chat history
+        }
         handleVideoMissed(message);
     }
 }
@@ -904,7 +910,7 @@ function renderCurrentChat(preserveScroll = true) {
             }
             
             if (msg.type === 'video_invite') {
-                handleVideoInvite(msg);
+                handleVideoInvite(msg, true); // true = from history
             } else {
                 addMessage(msg, false); // Don't auto-scroll for each message
             }
@@ -918,7 +924,7 @@ function renderCurrentChat(preserveScroll = true) {
             }
             
             if (msg.type === 'video_invite_private') {
-                handleVideoInvite(msg);
+                handleVideoInvite(msg, true); // true = from history
             } else {
                 addMessage(msg, false);
                 if (msg.type === 'private_file') {
@@ -935,7 +941,7 @@ function renderCurrentChat(preserveScroll = true) {
             }
             
             if (msg.type === 'video_invite_group') {
-                handleVideoInvite(msg);
+                handleVideoInvite(msg, true); // true = from history
             } else {
                 addMessage(msg, false);
                 if (msg.type === 'group_file') {
@@ -996,6 +1002,11 @@ function isAtBottom() {
 }
 
 function addMessage(message, autoScroll = true) {
+    // Skip VideoServer system messages completely
+    if (message.sender === 'VideoServer' || message.sender === 'VIDEOSERVER') {
+        return null;
+    }
+    
     // Check if this message was deleted by the user
     const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
     if (deletedMessages[message.id || message.timestamp]) {
@@ -1037,13 +1048,31 @@ function addMessage(message, autoScroll = true) {
     const header = document.createElement('div');
     header.className = 'message-header';
     
-    // Add reply indicator if this is a reply
+    // Add reply indicator if this is a reply (WhatsApp style)
     if (isReply && replyInfo) {
-        const replyIndicator = document.createElement('div');
-        replyIndicator.className = 'message-reply';
-        replyIndicator.title = 'Replying to: ' + (replyInfo.text || '').substring(0, 100);
-        replyIndicator.textContent = `Replying to ${replyInfo.sender || 'user'}: ${(replyInfo.text || '').substring(0, 50)}${(replyInfo.text || '').length > 50 ? '...' : ''}`;
-        content.appendChild(replyIndicator);
+        const replyQuote = document.createElement('div');
+        replyQuote.className = 'reply-quote';
+        replyQuote.style.cssText = `
+            background: ${isOwn ? 'rgba(0, 150, 136, 0.15)' : 'rgba(100, 100, 100, 0.2)'};
+            border-left: 3px solid ${isOwn ? '#009688' : '#888'};
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+        `;
+        
+        const replySender = document.createElement('div');
+        replySender.style.cssText = 'font-weight: 600; color: #009688; margin-bottom: 3px; font-size: 13px;';
+        replySender.textContent = replyInfo.sender === username ? 'You' : replyInfo.sender;
+        
+        const replyText = document.createElement('div');
+        replyText.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;';
+        replyText.textContent = (replyInfo.text || '').substring(0, 100);
+        
+        replyQuote.appendChild(replySender);
+        replyQuote.appendChild(replyText);
+        content.appendChild(replyQuote);
     }
     
     const sender = document.createElement('span');
@@ -1214,9 +1243,9 @@ function createMenuButton(messageElement, isOwn) {
 
 
 
-function handleVideoInvite(message) {
+function handleVideoInvite(message, isFromHistory = false) {
     const { sender, link, session_id } = message;
-    console.log('[VIDEO] Handling video invite from', sender);
+    console.log('[VIDEO] Handling video invite from', sender, 'isFromHistory:', isFromHistory);
     
     // Check if this call was marked as missed in localStorage
     const missedCalls = JSON.parse(localStorage.getItem('missedVideoCalls') || '{}');
@@ -1226,6 +1255,11 @@ function handleVideoInvite(message) {
     const missedTime = message.missed_at || (wasMissed ? wasMissed.timestamp : '');
     const videoMessage = document.createElement('div');
     if (session_id) videoMessage.dataset.sessionId = session_id;
+    
+    // Show modal ONLY for real-time incoming calls (not historical ones, not your own calls)
+    if (!isMissed && sender !== username && !isFromHistory) {
+        showIncomingCallModal(sender, link, session_id);
+    }
 
     if (isMissed) {
         // Reduced size and updated styling for missed call message
@@ -1329,12 +1363,12 @@ function handleVideoInvite(message) {
     <button class="join-call-btn" 
             onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'video_call', 'width=1200,height=800')"
             style="width: 100%; 
-                   background: #6b4646; 
-                   border: 1px solid #7a5252; 
+                   background: linear-gradient(135deg, #c62828, #c62828); 
+                   border: 1px solid #d32f2f; 
                    border-radius: 6px; 
                    padding: 10px 12px; 
-                   color: #e8e4e4; 
-                   font-weight: 500; 
+                   color: #ffffff; 
+                   font-weight: 600; 
                    font-size: 13px; 
                    cursor: pointer; 
                    transition: all 0.2s ease;
@@ -1345,10 +1379,10 @@ function handleVideoInvite(message) {
                    align-items: center;
                    justify-content: center;
                    gap: 8px;
-                   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);"
-            onmouseover="this.style.background='#7a5252'; this.style.borderColor='#8a6060';"
-            onmouseout="this.style.background='#6b4646'; this.style.borderColor='#7a5252';">
-        <span style="filter: grayscale(20%) brightness(0.9);">🎥</span>
+                   box-shadow: 0 2px 6px #c62828;"
+            onmouseover="this.style.background='linear-gradient(135deg, #d32f2f, #c62828)'; this.style.boxShadow='0 4px 12px rgba(198, 40, 40, 0.6)';"
+            onmouseout="this.style.background='linear-gradient(135deg, #c62828, #c62828)'; this.style.boxShadow='0 2px 6px rgba(198, 40, 40, 0.4)';">
+        <span>🎥</span>
         <span>Join Video Call</span>
     </button>
 </div>
@@ -1360,12 +1394,94 @@ function handleVideoInvite(message) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
+function showIncomingCallModal(sender, link, sessionId) {
+    // Check if this call has been ignored
+    const ignoredCalls = JSON.parse(localStorage.getItem('ignoredVideoCalls') || '{}');
+    if (ignoredCalls[sessionId]) {
+        console.log('[VIDEO] Call already ignored, not showing modal');
+        return;
+    }
+    
+    // Remove any existing modal
+    const existing = document.getElementById('incomingCallModal');
+    if (existing) existing.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'incomingCallModal';
+    modal.innerHTML = `
+        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+            <div style="background: linear-gradient(135deg, #2d3142, #1a1d29); border: 3px solid var(--accent-pink); border-radius: 16px; padding: 32px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(198, 40, 40, 0.6); animation: slideIn 0.3s ease;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="font-size: 64px; margin-bottom: 16px; animation: pulse 2s infinite;">📹</div>
+                    <h2 style="color: var(--text-bright); font-family: 'Bangers', cursive; font-size: 24px; margin: 0 0 8px 0; letter-spacing: 2px;">${sender} is calling...</h2>
+                    <p style="color: var(--text-muted); font-size: 14px; margin: 0;">Incoming video call</p>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                    <button id="answerCallBtn" style="flex: 1; background: linear-gradient(135deg, #c62828, #8B0000); border: none; border-radius: 8px; padding: 14px; color: white; font-weight: 600; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 12px rgba(198, 40, 40, 0.4); transition: all 0.2s;">
+                        📞 Answer
+                    </button>
+                    <button id="ignoreCallBtn" style="flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; color: #bbb; font-weight: 600; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">
+                        ❌ Ignore
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // Add hover effects and click handlers
+    const answerBtn = document.getElementById('answerCallBtn');
+    const ignoreBtn = document.getElementById('ignoreCallBtn');
+    
+    answerBtn.onmouseover = () => answerBtn.style.transform = 'scale(1.05)';
+    answerBtn.onmouseout = () => answerBtn.style.transform = 'scale(1)';
+    answerBtn.onclick = () => {
+        // Remove from ignored calls when answering
+        const ignoredCalls = JSON.parse(localStorage.getItem('ignoredVideoCalls') || '{}');
+        if (ignoredCalls[sessionId]) {
+            delete ignoredCalls[sessionId];
+            localStorage.setItem('ignoredVideoCalls', JSON.stringify(ignoredCalls));
+        }
+        window.open(`${link}?username=${encodeURIComponent(username)}`, 'video_call', 'width=1200,height=800');
+        modal.remove();
+    };
+    
+    ignoreBtn.onmouseover = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.15)'; ignoreBtn.style.color = '#fff'; };
+    ignoreBtn.onmouseout = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.1)'; ignoreBtn.style.color = '#bbb'; };
+    ignoreBtn.onclick = () => {
+        // Mark this call as ignored in localStorage
+        const ignoredCalls = JSON.parse(localStorage.getItem('ignoredVideoCalls') || '{}');
+        ignoredCalls[sessionId] = true;
+        localStorage.setItem('ignoredVideoCalls', JSON.stringify(ignoredCalls));
+        console.log('[VIDEO] Call ignored and saved:', sessionId);
+        modal.remove();
+    };
+    
+    // Auto-remove modal after 30 seconds
+    setTimeout(() => {
+        if (document.getElementById('incomingCallModal')) {
+            modal.remove();
+        }
+    }, 30000);
+}
+
 function handleVideoMissed(message) {
     const sessionId = message.session_id;
     const timestamp = message.timestamp || getCurrentTime();
     if (!sessionId) return;
 
     console.log('[VIDEO] Handling missed call for session:', sessionId);
+    
+    // Close incoming call modal if it's open
+    const modal = document.getElementById('incomingCallModal');
+    if (modal) modal.remove();
+    
+    // Remove from ignored calls (since it's now officially missed)
+    const ignoredCalls = JSON.parse(localStorage.getItem('ignoredVideoCalls') || '{}');
+    if (ignoredCalls[sessionId]) {
+        delete ignoredCalls[sessionId];
+        localStorage.setItem('ignoredVideoCalls', JSON.stringify(ignoredCalls));
+    }
 
     // Store missed call state in localStorage to persist across tab switches
     const missedCalls = JSON.parse(localStorage.getItem('missedVideoCalls') || '{}');
@@ -1449,6 +1565,11 @@ function restoreVideoCallStates() {
 }
 
 function addSystemMessage(content) {
+    // Skip VideoServer messages
+    if (content && (content.includes('VideoServer') || content.includes('VIDEOSERVER') || content.includes('Missed video call (session'))) {
+        return;
+    }
+    
     const messageDiv = document.createElement('div');
     messageDiv.className = 'system-message';
     messageDiv.textContent = content;
@@ -2532,10 +2653,18 @@ function showNotification(message, type = 'info') {
     };
     
     const notification = document.createElement('div');
+    const chatHeader = document.querySelector('.chat-header');
+    
+    if (!chatHeader) {
+        console.error('Chat header not found for notification positioning');
+        return;
+    }
+    
     notification.style.cssText = `
-        position: fixed;
-        top: 20px;
+        position: absolute;
+        top: 50%;
         right: 20px;
+        transform: translateY(-50%);
         background: var(--bg-secondary);
         border: 1px solid ${colors[type]};
         border-radius: 6px;
@@ -2550,7 +2679,7 @@ function showNotification(message, type = 'info') {
         max-width: 350px;
     `;
     notification.textContent = message;
-    document.body.appendChild(notification);
+    chatHeader.appendChild(notification);
     
     setTimeout(() => {
         notification.style.animation = 'slideOutRight 0.3s ease';
@@ -2901,11 +3030,8 @@ function replyToMessage(messageElement) {
         if (!replyText) return;
         
         try {
-            // Prepare message data with reply info
-            const messageData = {
-                type: currentChatType,
-                target: currentChatTarget,
-                text: replyText,
+            // Send the message through the existing send flow with full reply metadata
+            const metadata = {
                 replyTo: {
                     id: messageId,
                     sender: sender,
@@ -2913,25 +3039,30 @@ function replyToMessage(messageElement) {
                 }
             };
             
-            // Send the message through the existing send flow
-            const result = await eel.send_message('text', replyText, {
-                type: currentChatType,
-                target: currentChatTarget,
-                replyTo: messageId
-            })();
-            
-            if (result && result.success) {
-                // Clear input and reply preview
-                messageInput.value = '';
-                replyContainer.style.display = 'none';
-                replyContainer.dataset.replyTo = '';
-                
-                // Restore original send handler and button text
-                sendBtn.onclick = window.originalSendHandler;
-                sendBtn.textContent = 'Send';
+            if (currentChatType === 'private' && currentChatTarget) {
+                await eel.send_message('private', replyText, {
+                    receiver: currentChatTarget,
+                    metadata: metadata
+                })();
+            } else if (currentChatType === 'group' && currentChatTarget) {
+                await eel.send_message('group_message', replyText, {
+                    group_id: currentChatTarget,
+                    metadata: metadata
+                })();
             } else {
-                showNotification('Failed to send reply', 'error');
+                await eel.send_message('chat', replyText, {
+                    metadata: metadata
+                })();
             }
+            
+            // Clear input and reply preview
+            messageInput.value = '';
+            replyContainer.style.display = 'none';
+            replyContainer.dataset.replyTo = '';
+            
+            // Restore original send handler and button text
+            sendBtn.onclick = window.originalSendHandler;
+            sendBtn.textContent = 'Send';
         } catch (error) {
             console.error('Error sending reply:', error);
             showNotification('Error sending reply', 'error');

@@ -406,40 +406,23 @@
         .control-btn svg {
             width: 22px;
             height: 22px;
-            stroke: #f2f3f5;
-            fill: none;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
-        .control-btn.muted svg,
-        .control-btn.disabled svg,
-        .control-btn.sharing svg {
             fill: #f2f3f5;
-        }
-
-        /* PNG Icon Styles */
-        .control-btn img {
-            width: 24px;
-            height: 24px;
-            object-fit: contain;
-            filter: brightness(0) invert(1); /* Makes PNG white */
+            stroke: none;
             transition: all 0.2s ease;
         }
 
-        .control-btn:hover img {
-            filter: brightness(0) invert(1) drop-shadow(0 0 4px rgba(255, 255, 255, 0.5));
+        .control-btn:hover svg {
+            filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.5));
         }
 
-        .control-btn.muted img,
-        .control-btn.disabled img {
-            filter: brightness(0) invert(1) opacity(0.9);
+        .control-btn.muted svg,
+        .control-btn.disabled svg {
+            opacity: 0.9;
         }
 
-        .control-btn.sharing img,
-        .control-btn.raised img {
-            filter: brightness(0) invert(1) drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
+        .control-btn.sharing svg,
+        .control-btn.raised svg {
+            filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
         }
 
         .control-btn::after {
@@ -844,6 +827,7 @@
             <div class="remote-videos-container" id="remoteVideosContainer"></div>
             <div class="video-wrapper local-pip" id="localVideoWrapper">
                 <video id="localVideo" autoplay muted playsinline></video>
+                <div class="camera-off-placeholder" id="localPlaceholder"></div>
                 <div class="video-label" id="localVideoLabel">You</div>
                 <div class="status-indicator"></div>
                 <div class="hand-raised-indicator" id="localHandIndicator">✋ Hand Raised</div>
@@ -853,23 +837,35 @@
 
         <div class="controls">
             <button class="control-btn mic-btn" id="micBtn" data-tooltip="Mute">
-                <img src="../mute.png" alt="Mute">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
             </button>
             <button class="control-btn video-btn" id="videoBtn" data-tooltip="Turn Off Camera">
-                <img src="../camera.png" alt="Camera">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                    <path d="M17 10.5V7c0 .55-.45 1-1 1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                </svg>
             </button>
             <button class="control-btn screen-share-btn" id="screenShareBtn" data-tooltip="Share Screen">
-                <img src="../screenshare.png" alt="Screen Share">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                    <path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/>
+                    <path d="M6.5 14.5l1.41-1.41L10 15.17l4.59-4.59L16 12l-6 6-3.5-3.5z"/>
+                </svg>
             </button>
             <button class="control-btn hand-btn" id="handBtn" data-tooltip="Raise Hand">
-                <img src="../raise.png" alt="Raise Hand">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                    <path d="M23 5.5V20c0 2.2-1.8 4-4 4h-7.3c-1.08 0-2.1-.43-2.85-1.19L1 14.83s1.26-1.23 1.3-1.25c.22-.19.49-.29.79-.29.22 0 .42.06.6.16.04.01 4.31 2.46 4.31 2.46V4c0-.83.67-1.5 1.5-1.5S11 3.17 11 4v7h1V1.5c0-.83.67-1.5 1.5-1.5S15 .67 15 1.5V11h1V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11h1V5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5z"/>
+                </svg>
             </button>
             <button class="control-btn" id="reactionBtn" data-tooltip="Send Reaction">
-                <img src="../emoji.png" alt="Reactions">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
+                </svg>
             </button>
             <button class="control-btn noise-suppression-btn" id="noiseBtn" data-tooltip="Noise Suppression">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9l11.21 11.21C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z"/>
                 </svg>
             </button>
             <button class="control-btn settings-btn" id="settingsBtn" data-tooltip="Settings">
@@ -1131,8 +1127,15 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             video.playsinline = true;
             video.srcObject = stream;
             
+            // Camera off placeholder
+            const cameraOffPlaceholder = document.createElement('div');
+            cameraOffPlaceholder.className = 'camera-off-placeholder';
+            cameraOffPlaceholder.id = `placeholder-${peer_id}`;
+            cameraOffPlaceholder.style.display = 'none';
+            
             const label = document.createElement('div');
             label.className = 'video-label';
+            label.id = `label-${peer_id}`;
             // Use the actual username from _peer_names, fallback to peer_id if not available
             const displayName = _peer_names[peer_id] || peer_id;
             label.textContent = displayName;
@@ -1151,10 +1154,22 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             screenIndicator.textContent = 'Sharing Screen';
             
             videoWrapper.appendChild(video);
+            videoWrapper.appendChild(cameraOffPlaceholder);
             videoWrapper.appendChild(label);
             videoWrapper.appendChild(status);
             videoWrapper.appendChild(handIndicator);
             videoWrapper.appendChild(screenIndicator);
+            
+            // Monitor video track to detect camera off
+            if (stream && stream.getVideoTracks().length > 0) {
+                const videoTrack = stream.getVideoTracks()[0];
+                videoTrack.onended = () => showCameraOffPlaceholder(peer_id);
+                video.onloadedmetadata = () => {
+                    if (video.readyState === 0) {
+                        showCameraOffPlaceholder(peer_id);
+                    }
+                };
+            }
             
             // Add click-to-enlarge functionality
             videoWrapper.addEventListener('click', () => toggleVideoEnlarge(peer_id));
@@ -1170,6 +1185,65 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             console.log('[LAYOUT] Video wrapper already exists for:', peer_id, '- updating stream');
             const video = videoWrapper.querySelector('video');
             if (video) video.srcObject = stream;
+        }
+    }
+    
+    // Color palette for placeholders (10+ distinct colors)
+    const placeholderColors = [
+        { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', name: 'Purple' },
+        { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', name: 'Pink-Red' },
+        { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', name: 'Cyan' },
+        { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', name: 'Green' },
+        { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', name: 'Orange-Yellow' },
+        { bg: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', name: 'Teal-Purple' },
+        { bg: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', name: 'Mint-Pink' },
+        { bg: 'linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%)', name: 'Coral' },
+        { bg: 'linear-gradient(135deg, #2e2e78 0%, #662d91 100%)', name: 'Deep Purple' },
+        { bg: 'linear-gradient(135deg, #eb3349 0%, #f45c43 100%)', name: 'Red-Orange' },
+        { bg: 'linear-gradient(135deg, #1fa2ff 0%, #12d8fa 100%)', name: 'Blue' },
+        { bg: 'linear-gradient(135deg, #ffa400 0%, #ff6b6b 100%)', name: 'Gold-Red' }
+    ];
+    
+    function getPlaceholderColor(peer_id) {
+        // Use peer_id hash to consistently assign same color to same user
+        let hash = 0;
+        for (let i = 0; i < peer_id.length; i++) {
+            const char = peer_id.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        const colorIndex = Math.abs(hash) % placeholderColors.length;
+        return placeholderColors[colorIndex];
+    }
+    
+    function showCameraOffPlaceholder(peer_id) {
+        const placeholder = document.getElementById(`placeholder-${peer_id}`);
+        const video = document.querySelector(`#video-${peer_id} video`);
+        
+        if (placeholder && video) {
+            video.style.display = 'none';
+            placeholder.style.display = 'flex';
+            
+            // Get first letter of username
+            const displayName = _peer_names[peer_id] || peer_id;
+            const firstLetter = displayName.charAt(0).toUpperCase();
+            
+            // Get color for this peer
+            const color = getPlaceholderColor(peer_id);
+            
+            console.log('[PLACEHOLDER] Showing for', peer_id, 'name:', displayName, 'letter:', firstLetter);
+            
+            placeholder.style.background = color.bg;
+            placeholder.style.fontSize = '64px';
+            placeholder.style.fontWeight = '900';
+            placeholder.style.color = 'white';
+            placeholder.style.borderRadius = '12px';
+            placeholder.style.fontFamily = "'Bangers', cursive";
+            placeholder.style.letterSpacing = '2px';
+            placeholder.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.3)';
+            placeholder.textContent = firstLetter;
+        } else {
+            console.error('[PLACEHOLDER] Missing elements for', peer_id, 'placeholder:', !!placeholder, 'video:', !!video);
         }
     }
 
@@ -1404,6 +1478,8 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             const recvd_list = data['list'];
             for (let peer_id in recvd_list) {
                 _peer_list[peer_id] = undefined;
+                _peer_names[peer_id] = recvd_list[peer_id]; // STORE THE USERNAME!
+                console.log('[USER-LIST] Added peer:', peer_id, 'name:', recvd_list[peer_id]);
             }
             updateParticipantList(Object.keys(_peer_list));
             start_webrtc();
@@ -1420,6 +1496,21 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         if (peer_id !== myID) {
             _peer_list[peer_id] = undefined;
             _peer_names[peer_id] = peer_name;
+            
+            // Update label if video wrapper already exists
+            const label = document.getElementById(`label-${peer_id}`);
+            if (label) {
+                label.textContent = peer_name;
+                console.log('[LABEL] Updated label for', peer_id, 'to', peer_name);
+            }
+            
+            // Update participant list item if it exists
+            const participantItem = document.getElementById(`participant-${peer_id}`);
+            if (participantItem) {
+                participantItem.textContent = peer_name;
+                console.log('[PARTICIPANT] Updated participant', peer_id, 'to', peer_name);
+            }
+            
             updateParticipantList(Object.keys(_peer_list));
         }
     });
@@ -1509,8 +1600,12 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         participants.forEach(p => {
             if (p !== myID) {
                 const li = document.createElement('li');
-                li.textContent = _peer_names[p] || `User ${p.substring(0, 6)}`;
+                // Use actual username if available, otherwise show "Loading..."
+                const displayName = _peer_names[p] || 'Loading...';
+                li.textContent = displayName;
+                li.id = `participant-${p}`; // Add ID for later updates
                 participantList.appendChild(li);
+                console.log('[PARTICIPANT] Added:', p, 'as', displayName);
             }
         });
     }
@@ -1554,6 +1649,22 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         });
         videoBtn.classList.toggle('disabled', isVideoDisabled);
         videoBtn.setAttribute('data-tooltip', isVideoDisabled ? 'Turn On Camera' : 'Turn Off Camera');
+        
+        // Show/hide placeholder for local video
+        const localVideo = document.getElementById('localVideo');
+        const localPlaceholder = document.getElementById('localPlaceholder');
+        if (isVideoDisabled) {
+            if (localVideo) localVideo.style.display = 'none';
+            if (localPlaceholder) {
+                localPlaceholder.style.display = 'flex';
+                const color = placeholderColors[0]; // Use first color for local user
+                localPlaceholder.style.background = color.bg;
+                localPlaceholder.textContent = username.charAt(0).toUpperCase();
+            }
+        } else {
+            if (localVideo) localVideo.style.display = 'block';
+            if (localPlaceholder) localPlaceholder.style.display = 'none';
+        }
     });
 
     handBtn.addEventListener('click', toggleHandRaise);

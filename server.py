@@ -536,8 +536,15 @@ class CollaborationServer:
         """Handle public chat message"""
         sender = message.get('sender')
         content = message.get('content', '')
+        metadata = message.get('metadata', {})
         
-        print(f"💬 Global message from {sender}: {content[:50]}")
+        print(f" Global message from {sender}: {content[:50]}")
+        if metadata.get('replyTo'):
+            print(f"   Reply to: {metadata['replyTo'].get('sender')} - {metadata['replyTo'].get('text', '')[:30]}")
+        
+        # Preserve metadata in the message
+        if metadata:
+            message['metadata'] = metadata
         
         self.chat_history.append(message)
         storage.add_global_message(message)
@@ -546,16 +553,23 @@ class CollaborationServer:
             self.chat_history = self.chat_history[-1000:]
         
         # Broadcast to ALL clients (no exclude)
-        print(f"📢 Broadcasting to all {len(self.clients)} connected clients")
+        print(f" Broadcasting to all {len(self.clients)} connected clients")
         self.broadcast(json.dumps(message))
 
     def _handle_private_message(self, client_socket: socket.socket, message: Dict):
    
         sender = message.get('sender')
         receiver = message.get('receiver')
+        metadata = message.get('metadata', {})
         
         if not receiver:
             return
+        
+        # Preserve metadata in the message
+        if metadata:
+            message['metadata'] = metadata
+            if metadata.get('replyTo'):
+                print(f"   Reply to: {metadata['replyTo'].get('sender')} - {metadata['replyTo'].get('text', '')[:30]}")
         
         key = tuple(sorted([sender, receiver]))
         if key not in self.private_messages:
@@ -691,12 +705,19 @@ class CollaborationServer:
         """Handle group message"""
         group_id = message.get('group_id')
         sender = message.get('sender')
+        metadata = message.get('metadata', {})
         
         if group_id not in self.groups:
             return
         
         if sender not in self.groups[group_id]['members']:
             return
+        
+        # Preserve metadata in the message
+        if metadata:
+            message['metadata'] = metadata
+            if metadata.get('replyTo'):
+                print(f"   ↩️ Reply to: {metadata['replyTo'].get('sender')} - {metadata['replyTo'].get('text', '')[:30]}")
         
         self.group_messages[group_id].append(message)
         storage.add_group_message(group_id, message)  # PERSIST TO STORAGE
