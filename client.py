@@ -32,7 +32,7 @@ eel.init('web')
 class ClientState:
     def __init__(self):
         self.username: Optional[str] = None
-        self.server_host = "172.20.10.3"
+        self.server_host = "192.168.137.175"
         self.server_port = 5555
         self.file_port = 5556
         self.audio_port = 5557
