@@ -479,19 +479,29 @@ loginBtn.addEventListener('click', async () => {
         // Now connect to server
         const result = await eel.connect_to_server(username, host, port)();
         if (result.success) {
-            userName.textContent = username + ' ';
-            const statusIcon = document.createElement('span');
-            statusIcon.innerHTML = '🟢';
-            statusIcon.style.color = '#2ecc71';
-            statusIcon.style.fontSize = '12px';
-            statusIcon.style.verticalAlign = 'middle';
-            userName.appendChild(statusIcon);
-            
+            // Show full-screen spinner immediately after successful connection
+            const fullScreenSpinner = document.getElementById('fullScreenSpinner');
             spinLogo(loginScreen);
+            
             setTimeout(() => {
                 loginScreen.classList.remove('active');
-                mainApp.classList.add('active');
+                fullScreenSpinner.classList.add('active');
             }, 1000);
+            
+            // After spinner animation, show main app and set user info
+            setTimeout(() => {
+                // Set user info with status icon only when entering main app
+                userName.textContent = username + ' ';
+                const statusIcon = document.createElement('span');
+                statusIcon.innerHTML = '🟢';
+                statusIcon.style.color = '#2ecc71';
+                statusIcon.style.fontSize = '12px';
+                statusIcon.style.verticalAlign = 'middle';
+                userName.appendChild(statusIcon);
+                
+                fullScreenSpinner.classList.remove('active');
+                mainApp.classList.add('active');
+            }, 4000);
             
             // Ensure we're in global chat mode when connecting
             currentChatType = 'global';
