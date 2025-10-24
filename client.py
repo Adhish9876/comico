@@ -652,7 +652,7 @@ def delete_private_chat(chat_key: str):
 # Start the Eel app
 if __name__ == '__main__':
     import sys
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8081
     try:
         eel.start('index.html', size=(1600, 1000), port=port)
     except Exception as e:
