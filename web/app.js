@@ -265,15 +265,9 @@ function ensureBadges() {
                 btn.appendChild(span);
             }
         });
-        // Global badge (RED for global)
-        const globalBadgeParent = document.querySelector('#globalNetworkItem .chat-info .chat-name');
-        if (globalBadgeParent && !document.querySelector('#globalNetworkItem .unread-count')) {
-            const span = document.createElement('span');
-            span.className = 'unread-count';
-            span.style.cssText = 'display:none; background:#8b0000; color:white; padding:2px 6px; border-radius:10px; font-size:12px; margin-left:8px;';
-            span.textContent = '0';
-            globalBadgeParent.appendChild(span);
-        }
+        // Do not create or show unread badge for Global Network per requirement
+        const existingGlobalBadge = document.querySelector('#globalNetworkItem .unread-count');
+        if (existingGlobalBadge) existingGlobalBadge.style.display = 'none';
     } catch (e) { /* noop */ }
 }
 
@@ -292,6 +286,12 @@ connectBtn.addEventListener('click', async () => {
     connectBtn.textContent = 'CONNECTING...';
     
     try {
+        if (typeof eel === 'undefined') {
+            showNotification('Backend not available. Please start the app via the Python launcher.', 'error');
+            connectBtn.disabled = false;
+            connectBtn.textContent = 'CONNECT';
+            return;
+        }
         const result = await eel.connect_to_server(user, host, port)();
         if (result.success) {
             username = user;
@@ -444,53 +444,28 @@ function updateUnreadCountsUI() {
         document.title = 'Shadow Nexus';
     }
     
+    // Helper function to ensure badge exists on element
+    const ensureBadge = (element) => {
+        let badge = element.querySelector('.unread-count');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'unread-count';
+            badge.style.display = 'none';
+            element.appendChild(badge);
+        }
+        return badge;
+    };
+    
     // Update chat list items (private)
     Object.entries(unreadCounts.private).forEach(([user, count]) => {
         const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
         if (chatItem) {
-            let unreadBadge = chatItem.querySelector('.unread-count');
-            if (!unreadBadge) {
-                const nameEl = chatItem.querySelector('.chat-name');
-                if (nameEl) {
-                    unreadBadge = document.createElement('span');
-                    unreadBadge.className = 'unread-count';
-                    unreadBadge.style.cssText = 'display:none; background:#2ecc71; color:white; padding:2px 6px; border-radius:10px; font-size:12px; margin-left:8px;';
-                    nameEl.appendChild(unreadBadge);
-                }
-            }
-            if (unreadBadge) {
+            const nameEl = chatItem.querySelector('.chat-name');
+            if (nameEl) {
+                let unreadBadge = ensureBadge(nameEl);
                 if (count > 0) {
-                    unreadBadge.textContent = count;
+                    unreadBadge.textContent = count > 99 ? '99+' : count;
                     unreadBadge.style.display = 'inline-block';
-                    unreadBadge.style.background = '#2ecc71'; // Green for private
-                    unreadBadge.style.color = '#fff';
-                } else {
-                    unreadBadge.style.display = 'none';
-                }
-            }
-        }
-    });
-
-    // Update group list items
-    Object.entries(unreadCounts.group).forEach(([gid, count]) => {
-        const chatItem = document.querySelector(`.chat-item[data-group-id="${gid}"]`);
-        if (chatItem) {
-            let unreadBadge = chatItem.querySelector('.unread-count');
-            if (!unreadBadge) {
-                const nameEl = chatItem.querySelector('.chat-name');
-                if (nameEl) {
-                    unreadBadge = document.createElement('span');
-                    unreadBadge.className = 'unread-count';
-                    unreadBadge.style.cssText = 'display:none; background:#2ecc71; color:white; padding:2px 6px; border-radius:10px; font-size:12px; margin-left:8px;';
-                    nameEl.appendChild(unreadBadge);
-                }
-            }
-            if (unreadBadge) {
-                if (count > 0) {
-                    unreadBadge.textContent = count;
-                    unreadBadge.style.display = 'inline-block';
-                    unreadBadge.style.background = '#2ecc71'; // Green for groups
-                    unreadBadge.style.color = '#fff';
                 } else {
                     unreadBadge.style.display = 'none';
                 }
@@ -498,27 +473,44 @@ function updateUnreadCountsUI() {
         }
     });
     
-    // Update global chat badge (RED for global only)
+    // Also remove badges from users not in unreadCounts.private
+    document.querySelectorAll(`.chat-item[data-user] .unread-count`).forEach(badge => {
+        const chatItem = badge.closest('.chat-item');
+        const user = chatItem.dataset.user;
+        if (!unreadCounts.private[user] || unreadCounts.private[user] === 0) {
+            badge.style.display = 'none';
+        }
+    });
+
+    // Update group list items
+    Object.entries(unreadCounts.group).forEach(([gid, count]) => {
+        const chatItem = document.querySelector(`.chat-item[data-group-id="${gid}"]`);
+        if (chatItem) {
+            const nameEl = chatItem.querySelector('.chat-name');
+            if (nameEl) {
+                let unreadBadge = ensureBadge(nameEl);
+                if (count > 0) {
+                    unreadBadge.textContent = count > 99 ? '99+' : count;
+                    unreadBadge.style.display = 'inline-block';
+                } else {
+                    unreadBadge.style.display = 'none';
+                }
+            }
+        }
+    });
+    
+    // Also remove badges from groups not in unreadCounts.group
+    document.querySelectorAll(`.chat-item[data-group-id] .unread-count`).forEach(badge => {
+        const chatItem = badge.closest('.chat-item');
+        const gid = chatItem.dataset.groupId;
+        if (!unreadCounts.group[gid] || unreadCounts.group[gid] === 0) {
+            badge.style.display = 'none';
+        }
+    });
+    
+    // Do not display unread badge for Global Network
     const globalBadge = document.querySelector('#globalNetworkItem .unread-count');
-    if (globalBadge) {
-        if (unreadCounts.global > 0) {
-            globalBadge.textContent = unreadCounts.global;
-            globalBadge.style.display = 'inline-block';
-            globalBadge.style.background = '#8b0000'; // RED for global
-            globalBadge.style.color = '#fff';
-        } else {
-            globalBadge.style.display = 'none';
-        }
-    } else {
-        // If badge doesn't exist, create it
-        const globalName = document.querySelector('#globalNetworkItem .chat-name');
-        if (globalName && !globalName.querySelector('.unread-count')) {
-            const badge = document.createElement('span');
-            badge.className = 'unread-count';
-            badge.style.cssText = 'display: none; background: #8b0000; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;';
-            globalName.appendChild(badge);
-        }
-    }
+    if (globalBadge) globalBadge.style.display = 'none';
     
     // Update total badges
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -769,10 +761,23 @@ function handleMessage(message) {
         message.files.forEach(file => addFileToList(file));
     }
     else if (msgType === 'audio_message' || msgType === 'private_audio' || msgType === 'group_audio') {
+        // Check if this is a duplicate message (we already added it locally when sending)
+        let isDuplicate = false;
+        
         if (msgType === 'audio_message') {
-            chatHistories.global.push(message);
-            if (currentChatType === 'global') {
-                addMessage(message);
+            // Check for duplicate in global history
+            isDuplicate = chatHistories.global.some(existingMsg => 
+                existingMsg.sender === message.sender && 
+                existingMsg.type === message.type &&
+                existingMsg.timestamp === message.timestamp &&
+                existingMsg.duration === message.duration
+            );
+            
+            if (!isDuplicate) {
+                chatHistories.global.push(message);
+                if (currentChatType === 'global') {
+                    addMessage(message);
+                }
             }
         }
         else if (msgType === 'private_audio') {
@@ -780,13 +785,24 @@ function handleMessage(message) {
             if (!chatHistories.private[otherUser]) {
                 chatHistories.private[otherUser] = [];
             }
-            chatHistories.private[otherUser].push(message);
             
-            if (currentChatType === 'private' && currentChatTarget === otherUser) {
-                addMessage(message);
+            // Check for duplicate in private history
+            isDuplicate = chatHistories.private[otherUser].some(existingMsg => 
+                existingMsg.sender === message.sender && 
+                existingMsg.type === message.type &&
+                existingMsg.timestamp === message.timestamp &&
+                existingMsg.duration === message.duration
+            );
+            
+            if (!isDuplicate) {
+                chatHistories.private[otherUser].push(message);
+                
+                if (currentChatType === 'private' && currentChatTarget === otherUser) {
+                    addMessage(message);
+                }
             }
             
-            if (message.receiver === username) {
+            if (message.receiver === username && !isDuplicate) {
                 addToRecentChats(message.sender);
                 showNotification(`${message.sender} sent an audio message`, 'info');
             }
@@ -795,10 +811,21 @@ function handleMessage(message) {
             if (!chatHistories.group[message.group_id]) {
                 chatHistories.group[message.group_id] = [];
             }
-            chatHistories.group[message.group_id].push(message);
             
-            if (currentChatType === 'group' && currentChatTarget === message.group_id) {
-                addMessage(message);
+            // Check for duplicate in group history
+            isDuplicate = chatHistories.group[message.group_id].some(existingMsg => 
+                existingMsg.sender === message.sender && 
+                existingMsg.type === message.type &&
+                existingMsg.timestamp === message.timestamp &&
+                existingMsg.duration === message.duration
+            );
+            
+            if (!isDuplicate) {
+                chatHistories.group[message.group_id].push(message);
+                
+                if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+                    addMessage(message);
+                }
             }
         }
     }
@@ -1162,17 +1189,7 @@ function addMessage(message, autoScroll = true) {
         
         if (message.audio_data) {
             playBtn.onclick = () => {
-                playBtn.disabled = true;
-                playBtn.innerHTML = 'Playing...';
-                
-                eel.play_audio(message.audio_data)().then(() => {
-                    playBtn.disabled = false;
-                    playBtn.innerHTML = `
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                            <path d="M8 5v14l11-7z"/>
-                        </svg> Play
-                    `;
-                });
+                showAudioPlayback(message.audio_data, message.duration, message.sender);
             };
         } else {
             playBtn.textContent = 'Audio not available';
@@ -1692,9 +1709,9 @@ function updateUsersList(users) {
         chatItem.innerHTML = `
             <div class="chat-avatar">👤</div>
             <div class="chat-info">
-                <div class="chat-name">${user} 
-                    <span style="font-size: 18px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 4px;">●</span>
-                    <span class="unread-count" style="display: none; background: #2ecc71; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;">0</span>
+                <div class="chat-name">
+                    <span>${user}</span>
+                    <span style="font-size: 18px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 2px;">●</span>
                 </div>
                 <div class="chat-last-msg">${lastMsgText}</div>
             </div>
@@ -1705,7 +1722,22 @@ function updateUsersList(users) {
             </button>
         `;
         usersList.appendChild(chatItem);
+        // Add badge after rendering
+        const nameEl = chatItem.querySelector('.chat-name');
+        const badge = document.createElement('span');
+        badge.className = 'unread-count';
+        nameEl.appendChild(badge);
+        // Set unread badge for this user immediately
+        const privCount = unreadCounts.private[user] || 0;
+        if (privCount > 0) {
+            badge.textContent = privCount > 99 ? '99+' : privCount;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
     });
+    // After rendering list, sync unread badges to ensure correct visibility
+    updateUnreadCountsUI();
 }
 
 // Update Active Users Section
@@ -1783,9 +1815,9 @@ function moveUserToChattedList(user) {
         chatItem.innerHTML = `
             <div class="chat-avatar">👤</div>
             <div class="chat-info">
-                <div class="chat-name">${user} 
-                    <span style="font-size: 14px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 4px;">●</span>
-                    <span class="unread-count" style="display: none; background: #2ecc71; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;">0</span>
+                <div class="chat-name">
+                    <span>${user}</span>
+                    <span style="font-size: 14px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 2px;">●</span>
                 </div>
                 <div class="chat-last-msg">Just now</div>
             </div>
@@ -1796,6 +1828,19 @@ function moveUserToChattedList(user) {
             </button>
         `;
         usersList.insertBefore(chatItem, usersList.firstChild);
+        // Add badge after rendering
+        const nameEl2 = chatItem.querySelector('.chat-name');
+        const badge2 = document.createElement('span');
+        badge2.className = 'unread-count';
+        nameEl2.appendChild(badge2);
+        // Apply unread count if exists for this user
+        const count = unreadCounts.private[user] || 0;
+        if (count > 0) {
+            badge2.textContent = count > 99 ? '99+' : count;
+            badge2.style.display = 'inline-block';
+        } else {
+            badge2.style.display = 'none';
+        }
         console.log(`✅ Added ${user} to private chats DOM`);
     }
 }
@@ -1915,8 +1960,10 @@ function renderGroupsList() {
         chatItem.innerHTML = `
             <div class="chat-avatar">👥</div>
             <div class="chat-info">
-                <div class="chat-name">${groupInfo.name}${onlineStatusDot}
-                    <span class="unread-count" style="display: none; background: #2ecc71; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;">0</span>
+                <div class="chat-name">
+                    <span>${groupInfo.name}</span>
+                    ${onlineStatusDot}
+                    <span class="unread-count" style="display: none;"></span>
                 </div>
                 <div class="chat-last-msg">${lastMsgText}</div>
             </div>
@@ -2335,69 +2382,12 @@ function showAudioPreview(audioBlob) {
     const previewUI = document.createElement('div');
     previewUI.id = 'audioPreview';
     previewUI.innerHTML = `
-        <div style="
-            position: fixed;
-            bottom: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: linear-gradient(135deg, #1a1d29, #252936);
-            border: 2px solid #c62828;
-            padding: 20px;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-            box-shadow: 0 8px 32px rgba(198, 40, 40, 0.3), 0 0 20px rgba(0, 184, 212, 0.2);
-            z-index: 10001;
-            animation: slideUp 0.3s ease-out;
-        ">
-            <div style="
-                color: #00b8d4;
-                font-family: 'Rajdhani', sans-serif;
-                font-weight: bold;
-                font-size: 16px;
-                margin-bottom: 5px;
-                text-align: center;
-            ">🎤 Audio Message</div>
-            <audio id="audioPreviewPlayer" controls style="
-                width: 280px;
-                height: 45px;
-                border-radius: 25px;
-                background: rgba(198, 40, 40, 0.1);
-                border: 1px solid #c62828;
-            "></audio>
-            <div style="
-                display: flex;
-                gap: 12px;
-                margin-top: 5px;
-            ">
-                <button id="discardAudio" style="
-                    background: linear-gradient(135deg, #c62828, #9c27b0);
-                    border: none;
-                    border-radius: 8px;
-                    padding: 10px 20px;
-                    color: white;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    font-family: 'Rajdhani', sans-serif;
-                    font-weight: bold;
-                    font-size: 14px;
-                    box-shadow: 0 4px 12px rgba(198, 40, 40, 0.3);
-                ">🗑️ Discard</button>
-                <button id="sendAudio" style="
-                    background: linear-gradient(135deg, #00b8d4, #9c27b0);
-                    border: none;
-                    border-radius: 8px;
-                    padding: 10px 20px;
-                    color: white;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    font-family: 'Rajdhani', sans-serif;
-                    font-weight: bold;
-                    font-size: 14px;
-                    box-shadow: 0 4px 12px rgba(0, 184, 212, 0.3);
-                ">📤 Send</button>
+        <div class="audio-preview-modal">
+            <div class="audio-preview-title">🎤 Audio Message</div>
+            <audio id="audioPreviewPlayer" controls class="audio-preview-player"></audio>
+            <div class="audio-preview-buttons">
+                <button id="discardAudio" class="modal-btn cancel">🗑️ Discard</button>
+                <button id="sendAudio" class="modal-btn create">📤 Send</button>
             </div>
         </div>
     `;
@@ -2452,6 +2442,43 @@ function showAudioPreview(audioBlob) {
                 
                 console.log('✅ Audio message sent successfully');
                 showNotification('🎤 Audio message sent', 'success');
+                
+                // Add the audio message locally to show immediately
+                const audioMessage = {
+                    type: currentChatType === 'private' ? 'private_audio' : 
+                          currentChatType === 'group' ? 'group_audio' : 'audio_message',
+                    sender: username,
+                    audio_data: base64Audio,
+                    duration: recordingDuration,
+                    timestamp: getCurrentTime(),
+                    id: `audio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+                };
+                
+                // Add receiver/group_id if needed
+                if (currentChatType === 'private' && currentChatTarget) {
+                    audioMessage.receiver = currentChatTarget;
+                }
+                if (currentChatType === 'group' && currentChatTarget) {
+                    audioMessage.group_id = currentChatTarget;
+                }
+                
+                // Add to local history and display immediately
+                if (currentChatType === 'global') {
+                    chatHistories.global.push(audioMessage);
+                } else if (currentChatType === 'private' && currentChatTarget) {
+                    if (!chatHistories.private[currentChatTarget]) {
+                        chatHistories.private[currentChatTarget] = [];
+                    }
+                    chatHistories.private[currentChatTarget].push(audioMessage);
+                } else if (currentChatType === 'group' && currentChatTarget) {
+                    if (!chatHistories.group[currentChatTarget]) {
+                        chatHistories.group[currentChatTarget] = [];
+                    }
+                    chatHistories.group[currentChatTarget].push(audioMessage);
+                }
+                
+                // Display the message in current chat
+                addMessage(audioMessage);
             } catch (error) {
                 console.error('❌ Error sending audio:', error);
                 showNotification('Failed to send audio message', 'error');
@@ -2521,41 +2548,72 @@ function showGroupModal(users) {
     modal.className = 'modal-overlay';
     
     const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
+    modalContent.className = 'modal-content settings-modal';
     
     modalContent.innerHTML = `
-        <div class="modal-title">Create New Group</div>
-        <div class="form-group">
-            <label>Group Name</label>
-            <input type="text" id="newGroupNameInput" placeholder="Enter group name" style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+        <div class="settings-header">
+            <h3 class="modal-title">Create New Group</h3>
+            <button class="close-modal-btn" id="closeGroupModalBtn">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+            </button>
         </div>
-        <div class="admin-selector">
-            <label>Group Admin</label>
-            <select id="newGroupAdminSelect" style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
-                <option value="${username}">${username} (You)</option>
-                ${users.map(u => `<option value="${u}">${u}</option>`).join('')}
-            </select>
-        </div>
-        <div style="margin-bottom: 16px;">
-            <label style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; display: block; margin-bottom: 10px;">Select Members</label>
-            <div class="user-select-list">
-                ${users.map(user => `
-                    <div class="user-checkbox">
-                        <input type="checkbox" value="${user}" id="user_${user}">
-                        <label for="user_${user}">${user}</label>
-                    </div>
-                `).join('')}
+        <div class="settings-content">
+            <!-- Group Name Section -->
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75 3.54h2.5l3.5-4.36H6.5l3.54 4.36h-2.96l4.42-5.38z"/>
+                    </svg>
+                    <h4 style="font-size: 18px;">Group Name</h4>
+                </div>
+                <input type="text" id="newGroupNameInput" placeholder="Enter group name" style="width: 100%; padding: 14px 16px; background: var(--bg-card); border: 3px solid var(--border-main); color: var(--text-bright); border-radius: 10px; font-family: 'Comic Neue', cursive; font-size: 15px; font-weight: 600; margin-bottom: 14px; transition: all var(--transition-fast);">
+            </div>
+            
+            <!-- Group Admin Section -->
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                    <h4 style="font-size: 18px;">Group Admin</h4>
+                </div>
+                <select id="newGroupAdminSelect" style="width: 100%; padding: 14px 16px; background: var(--bg-card); border: 3px solid var(--border-main); color: var(--text-bright); border-radius: 10px; font-family: 'Comic Neue', cursive; font-size: 15px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast);">
+                    <option value="${username}">${username} (You)</option>
+                    ${users.map(u => `<option value="${u}">${u}</option>`).join('')}
+                </select>
+            </div>
+            
+            <!-- Members Section -->
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                    </svg>
+                    <h4 style="font-size: 18px;">Select Members</h4>
+                </div>
+                <div class="user-select-list">
+                    ${users.map(user => `
+                        <div class="user-checkbox">
+                            <input type="checkbox" value="${user}" id="user_${user}">
+                            <label for="user_${user}" style="font-size: 15px;">${user}</label>
+                        </div>
+                    `).join('')}
+                </div>
             </div>
         </div>
-        <div class="modal-buttons">
-            <button class="modal-btn cancel" id="cancelBtn">Cancel</button>
-            <button class="modal-btn create" id="createBtn">Create Group</button>
+        
+        <div style="display: flex; gap: 14px; justify-content: flex-end; margin-top: 24px; padding-top: 24px; border-top: 3px solid var(--border-main);">
+            <button class="modal-btn cancel" id="cancelBtn" style="padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all var(--transition-fast); text-transform: uppercase; font-family: 'Bangers', cursive; background: var(--bg-card); border: 3px solid var(--border-main); color: var(--text-muted);">Cancel</button>
+            <button class="modal-btn create" id="createBtn" style="padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all var(--transition-fast); text-transform: uppercase; font-family: 'Bangers', cursive; background: var(--accent-cyan); border: none; color: var(--bg-deep);">Create Group</button>
         </div>
     `;
     
     modal.appendChild(modalContent);
     document.body.appendChild(modal);
     
+    document.getElementById('closeGroupModalBtn').onclick = () => modal.remove();
     document.getElementById('cancelBtn').onclick = () => modal.remove();
     
     // Prevent multiple clicks
@@ -3056,6 +3114,59 @@ function showConnectionAlert(message, type = 'connected') {
         alert.style.animation = 'slideOutRight 0.4s ease';
         setTimeout(() => alert.remove(), 400);
     }, 4000);
+}
+
+function showAudioPlayback(audioData, duration, sender) {
+    const playbackUI = document.createElement('div');
+    playbackUI.id = 'audioPlayback';
+    playbackUI.innerHTML = `
+        <div class="audio-playback-modal">
+            <div class="audio-playback-title">🎵 Audio Message</div>
+            <div class="audio-playback-info">From: ${sender} • ${duration}s</div>
+            <audio id="audioPlaybackPlayer" controls class="audio-playback-player"></audio>
+            <div class="audio-playback-buttons">
+                <button id="closeAudioPlayback" class="modal-btn cancel">✕ Close</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(playbackUI);
+
+    // Set up the audio playback
+    const audioPlayer = document.getElementById('audioPlaybackPlayer');
+    const audioURL = `data:audio/wav;base64,${audioData}`;
+    audioPlayer.src = audioURL;
+    audioPlayer.style.background = 'var(--bg-card)';
+    
+    // Auto-play the audio
+    audioPlayer.play().catch(e => {
+        console.warn('Audio autoplay prevented:', e);
+    });
+
+    // Handle close button
+    document.getElementById('closeAudioPlayback').onclick = () => {
+        audioPlayer.pause();
+        playbackUI.remove();
+        URL.revokeObjectURL(audioURL);
+    };
+    
+    // Auto-close when audio ends
+    audioPlayer.onended = () => {
+        setTimeout(() => {
+            playbackUI.remove();
+            URL.revokeObjectURL(audioURL);
+        }, 1000);
+    };
+    
+    // Close on escape key
+    const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+            audioPlayer.pause();
+            playbackUI.remove();
+            URL.revokeObjectURL(audioURL);
+            document.removeEventListener('keydown', handleEscape);
+        }
+    };
+    document.addEventListener('keydown', handleEscape);
 }
 
 function getCurrentTime() {
