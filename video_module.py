@@ -63,7 +63,7 @@ def api_create_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'https://192.168.137.175:5000/video/{session_id}'
+        'link': f'https://localhost:5000/video/{session_id}'
     })
 
 @socketio.on('connect')
@@ -260,7 +260,7 @@ def notify_chat_server_session_empty(session_id: str):
         print(f"[VIDEO SERVER] Notifying chat server about empty session: {payload}")
 
         # Connect to chat server TCP socket
-        chat_host = '192.168.137.175'
+        chat_host = 'localhost'
         chat_port = 5555
         s = py_socket.socket(py_socket.AF_INET, py_socket.SOCK_STREAM)
         s.settimeout(5.0)
@@ -314,7 +314,7 @@ if __name__ == '__main__':
             
             # Generate certificate
             subject = issuer = x509.Name([
-                x509.NameAttribute(NameOID.COMMON_NAME, u"192.168.137.175"),
+                x509.NameAttribute(NameOID.COMMON_NAME, u"localhost"),
             ])
             
             cert = x509.CertificateBuilder().subject_name(
@@ -331,7 +331,7 @@ if __name__ == '__main__':
                 datetime.utcnow() + timedelta(days=365)
             ).add_extension(
                 x509.SubjectAlternativeName([
-                    x509.IPAddress(ipaddress.IPv4Address("192.168.137.175")),
+                    x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
                     x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
                 ]),
                 critical=False,

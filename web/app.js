@@ -479,18 +479,24 @@ loginBtn.addEventListener('click', async () => {
         // Now connect to server
         const result = await eel.connect_to_server(username, host, port)();
         if (result.success) {
-            // Show full-screen spinner immediately after successful connection
-            const fullScreenSpinner = document.getElementById('fullScreenSpinner');
-            spinLogo(loginScreen);
+            // Step 1: Start spinning the logo on login screen (immediately)
+            const logoContainer = loginScreen.querySelector('.logo-container');
+            logoContainer.classList.add('spinning');
             
+            // Step 2: After 0.3s, start tile animation in background
+            const loginLoader = document.getElementById('loginLoader');
             setTimeout(() => {
-                loginScreen.classList.remove('active');
-                fullScreenSpinner.classList.add('active');
-            }, 1000);
+                loginLoader.classList.add('login-loader--active');
+            }, 300);
             
-            // After spinner animation, show main app and set user info
+            // Step 3: Fade out login form/text while logo continues
             setTimeout(() => {
-                // Set user info with status icon only when entering main app
+                loginScreen.classList.add('login-fade-out');
+            }, 600);
+            
+            // Step 4: After ~1.6s total, transition directly to main app (no old spinner)
+            setTimeout(() => {
+                // Prepare user info
                 userName.textContent = username + ' ';
                 const statusIcon = document.createElement('span');
                 statusIcon.innerHTML = '🟢';
@@ -499,65 +505,67 @@ loginBtn.addEventListener('click', async () => {
                 statusIcon.style.verticalAlign = 'middle';
                 userName.appendChild(statusIcon);
                 
-                fullScreenSpinner.classList.remove('active');
-                mainApp.classList.add('active');
-            }, 4000);
-            
-            // Ensure we're in global chat mode when connecting
-            currentChatType = 'global';
-            currentChatTarget = null;
-            chatHeaderName.textContent = 'Global Network';
-            chatHeaderStatus.textContent = 'Secure broadcast channel';
-            
-            // Highlight the global network item
-            document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
-            globalNetworkItem.classList.add('active');
-            
-            showNotification('Connected!', 'success');
-            
-            // Ensure badges are created
-            ensureBadges();
-            
-            // Start polling for data if Eel bridge is not working
-            setTimeout(() => {
-                console.log('===== STARTING DATA POLLING =====');
-                pollForData();
-            }, 2000);
-            
-            // Test Eel bridge first
-            setTimeout(() => {
-                console.log('===== TESTING EEL BRIDGE =====');
-                try {
-                    eel.test_connection()().then(result => {
-                        console.log('Eel bridge test result:', result);
-                    }).catch(err => {
-                        console.log('Eel bridge test failed:', err);
-                    });
-                } catch (e) {
-                    console.log('Eel bridge not available:', e);
-                }
-            }, 500);
-            
-            // Force render after a short delay to ensure data is received
-            setTimeout(() => {
-                console.log('===== FORCE RENDERING AFTER CONNECT =====');
-                console.log('Global history length:', chatHistories.global.length);
+                // Switch screens smoothly
+                loginScreen.classList.remove('active');
+                logoContainer.classList.remove('spinning');
+                loginLoader.classList.remove('login-loader--active');
+                mainApp.classList.add('active', 'main-app-fade-in');
                 
-                // If we still don't have data, request it explicitly
-                if (chatHistories.global.length === 0) {
-                    console.log('No chat history received, requesting explicitly...');
-                    eel.send_message('request_chat_history', '', {})();
-                    eel.refresh_user_list()();
-                }
+                // Highlight the global network item
+                document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
+                globalNetworkItem.classList.add('active');
                 
-                // Load persistent groups
-                console.log('===== LOADING PERSISTENT GROUPS =====');
-                console.log(`Found ${Object.keys(persistentGroups).length} groups in localStorage`);
-                updateGroupsList();
+                showNotification('Connected!', 'success');
                 
-                // Render and scroll to appropriate position
-                renderCurrentChat(false); // Don't preserve scroll, will auto-position
-            }, 1000);
+                // Ensure badges are created
+                ensureBadges();
+                
+                // Start polling for data
+                setTimeout(() => {
+                    console.log('===== STARTING DATA POLLING =====');
+                    pollForData();
+                }, 500);
+                
+                // Test Eel bridge first
+                setTimeout(() => {
+                    console.log('===== TESTING EEL BRIDGE =====');
+                    try {
+                        eel.test_connection()().then(result => {
+                            console.log('Eel bridge test result:', result);
+                        }).catch(err => {
+                            console.log('Eel bridge test failed:', err);
+                        });
+                    } catch (e) {
+                        console.log('Eel bridge not available:', e);
+                    }
+                }, 300);
+                
+                // Force render after a short delay to ensure data is received
+                setTimeout(() => {
+                    console.log('===== FORCE RENDERING AFTER CONNECT =====');
+                    console.log('Global history length:', chatHistories.global.length);
+                    
+                    // If we still don't have data, request it explicitly
+                    if (chatHistories.global.length === 0) {
+                        console.log('No chat history received, requesting explicitly...');
+                        eel.send_message('request_chat_history', '', {})();
+                        eel.refresh_user_list()();
+                    }
+                    
+                    // Load persistent groups
+                    console.log('===== LOADING PERSISTENT GROUPS =====');
+                    console.log(`Found ${Object.keys(persistentGroups).length} groups in localStorage`);
+                    updateGroupsList();
+                    
+                    // Render and scroll to appropriate position
+                    renderCurrentChat(false);
+                }, 800);
+                
+                // Clean up animation class
+                setTimeout(() => mainApp.classList.remove('main-app-fade-in'), 500);
+            }, 1600);
+            
+            return;
         } else {
             showNotification(result.message, 'error');
             loginBtn.disabled = false;
@@ -1112,6 +1120,9 @@ function renderCurrentChat(preserveScroll = true) {
     console.log('Chat type:', currentChatType);
     console.log('Global history length:', chatHistories.global.length);
     
+    // Reset date tracker when rendering a new chat
+    resetDateTracker();
+    
     // Store current scroll position and check if we're at bottom
     const wasAtBottom = isAtBottom();
     const scrollPosition = messagesContainer.scrollTop;
@@ -1350,11 +1361,21 @@ function addMessage(message, autoScroll = true) {
     
     const time = document.createElement('span');
     time.className = 'message-time';
-    time.textContent = message.timestamp || getCurrentTime();
+    time.textContent = formatTimeWithoutSeconds(message.timestamp || getCurrentTime());
     
     header.appendChild(sender);
     header.appendChild(time);
     content.appendChild(header);
+    
+    // Check if we need to add a date divider
+    const currentDate = getDateFromTimestamp(message.timestamp);
+    if (currentDate && currentDate !== lastMessageDate) {
+        lastMessageDate = currentDate;
+        const dateDivider = document.createElement('div');
+        dateDivider.className = 'date-divider';
+        dateDivider.textContent = currentDate;
+        messagesContainer.appendChild(dateDivider);
+    }
     
     // Handle different message types
     if ((message.type === 'file_share' || message.type === 'file_notification' || message.type === 'private_file' || message.type === 'group_file') && message.file_id) {
@@ -3143,8 +3164,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Load saved theme on page load
-    const savedTheme = localStorage.getItem('theme');
+    // Load saved theme on page load (default to cyan/pink theme)
+    const savedTheme = localStorage.getItem('theme') || 'default';
     console.log('Saved theme:', savedTheme);
     
     if (savedTheme === 'alt') {
@@ -3154,6 +3175,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (altOption) altOption.classList.add('active');
         if (defaultOption) defaultOption.classList.remove('active');
         console.log('Loaded alt theme from storage');
+    } else {
+        // Ensure default theme (cyan/pink) is active
+        document.body.classList.remove('theme-alt');
+        localStorage.setItem('theme', 'default');
+        const defaultOption = document.querySelector('[data-theme="default"]');
+        const altOption = document.querySelector('[data-theme="alt"]');
+        if (defaultOption) defaultOption.classList.add('active');
+        if (altOption) altOption.classList.remove('active');
+        console.log('Using default cyan/pink theme');
     }
     
     // Settings toggles
@@ -3338,7 +3368,8 @@ function showAudioPlayback(audioData, duration, sender) {
             </div>
         </div>
     `;
-    document.body.appendChild(playbackUI);
+    // Append to messagesContainer to center within chat area
+    messagesContainer.appendChild(playbackUI);
 
     // Set up the audio playback
     const audioPlayer = document.getElementById('audioPlaybackPlayer');
@@ -3382,6 +3413,50 @@ function getCurrentTime() {
     const now = new Date();
     return now.getHours().toString().padStart(2, '0') + ':' + 
            now.getMinutes().toString().padStart(2, '0');
+}
+
+function formatTimeWithoutSeconds(timestamp) {
+    if (!timestamp) return getCurrentTime();
+    // Handle various timestamp formats
+    if (timestamp.includes(':')) {
+        const parts = timestamp.split(':');
+        return parts[0] + ':' + parts[1]; // Remove seconds
+    }
+    return timestamp;
+}
+
+// Get date string from timestamp (e.g., "Wednesday 17-10-25")
+function getDateFromTimestamp(timestamp) {
+    if (!timestamp) {
+        const now = new Date();
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayName = days[now.getDay()];
+        const date = now.getDate().toString().padStart(2, '0');
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+        const year = now.getFullYear().toString().slice(-2);
+        return `${dayName} ${date}-${month}-${year}`;
+    }
+    try {
+        // For now, use current date since we don't have full date info in timestamp
+        // In a real app, you'd parse the full timestamp
+        const now = new Date();
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayName = days[now.getDay()];
+        const date = now.getDate().toString().padStart(2, '0');
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+        const year = now.getFullYear().toString().slice(-2);
+        return `${dayName} ${date}-${month}-${year}`;
+    } catch (e) {
+        return null;
+    }
+}
+
+// Track last date to show dividers - reset per chat
+let lastMessageDate = null;
+
+// Reset date tracker when switching chats
+function resetDateTracker() {
+    lastMessageDate = null;
 }
 
 function getCurrentChatMessages() {
@@ -4795,18 +4870,24 @@ document.addEventListener('DOMContentLoaded', () => {
         closeEmojiBtn.addEventListener('click', hideEmojiPicker);
     }
     
-    // Close emoji picker when clicking outside
+    // Close emoji picker when clicking outside (only if mainApp is active)
     document.addEventListener('click', (e) => {
-        if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
-            hideEmojiPicker();
+        const mainApp = document.getElementById('mainApp');
+        if (mainApp && mainApp.classList.contains('active')) {
+            if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
+                hideEmojiPicker();
+            }
         }
     });
     
-    // Emoji selection
+    // Emoji selection (only if mainApp is active)
     document.addEventListener('click', (e) => {
-        if (e.target.classList.contains('emoji')) {
-            const emoji = e.target.dataset.emoji;
-            insertEmoji(emoji);
+        const mainApp = document.getElementById('mainApp');
+        if (mainApp && mainApp.classList.contains('active')) {
+            if (e.target.classList.contains('emoji')) {
+                const emoji = e.target.dataset.emoji;
+                insertEmoji(emoji);
+            }
         }
     });
     

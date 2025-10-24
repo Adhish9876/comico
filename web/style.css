@@ -771,6 +771,11 @@ body {
     border-color: var(--accent-cyan);
 }
 
+.global-network-item .chat-avatar {
+    background: var(--accent-cyan);
+    color: #000000;
+}
+
 .chat-avatar {
     width: 45px;
     height: 45px;
@@ -1055,19 +1060,21 @@ body {
 }
 
 .message-time {
-    font-size: 10px;
-    color: var(--text-dim);
-    font-weight: 600;
+    font-size: 13px;
+    color: #888888;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-left: 8px;
 }
 
 .message-bubble {
     background: var(--bg-card);
     border: 3px solid var(--border-main);
     border-radius: 14px;
-    padding: 12px 16px;
+    padding: 8px 12px;
     color: var(--text-normal);
-    font-size: 16px; /* increased font size */
-    line-height: 1.5;
+    font-size: 18px; /* increased font size for better readability */
+    line-height: 1.6;
     font-weight: 600;
     word-wrap: break-word;
     max-width: fit-content; /* dynamic sizing */
@@ -1084,9 +1091,9 @@ body {
 }
 
 .message.own .message-bubble {
-    background: var(--accent-cyan);
-    color: var(--bg-deep);
-    border-color: var(--accent-cyan);
+    background: #0097a7;
+    color: #ffffff;
+    border-color: #0097a7;
 }
 
 .system-message {
@@ -1099,6 +1106,23 @@ body {
     color: var(--text-muted);
     font-weight: 700;
     text-align: center;
+}
+
+/* Date divider banner for new days */
+.date-divider {
+    align-self: center;
+    background: var(--bg-card);
+    border: 2px solid var(--accent-cyan);
+    border-radius: 16px;
+    padding: 10px 20px;
+    font-size: 13px;
+    color: var(--accent-cyan);
+    font-weight: 700;
+    text-align: center;
+    margin: 20px 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-family: 'Comic Neue', cursive;
 }
 
 /* Video Call Messages */
@@ -2475,63 +2499,69 @@ textarea {
 }
 
 /* ===== AUDIO PLAYBACK MODAL ===== */
-.audio-playback-modal {
-    position: fixed;
+#audioPlayback {
+    position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: var(--bg-panel);
+    z-index: 10002;
+}
+
+.audio-playback-modal {
+    position: relative;
+    background: var(--bg-card);
     border: 4px solid var(--border-main);
-    padding: 30px;
+    padding: 25px;
     border-radius: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
+    gap: 15px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-    z-index: 10002;
     animation: slideIn 0.3s ease-out;
-    min-width: 350px;
+    min-width: 340px;
 }
 
 .audio-playback-title {
-    color: var(--accent-purple);
+    color: var(--accent-cyan);
     font-family: 'Bangers', cursive;
-    font-size: 22px;
+    font-size: 20px;
     letter-spacing: 2px;
     text-align: center;
-    margin-bottom: 5px;
+    margin-bottom: 3px;
+    font-weight: 700;
 }
 
 .audio-playback-info {
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-family: 'Comic Neue', cursive;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
     text-align: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
 }
 
 .audio-playback-player {
-    width: 320px;
-    height: 50px;
-    border-radius: 12px;
-    background: var(--bg-card);
+    width: 300px;
+    height: 45px;
+    border-radius: 10px;
+    background: var(--bg-panel);
     border: 3px solid var(--border-main);
     outline: none;
 }
 
 .audio-playback-player::-webkit-media-controls-panel {
-    background-color: var(--bg-card);
+    background-color: var(--bg-panel);
 }
 
 .audio-playback-buttons {
     display: flex;
-    gap: 15px;
-    margin-top: 10px;
+    gap: 12px;
+    margin-top: 8px;
 }
 
-/* ===== EMOJI PICKER =====
+/* ===== EMOJI PICKER ===== */
 .emoji-picker {
     position: fixed;
     top: 50%;
@@ -2544,12 +2574,18 @@ textarea {
     z-index: 1000;
     width: 400px;
     max-height: 500px;
-    display: none;
+    display: none !important;
     flex-direction: column;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
 }
 
 .emoji-picker.show {
-    display: flex;
+    display: flex !important;
+    pointer-events: auto;
+    visibility: visible;
+    opacity: 1;
 }
 
 .emoji-picker-header {
@@ -3036,5 +3072,155 @@ textarea {
     .emoji-picker {
         width: 90%;
         max-width: 350px;
+    }
+}
+
+/* ===== ADVANCED LOGIN ANIMATION ===== */
+/* Logo spin animation on login screen - only logo above tiles */
+.logo-container.spinning {
+    position: relative;
+    z-index: 100001; /* Ensure logo is above tiles (tiles are 99990) */
+}
+
+.logo-container.spinning .logo-icon {
+    position: relative;
+    z-index: 100002; /* Extra layer for the icon itself */
+}
+
+.logo-container.spinning .logo-icon svg {
+    animation: continuousSpin 0.8s linear infinite, logoExpandPop 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+@keyframes continuousSpin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes logoExpandPop {
+    0% {
+        transform: scale(1) rotate(0deg);
+    }
+    50% {
+        transform: scale(4) rotate(720deg);
+    }
+    100% {
+        transform: scale(3.5) rotate(1080deg);
+    }
+}
+
+.login-loader {
+    position: fixed;
+    z-index: 99990; /* Keep tiles in the background layer */
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 100vh;
+    transition: width 0s ease;
+    pointer-events: none;
+}
+
+.login-loader__icon {
+    position: absolute;
+    z-index: 100000;
+    top: 50%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-50%) scale(1);
+    opacity: 0;
+    transition: none;
+    pointer-events: none;
+}
+
+.login-loader__icon svg {
+    transform-origin: center center;
+}
+
+.login-loader__tile {
+    position: absolute;
+    left: 0;
+    width: 0;
+    height: 20%;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent-pink));
+    transition: width 0.7s ease;
+    z-index: 99990; /* Explicitly below the spinning logo */
+}
+
+.login-loader__tile:nth-child(1) {
+    top: 0%;
+    transition-delay: 0s;
+}
+
+.login-loader__tile:nth-child(2) {
+    top: 20%;
+    transition-delay: 0.2s;
+}
+
+.login-loader__tile:nth-child(3) {
+    top: 40%;
+    transition-delay: 0.4s;
+}
+
+.login-loader__tile:nth-child(4) {
+    top: 60%;
+    transition-delay: 0.6s;
+}
+
+.login-loader__tile:nth-child(5) {
+    top: 80%;
+    transition-delay: 0.8s;
+}
+
+.login-loader--active {
+    width: 100%;
+    transition-delay: 0s;
+}
+
+.login-loader--active .login-loader__tile {
+    width: 100%;
+}
+
+.login-loader--active .login-loader__tile:nth-child(1) {
+    transition-delay: 0s;
+}
+
+.login-loader--active .login-loader__tile:nth-child(2) {
+    transition-delay: 0.15s;
+}
+
+.login-loader--active .login-loader__tile:nth-child(3) {
+    transition-delay: 0.3s;
+}
+
+.login-loader--active .login-loader__tile:nth-child(4) {
+    transition-delay: 0.45s;
+}
+
+.login-loader--active .login-loader__tile:nth-child(5) {
+    transition-delay: 0.6s;
+}
+
+/* Smooth fade-in for main app when login completes */
+.main-app-fade-in {
+    animation: mainAppFadeIn 0.4s ease-out both;
+}
+
+@keyframes mainAppFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Login screen fade out (only form/text, not logo) */
+.login-fade-out .connection-form,
+.login-fade-out .welcome-text,
+.login-fade-out .logo-text,
+.login-fade-out .logo-subtitle {
+    animation: fadeOut 0.5s ease-out forwards;
+}
+
+@keyframes fadeOut {
+    0% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        pointer-events: none;
     }
 }
