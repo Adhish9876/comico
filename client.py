@@ -11,8 +11,13 @@ import json
 import time
 import os
 import base64
+import requests
 from datetime import datetime
 from typing import Optional, Dict, List
+
+# Disable SSL verification for self-signed certificates
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Import audio module
 from audio_module import AudioEngine, audio_engine as global_audio_engine
@@ -460,12 +465,12 @@ def start_video_call(chat_type, chat_id):
         #print chat_type
         print(f"[CLIENT] Chat Type: {chat_type}")
         # Call video server API to create session with chat_id
-        response = requests.post('http://192.168.137.175:5000/api/create_session', json={
+        response = requests.post('https://192.168.137.175:5000/api/create_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,
             'chat_id': chat_id  # CRITICAL: Pass chat_id to video server
-        })
+        }, verify=False)  # Disable SSL verification for self-signed certificate
         
         if response.status_code != 200:
             return {'success': False, 'error': 'Failed to create video session'}
