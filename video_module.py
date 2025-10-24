@@ -54,7 +54,7 @@ def api_create_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'http://localhost:5000/video/{session_id}'
+        'link': f'http://10.200.14.204:5000/video/{session_id}'
     })
 
 @socketio.on('connect')
@@ -251,7 +251,7 @@ def notify_chat_server_session_empty(session_id: str):
         print(f"[VIDEO SERVER] Notifying chat server about empty session: {payload}")
 
         # Connect to chat server TCP socket
-        chat_host = 'localhost'
+        chat_host = '10.200.14.204'
         chat_port = 5555
         s = py_socket.socket(py_socket.AF_INET, py_socket.SOCK_STREAM)
         s.settimeout(5.0)

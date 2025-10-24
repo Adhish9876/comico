@@ -32,7 +32,7 @@ eel.init('web')
 class ClientState:
     def __init__(self):
         self.username: Optional[str] = None
-        self.server_host = "localhost"
+        self.server_host = "10.200.14.204"
         self.server_port = 5555
         self.file_port = 5556
         self.audio_port = 5557
@@ -454,7 +454,7 @@ def start_video_call(chat_type, chat_id):
             session_name = 'Video Call'
         
         # Call video server API to create session with chat_id
-        response = requests.post('http://localhost:5000/api/create_session', json={
+        response = requests.post('http://10.200.14.204:5000/api/create_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,

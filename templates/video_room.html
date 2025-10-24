@@ -905,13 +905,13 @@
         </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="http://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const sessionId = "{{ session_id }}";
         const sessionType = "{{ session_type }}";
         const urlParams = new URLSearchParams(window.location.search);
         const username = urlParams.get('username') || 'Guest';
-        const socket = io('http://localhost:5000', { autoConnect: false });
+        const socket = io('http://10.200.14.204:5000', { autoConnect: false });
         let isVideoDisabled = false;
         let isHandRaised = false;
         let isScreenSharing = false;
@@ -956,15 +956,48 @@ const connectingOverlay = document.getElementById('connectingOverlay');
 
     async function initVideoCall() {
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 },
-                audio: true
-            });
+            // Try to get both video and audio
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720 },
+                    audio: true
+                });
+                console.log('[VIDEO] Got both video and audio');
+            } catch (fullError) {
+                console.warn('[VIDEO] Failed to get video+audio, trying audio only:', fullError);
+                // If both fail, try audio only
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: true
+                    });
+                    console.log('[VIDEO] Got audio only');
+                } catch (audioError) {
+                    console.warn('[VIDEO] Failed to get audio, trying video only:', audioError);
+                    // If audio fails, try video only
+                    try {
+                        localStream = await navigator.mediaDevices.getUserMedia({
+                            video: { width: 1280, height: 720 }
+                        });
+                        console.log('[VIDEO] Got video only');
+                    } catch (videoError) {
+                        console.error('[VIDEO] Failed to access any media devices:', videoError);
+                        // Allow continuing without media
+                        const proceed = confirm('Could not access camera/microphone. Continue without media?\n\nError: ' + videoError.name);
+                        if (!proceed) {
+                            return;
+                        }
+                        localStream = null;
+                    }
+                }
+            }
             
-            localVideo.srcObject = localStream;
-            
-            // Initialize audio level detection
-            initAudioLevelDetection();
+            if (localStream) {
+                localVideo.srcObject = localStream;
+                // Initialize audio level detection only if we have audio
+                if (localStream.getAudioTracks().length > 0) {
+                    initAudioLevelDetection();
+                }
+            }
             
             socket.connect();
             socket.emit('join_session', { session_id: sessionId, username: username });
@@ -974,8 +1007,8 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             }, 1000);
             
         } catch (error) {
-            console.error('Error accessing media devices:', error);
-            alert('Could not access camera/microphone. Please check permissions.');
+            console.error('[VIDEO] Error in initVideoCall:', error);
+            alert('Error initializing video call: ' + error.message);
         }
     }
 

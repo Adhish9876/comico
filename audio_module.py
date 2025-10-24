@@ -54,25 +54,40 @@ class AudioEngine:
     def initialize_streams(self):
         """Initialize audio input and output streams"""
         try:
-            # Input stream (microphone)
-            self.input_stream = self.audio.open(
-                format=AUDIO_FORMAT,
-                channels=CHANNELS,
-                rate=SAMPLE_RATE,
-                input=True,
-                frames_per_buffer=CHUNK_SIZE,
-                stream_callback=self._input_callback
-            )
+            # Input stream (microphone) - without callback for better compatibility
+            try:
+                self.input_stream = self.audio.open(
+                    format=AUDIO_FORMAT,
+                    channels=CHANNELS,
+                    rate=SAMPLE_RATE,
+                    input=True,
+                    frames_per_buffer=CHUNK_SIZE,
+                    exception_on_overflow=False
+                )
+                self.input_stream.start_stream()
+                print("[AUDIO] Input stream initialized")
+            except Exception as e:
+                print(f"[AUDIO] Failed to initialize input stream: {e}")
+                return False
             
-            # Output stream (speaker)
-            self.output_stream = self.audio.open(
-                format=AUDIO_FORMAT,
-                channels=CHANNELS,
-                rate=SAMPLE_RATE,
-                output=True,
-                frames_per_buffer=CHUNK_SIZE,
-                stream_callback=self._output_callback
-            )
+            # Output stream (speaker) - without callback for better compatibility
+            try:
+                self.output_stream = self.audio.open(
+                    format=AUDIO_FORMAT,
+                    channels=CHANNELS,
+                    rate=SAMPLE_RATE,
+                    output=True,
+                    frames_per_buffer=CHUNK_SIZE,
+                    exception_on_overflow=False
+                )
+                self.output_stream.start_stream()
+                print("[AUDIO] Output stream initialized")
+            except Exception as e:
+                print(f"[AUDIO] Failed to initialize output stream: {e}")
+                if self.input_stream:
+                    self.input_stream.stop_stream()
+                    self.input_stream.close()
+                return False
             
             print("[AUDIO] Streams initialized successfully")
             return True
@@ -140,25 +155,35 @@ class AudioEngine:
         """Capture and send audio to server"""
         while self.running and self.enabled:
             try:
-                frame = self.input_queue.get(timeout=1)
-                
-                if self.audio_socket:
-                    # Send audio frame with header
-                    header = {
-                        'type': 'audio_frame',
-                        'sender': self.username,
-                        'timestamp': datetime.now().isoformat(),
-                        'size': len(frame)
-                    }
+                # Read directly from input stream
+                if self.input_stream and self.input_stream.is_active():
+                    audio_data = self.input_stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                    frame = np.frombuffer(audio_data, dtype=np.int16)
                     
-                    # Send as: [HEADER_JSON]\n[AUDIO_BYTES]
-                    self.audio_socket.send(
-                        (json.dumps(header) + '\n').encode() + frame.tobytes()
-                    )
-            except queue.Empty:
-                continue
+                    # Queue for processing
+                    try:
+                        self.input_queue.put_nowait(frame)
+                    except queue.Full:
+                        print("[AUDIO] Input queue full, dropping frame")
+                    
+                    if self.audio_socket:
+                        # Send audio frame with header
+                        header = {
+                            'type': 'audio_frame',
+                            'sender': self.username,
+                            'timestamp': datetime.now().isoformat(),
+                            'size': len(frame)
+                        }
+                        
+                        # Send as: [HEADER_JSON]\n[AUDIO_BYTES]
+                        self.audio_socket.send(
+                            (json.dumps(header) + '\n').encode() + frame.tobytes()
+                        )
+                else:
+                    time.sleep(0.01)
             except Exception as e:
                 print(f"[AUDIO] Capture error: {e}")
+                time.sleep(0.1)
     
     def set_audio_socket(self, sock: socket.socket):
         """Set socket for audio transmission"""
@@ -340,16 +365,28 @@ def start_audio_recording():
         recording_state['start_time'] = time.time()
         
         # Create PyAudio instance
-        recording_state['audio'] = pyaudio.PyAudio()
+        try:
+            recording_state['audio'] = pyaudio.PyAudio()
+        except Exception as e:
+            print(f"[AUDIO] PyAudio initialization error: {e}")
+            recording_state['is_recording'] = False
+            return {'success': False, 'message': f'Audio system error: {str(e)}'}
         
-        # Open stream
-        recording_state['stream'] = recording_state['audio'].open(
-            format=FORMAT, 
-            channels=CHANNELS,
-            rate=RATE, 
-            input=True,
-            frames_per_buffer=CHUNK
-        )
+        # Open stream with better error handling
+        try:
+            recording_state['stream'] = recording_state['audio'].open(
+                format=FORMAT, 
+                channels=CHANNELS,
+                rate=RATE, 
+                input=True,
+                frames_per_buffer=CHUNK,
+                exception_on_overflow=False
+            )
+        except Exception as e:
+            print(f"[AUDIO] Stream open error: {e}")
+            recording_state['audio'].terminate()
+            recording_state['is_recording'] = False
+            return {'success': False, 'message': f'Could not access microphone: {str(e)}. Please check permissions.'}
         
         # Start recording in a separate thread
         recording_thread = threading.Thread(target=_record_audio_thread, daemon=True)
@@ -371,8 +408,12 @@ def _record_audio_thread():
     """Background thread for recording audio"""
     try:
         while recording_state['is_recording']:
-            data = recording_state['stream'].read(1024, exception_on_overflow=False)
-            recording_state['frames'].append(data)
+            try:
+                data = recording_state['stream'].read(1024, exception_on_overflow=False)
+                recording_state['frames'].append(data)
+            except Exception as e:
+                print(f"[AUDIO] Recording thread error: {e}")
+                break
     except Exception as e:
         print(f"[AUDIO] Recording thread error: {e}")
 
