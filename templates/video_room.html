@@ -905,13 +905,13 @@
         </div>
     </div>
 
-    <script src="http://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const sessionId = "{{ session_id }}";
         const sessionType = "{{ session_type }}";
         const urlParams = new URLSearchParams(window.location.search);
         const username = urlParams.get('username') || 'Guest';
-        const socket = io('http://10.200.14.204:5000', { autoConnect: false });
+        const socket = io('https://10.200.14.204:5000', { autoConnect: false });
         let isVideoDisabled = false;
         let isHandRaised = false;
         let isScreenSharing = false;

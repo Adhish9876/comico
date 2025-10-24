@@ -11,6 +11,8 @@ import socket as py_socket
 import uuid
 from datetime import datetime
 from typing import Dict, List
+import os
+import ssl
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'shadow_nexus_video_secret'
@@ -54,7 +56,7 @@ def api_create_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'http://10.200.14.204:5000/video/{session_id}'
+        'link': f'https://10.200.14.204:5000/video/{session_id}'
     })
 
 @socketio.on('connect')
@@ -278,5 +280,17 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print("🎥 Shadow Nexus Video Server (WebRTC)")
     print("="*60)
-    print("Video server starting on http://localhost:5000\n")
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
+    print("Video server starting on https://0.0.0.0:5000\n")
+    
+    # Create self-signed certificate if it doesn't exist
+    cert_file = 'cert.pem'
+    key_file = 'key.pem'
+    
+    if not os.path.exists(cert_file) or not os.path.exists(key_file):
+        print("[VIDEO SERVER] Generating self-signed certificate...")
+        os.system(f'openssl req -x509 -newkey rsa:4096 -nodes -out {cert_file} -keyout {key_file} -days 365 -subj "/CN=10.200.14.204"')
+        print("[VIDEO SERVER] Certificate generated successfully\n")
+    
+    # Run with HTTPS
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True, 
+                 ssl_context=(cert_file, key_file))
