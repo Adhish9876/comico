@@ -14,6 +14,13 @@ from typing import Dict, List
 import os
 import ssl
 
+# Use eventlet for better Windows compatibility
+try:
+    import eventlet
+    eventlet.monkey_patch()
+except ImportError:
+    pass
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'shadow_nexus_video_secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -349,9 +356,26 @@ if __name__ == '__main__':
             print("[VIDEO SERVER] Please run the server again after installation\n")
             exit(1)
     
-    # Run with HTTPS using SSL context
-    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ssl_context.load_cert_chain(cert_file, key_file)
-    
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True, 
-                 ssl_context=ssl_context)
+    # Run with HTTPS using eventlet
+    try:
+        import eventlet
+        from eventlet import wsgi
+        
+        # Create SSL context for eventlet
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain(cert_file, key_file)
+        
+        # Wrap socket with SSL
+        listener = eventlet.listen(('0.0.0.0', 5000), backlog=128)
+        listener = ssl.wrap_socket(listener, 
+                                   certfile=cert_file, 
+                                   keyfile=key_file,
+                                   server_side=True)
+        
+        print("[VIDEO SERVER] Server running on https://0.0.0.0:5000\n")
+        wsgi.server(listener, app)
+    except ImportError:
+        print("[VIDEO SERVER] eventlet not installed, installing...")
+        os.system("pip install eventlet")
+        print("[VIDEO SERVER] Please run the server again\n")
+        exit(1)
