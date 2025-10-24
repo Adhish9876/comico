@@ -16,6 +16,15 @@ from typing import Optional, Dict, List
 # Import audio module
 from audio_module import AudioEngine, audio_engine as global_audio_engine
 
+# Import authentication module
+from auth_module import (
+    get_mac_address, 
+    check_mac_registered, 
+    register_user, 
+    verify_login,
+    get_username_by_mac
+)
+
 # Initialize Eel with web folder
 eel.init('web')
 
@@ -536,6 +545,51 @@ def test_connection():
     """Test if Eel bridge is working"""
     print("[CLIENT] Eel bridge test called")
     return {'success': True, 'message': 'Eel bridge is working', 'username': state.username}
+
+# ===== AUTHENTICATION FUNCTIONS =====
+@eel.expose
+def get_device_mac():
+    """Get the MAC address of the current device"""
+    mac = get_mac_address()
+    print(f"[AUTH] MAC Address: {mac}")
+    return {'success': True, 'mac_address': mac}
+
+@eel.expose
+def check_device_registration():
+    """Check if the current device is registered"""
+    mac = get_mac_address()
+    is_registered, username = check_mac_registered(mac)
+    print(f"[AUTH] Device registered: {is_registered}, Username: {username}")
+    return {
+        'success': True,
+        'is_registered': is_registered,
+        'username': username,
+        'mac_address': mac
+    }
+
+@eel.expose
+def signup_user(username: str, password: str):
+    """Register a new user with the current device's MAC address"""
+    mac = get_mac_address()
+    success, message = register_user(mac, username, password)
+    print(f"[AUTH] Signup attempt: {success}, {message}")
+    return {
+        'success': success,
+        'message': message,
+        'username': username if success else None
+    }
+
+@eel.expose
+def login_user(password: str):
+    """Login with password for the current device"""
+    mac = get_mac_address()
+    success, message, username = verify_login(mac, password)
+    print(f"[AUTH] Login attempt: {success}, {message}")
+    return {
+        'success': success,
+        'message': message,
+        'username': username
+    }
 
 @eel.expose
 def refresh_user_list():

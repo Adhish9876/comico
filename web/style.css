@@ -72,15 +72,29 @@ body {
     color: var(--bg-deep);
 }
 
-/* Screens */
+/* Screens with fade-in animation */
 .screen {
     display: none;
     width: 100%;
     height: 100vh;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
 }
 
 .screen.active {
     display: flex;
+    animation: fadeIn 0.6s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 /* ============ CONNECTION SCREEN ============ */
@@ -98,6 +112,18 @@ body {
     width: 100%;
     max-width: 600px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    animation: containerSlideIn 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes containerSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .logo-container {
@@ -114,6 +140,48 @@ body {
 .logo-svg {
     width: 100%;
     height: 100%;
+}
+
+/* Logo spin animation - Enhanced with 3D effect */
+@keyframes logoSpin {
+    0% {
+        transform: rotate(0deg) scale(1);
+    }
+    50% {
+        transform: rotate(180deg) scale(1.1);
+    }
+    100% {
+        transform: rotate(360deg) scale(1);
+    }
+}
+
+.logo-icon.spinning .logo-svg {
+    animation: logoSpin 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Shake animation for wrong password - Enhanced with rotation */
+@keyframes shake {
+    0%, 100% { 
+        transform: translateX(0) rotate(0deg); 
+    }
+    10%, 30%, 50%, 70%, 90% { 
+        transform: translateX(-12px) rotate(-2deg); 
+    }
+    20%, 40%, 60%, 80% { 
+        transform: translateX(12px) rotate(2deg); 
+    }
+}
+
+/* Pulse animation for error state */
+@keyframes errorPulse {
+    0%, 100% {
+        border-color: var(--border-main);
+        box-shadow: 0 0 0 0 rgba(198, 40, 40, 0);
+    }
+    50% {
+        border-color: #c62828;
+        box-shadow: 0 0 0 4px rgba(198, 40, 40, 0.3);
+    }
 }
 
 .logo-text {
@@ -167,17 +235,76 @@ body {
     color: var(--text-bright);
     font-family: 'Comic Neue', cursive;
     font-weight: 700;
-    transition: all var(--transition-fast);
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
 .form-group input:focus {
     outline: none;
     border-color: var(--accent-cyan);
     background: var(--bg-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 184, 212, 0.2);
+}
+
+#signupScreen .form-group input:focus {
+    border-color: var(--accent-pink);
+    box-shadow: 0 4px 12px rgba(198, 40, 40, 0.2);
 }
 
 .form-group input::placeholder {
     color: var(--text-dim);
+}
+
+/* Password input wrapper with toggle button */
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper input {
+    flex: 1;
+    padding-right: 50px; /* Make room for the eye icon */
+}
+
+.password-toggle {
+    position: absolute;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    border-radius: 5px;
+}
+
+.password-toggle:hover {
+    color: var(--accent-cyan);
+    background: rgba(0, 184, 212, 0.1);
+    transform: scale(1.1);
+}
+
+.password-toggle:active {
+    transform: scale(0.9);
+}
+
+#signupScreen .password-toggle:hover {
+    color: var(--accent-pink);
+    background: rgba(198, 40, 40, 0.1);
+}
+
+.eye-icon {
+    pointer-events: none;
+    transition: transform 0.3s ease;
+}
+
+/* Icon rotation on toggle */
+.password-toggle.active .eye-icon {
+    transform: rotateY(180deg);
 }
 
 .primary-btn {
@@ -191,18 +318,109 @@ body {
     cursor: pointer;
     letter-spacing: 2px;
     font-family: 'Bangers', cursive;
-    transition: all var(--transition-fast);
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     text-transform: uppercase;
     margin-top: 10px;
+    box-shadow: 0 4px 15px rgba(0, 184, 212, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.primary-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.primary-btn:hover::before {
+    width: 300px;
+    height: 300px;
 }
 
 .primary-btn:hover {
     background: var(--accent-purple);
-    transform: translateY(-2px);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(156, 39, 176, 0.4);
 }
 
 .primary-btn:active {
-    transform: translateY(0);
+    transform: translateY(-1px) scale(0.98);
+    box-shadow: 0 2px 10px rgba(0, 184, 212, 0.3);
+}
+
+/* ============ SIGNUP & LOGIN SCREENS ============ */
+#signupScreen, #loginScreen {
+    background: var(--bg-deep);
+    justify-content: center;
+    align-items: center;
+}
+
+/* Signup screen uses red theme */
+#signupScreen .logo-text {
+    color: var(--accent-pink);
+}
+
+#signupScreen .form-group label {
+    color: var(--accent-pink);
+}
+
+#signupScreen .form-group input:focus {
+    border-color: var(--accent-pink);
+}
+
+#signupScreen .primary-btn {
+    background: var(--accent-pink);
+}
+
+#signupScreen .primary-btn:hover {
+    background: #424242;
+}
+
+/* Welcome text for login screen */
+.welcome-text {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 25px;
+    font-family: 'Comic Neue', cursive;
+    animation: welcomeSlide 0.8s ease-out 0.3s both;
+}
+
+@keyframes welcomeSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.welcome-text span {
+    color: var(--accent-cyan);
+    font-family: 'Bangers', cursive;
+    font-size: 24px;
+    letter-spacing: 1px;
+    display: inline-block;
+    animation: nameGlow 2s ease-in-out infinite;
+}
+
+@keyframes nameGlow {
+    0%, 100% {
+        text-shadow: 0 0 5px rgba(0, 184, 212, 0.3);
+    }
+    50% {
+        text-shadow: 0 0 15px rgba(0, 184, 212, 0.6), 0 0 25px rgba(0, 184, 212, 0.4);
+    }
 }
 
 /* ============ MAIN APP ============ */

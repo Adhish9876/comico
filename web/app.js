@@ -200,17 +200,27 @@ let isWindowFocused = true;
 window.addEventListener('focus', () => isWindowFocused = true);
 window.addEventListener('blur', () => isWindowFocused = false);
 
-// DOM Elements
-const connectionScreen = document.getElementById('connectionScreen');
+// DOM Elements - Auth Screens
+const signupScreen = document.getElementById('signupScreen');
+const loginScreen = document.getElementById('loginScreen');
 const mainApp = document.getElementById('mainApp');
-const connectBtn = document.getElementById('connectBtn');
-const usernameInput = document.getElementById('usernameInput');
+
+// Signup elements
+const signupBtn = document.getElementById('signupBtn');
+const signupUsernameInput = document.getElementById('signupUsernameInput');
+const signupPasswordInput = document.getElementById('signupPasswordInput');
+
+// Login elements
+const loginBtn = document.getElementById('loginBtn');
+const loginPasswordInput = document.getElementById('loginPasswordInput');
+const loginUsername = document.getElementById('loginUsername');
 const hostInput = document.getElementById('hostInput');
 const portInput = document.getElementById('portInput');
 const userName = document.getElementById('userName');
 const messagesContainer = document.getElementById('messagesContainer');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
+
 // Dynamically add mic button next to message input if not present
 if (!document.getElementById('audioRecordBtn')) {
     const micBtn = document.createElement('button');
@@ -271,40 +281,217 @@ function ensureBadges() {
     } catch (e) { /* noop */ }
 }
 
-// ===== CONNECTION =====
-connectBtn.addEventListener('click', async () => {
-    const user = usernameInput.value.trim();
-    const host = hostInput.value.trim() || 'localhost';
-    const port = parseInt(portInput.value.trim() || '5555');
+// ===== AUTHENTICATION FLOW =====
+// Helper function to trigger logo spin animation
+function spinLogo(screen) {
+    const logoIcon = screen.querySelector('.logo-icon');
+    if (logoIcon) {
+        logoIcon.classList.add('spinning');
+        setTimeout(() => {
+            logoIcon.classList.remove('spinning');
+        }, 1000);
+    }
+}
+
+// Helper function to show notification
+function showNotification(message, type = 'info') {
+    const banner = document.createElement('div');
+    banner.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'error' ? '#c62828' : type === 'success' ? '#2ecc71' : '#00b8d4'};
+        color: white;
+        padding: 15px 20px;
+        border-radius: 10px;
+        font-weight: 700;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    `;
+    banner.textContent = message;
+    document.body.appendChild(banner);
+    setTimeout(() => banner.remove(), 3000);
+}
+
+// Password visibility toggle functionality
+function setupPasswordToggle(toggleBtn, passwordInput) {
+    if (!toggleBtn || !passwordInput) return;
     
-    if (!user) {
-        showNotification('Enter a username', 'warning');
+    toggleBtn.addEventListener('click', () => {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        toggleBtn.title = isPassword ? 'Hide password' : 'Show password';
+        
+        // Toggle active class for rotation animation
+        toggleBtn.classList.toggle('active');
+        
+        // Update icon (eye vs eye-slash)
+        const svg = toggleBtn.querySelector('.eye-icon');
+        if (isPassword) {
+            // Show eye-slash (password visible)
+            svg.innerHTML = '<path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>';
+        } else {
+            // Show eye (password hidden)
+            svg.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>';
+        }
+    });
+}
+
+// Check device registration on page load
+window.addEventListener('DOMContentLoaded', async () => {
+    console.log('[AUTH] Checking device registration...');
+    
+    // Setup password toggle buttons
+    const signupPasswordToggle = document.getElementById('signupPasswordToggle');
+    const loginPasswordToggle = document.getElementById('loginPasswordToggle');
+    setupPasswordToggle(signupPasswordToggle, signupPasswordInput);
+    setupPasswordToggle(loginPasswordToggle, loginPasswordInput);
+    
+    if (typeof eel === 'undefined') {
+        console.log('[AUTH] Eel not available, showing signup screen');
         return;
     }
     
-    connectBtn.disabled = true;
-    connectBtn.textContent = 'CONNECTING...';
+    try {
+        const result = await eel.check_device_registration()();
+        console.log('[AUTH] Registration check result:', result);
+        
+        if (result.is_registered && result.username) {
+            // Device is registered, show login screen
+            console.log('[AUTH] Device registered, showing login screen');
+            loginUsername.textContent = result.username;
+            username = result.username; // Store username globally
+            
+            spinLogo(signupScreen);
+            setTimeout(() => {
+                signupScreen.classList.remove('active');
+                loginScreen.classList.add('active');
+                spinLogo(loginScreen);
+            }, 1000);
+        } else {
+            // Device not registered, stay on signup screen
+            console.log('[AUTH] Device not registered, showing signup screen');
+        }
+    } catch (error) {
+        console.error('[AUTH] Error checking registration:', error);
+    }
+});
+
+// Signup button handler
+signupBtn.addEventListener('click', async () => {
+    const user = signupUsernameInput.value.trim();
+    const password = signupPasswordInput.value.trim();
+    
+    if (!user) {
+        showNotification('Please enter a username', 'error');
+        return;
+    }
+    
+    if (!password) {
+        showNotification('Please enter a password', 'error');
+        return;
+    }
+    
+    if (password.length < 4) {
+        showNotification('Password must be at least 4 characters', 'error');
+        return;
+    }
+    
+    signupBtn.disabled = true;
+    signupBtn.textContent = 'SIGNING UP...';
     
     try {
-        if (typeof eel === 'undefined') {
-            showNotification('Backend not available. Please start the app via the Python launcher.', 'error');
-            connectBtn.disabled = false;
-            connectBtn.textContent = 'CONNECT';
+        const result = await eel.signup_user(user, password)();
+        
+        if (result.success) {
+            username = result.username;
+            showNotification('Signup successful!', 'success');
+            
+            // Transition to login screen
+            spinLogo(signupScreen);
+            setTimeout(() => {
+                signupScreen.classList.remove('active');
+                loginScreen.classList.add('active');
+                loginUsername.textContent = username;
+                spinLogo(loginScreen);
+            }, 1000);
+        } else {
+            showNotification(result.message, 'error');
+            signupBtn.disabled = false;
+            signupBtn.textContent = 'SIGN UP';
+        }
+    } catch (error) {
+        showNotification('Signup failed', 'error');
+        signupBtn.disabled = false;
+        signupBtn.textContent = 'SIGN UP';
+    }
+});
+
+// Login button handler
+loginBtn.addEventListener('click', async () => {
+    const password = loginPasswordInput.value.trim();
+    const host = hostInput.value.trim() || 'localhost';
+    const port = parseInt(portInput.value.trim() || '5555');
+    
+    if (!password) {
+        showNotification('Please enter your password', 'error');
+        return;
+    }
+    
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'VERIFYING...';
+    
+    try {
+        // First verify password
+        const authResult = await eel.login_user(password)();
+        
+        if (!authResult.success) {
+            // Show specific error message for wrong password
+            const errorMsg = authResult.message === 'Incorrect password' 
+                ? '❌ Wrong Password! Please try again.' 
+                : authResult.message;
+            showNotification(errorMsg, 'error');
+            
+            // Shake animation on password input
+            loginPasswordInput.style.animation = 'shake 0.6s, errorPulse 1s';
+            setTimeout(() => {
+                loginPasswordInput.style.animation = '';
+            }, 1000);
+            
+            // Add error class for visual feedback
+            loginPasswordInput.classList.add('error-state');
+            setTimeout(() => {
+                loginPasswordInput.classList.remove('error-state');
+            }, 1000);
+            
+            // Clear password field
+            loginPasswordInput.value = '';
+            loginPasswordInput.focus();
+            
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'CONNECT';
             return;
         }
-        const result = await eel.connect_to_server(user, host, port)();
+        
+        username = authResult.username;
+        loginBtn.textContent = 'CONNECTING...';
+        
+        // Now connect to server
+        const result = await eel.connect_to_server(username, host, port)();
         if (result.success) {
-            username = user;
-            userName.textContent = user + ' ';
+            userName.textContent = username + ' ';
             const statusIcon = document.createElement('span');
             statusIcon.innerHTML = '🟢';
             statusIcon.style.color = '#2ecc71';
-            statusIcon.style.fontSize = '12px';  // CHANGE THIS
+            statusIcon.style.fontSize = '12px';
             statusIcon.style.verticalAlign = 'middle';
             userName.appendChild(statusIcon);
             
-            connectionScreen.classList.remove('active');
-            mainApp.classList.add('active');
+            spinLogo(loginScreen);
+            setTimeout(() => {
+                loginScreen.classList.remove('active');
+                mainApp.classList.add('active');
+            }, 1000);
             
             // Ensure we're in global chat mode when connecting
             currentChatType = 'global';
@@ -363,19 +550,31 @@ connectBtn.addEventListener('click', async () => {
             }, 1000);
         } else {
             showNotification(result.message, 'error');
-            connectBtn.disabled = false;
-            connectBtn.textContent = 'CONNECT';
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'CONNECT';
         }
     } catch (error) {
         showNotification('Connection failed', 'error');
-        connectBtn.disabled = false;
-        connectBtn.textContent = 'CONNECT';
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'CONNECT';
     }
 });
 
-[usernameInput, hostInput, portInput].forEach(input => {
+// Enter key support for signup
+signupUsernameInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') signupPasswordInput.focus();
+});
+signupPasswordInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') signupBtn.click();
+});
+
+// Enter key support for login
+loginPasswordInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') loginBtn.click();
+});
+[hostInput, portInput].forEach(input => {
     input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') connectBtn.click();
+        if (e.key === 'Enter') loginBtn.click();
     });
 });
 
