@@ -16,6 +16,16 @@ const chatHistories = {
 // Store groups persistently
 const persistentGroups = JSON.parse(localStorage.getItem('persistentGroups') || '{}');
 
+// Helper function to save groups to localStorage
+function saveGroupsToLocalStorage() {
+    try {
+        localStorage.setItem('persistentGroups', JSON.stringify(persistentGroups));
+        console.log(` Saved ${Object.keys(persistentGroups).length} groups to localStorage`);
+    } catch (error) {
+        console.error(' Error saving groups to localStorage:', error);
+    }
+}
+
 // Store unread counts
 const unreadCounts = {
     global: 0,
@@ -343,6 +353,11 @@ connectBtn.addEventListener('click', async () => {
                     eel.refresh_user_list()();
                 }
                 
+                // Load persistent groups
+                console.log('===== LOADING PERSISTENT GROUPS =====');
+                console.log(`Found ${Object.keys(persistentGroups).length} groups in localStorage`);
+                updateGroupsList();
+                
                 // Render and scroll to appropriate position
                 renderCurrentChat(false); // Don't preserve scroll, will auto-position
             }, 1000);
@@ -385,6 +400,13 @@ async function sendMessage() {
         if (!allUsers.includes(currentChatTarget) && !offlineNotificationsShown.has(currentChatTarget)) {
             showNotification(`${currentChatTarget} is offline. They will receive your message when they come online.`, 'warning');
             offlineNotificationsShown.add(currentChatTarget);
+        }
+        
+        // Check if this user was in active list and move them to private chats immediately
+        const activeUserItem = document.querySelector(`.active-user-item[data-user="${currentChatTarget}"]`);
+        if (activeUserItem) {
+            console.log(`Moving ${currentChatTarget} from active to private chats immediately`);
+            moveUserToChattedList(currentChatTarget);
         }
         
         addToRecentChats(currentChatTarget);
@@ -1017,6 +1039,15 @@ function addMessage(message, autoScroll = true) {
     const isReply = message.replyTo || (message.metadata && message.metadata.replyTo);
     const replyInfo = message.replyTo || (message.metadata && message.metadata.replyTo);
     
+    // Debug log for replies
+    if (isReply && replyInfo) {
+        console.log('🔄 Found reply message:', {
+            sender: message.sender,
+            replyTo: replyInfo,
+            fullMessage: message
+        });
+    }
+    
     const isOwn = message.sender === username;
     const messageDiv = document.createElement('div');
     messageDiv.className = isOwn ? 'message own' : 'message';
@@ -1053,27 +1084,29 @@ function addMessage(message, autoScroll = true) {
         const replyQuote = document.createElement('div');
         replyQuote.className = 'reply-quote';
         replyQuote.style.cssText = `
-            background: ${isOwn ? 'rgba(0, 150, 136, 0.15)' : 'rgba(100, 100, 100, 0.2)'};
-            border-left: 3px solid ${isOwn ? '#009688' : '#888'};
+            background: ${isOwn ? 'rgba(198, 40, 40, 0.15)' : 'rgba(100, 100, 100, 0.2)'};
+            border-left: 3px solid ${isOwn ? '#c62828' : '#888'};
             padding: 8px 10px;
             margin-bottom: 6px;
             border-radius: 4px;
             font-size: 13px;
             cursor: pointer;
         `;
-        
+            
         const replySender = document.createElement('div');
-        replySender.style.cssText = 'font-weight: 600; color: #009688; margin-bottom: 3px; font-size: 13px;';
+        replySender.style.cssText = 'font-weight: 600; color: #c62828; margin-bottom: 3px; font-size: 13px;';
         replySender.textContent = replyInfo.sender === username ? 'You' : replyInfo.sender;
-        
+            
         const replyText = document.createElement('div');
         replyText.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;';
-        replyText.textContent = (replyInfo.text || '').substring(0, 100);
-        
+        const replyContent = replyInfo.text || replyInfo.content || '';
+        replyText.textContent = replyContent.substring(0, 100);
+            
         replyQuote.appendChild(replySender);
         replyQuote.appendChild(replyText);
         content.appendChild(replyQuote);
     }
+        
     
     const sender = document.createElement('span');
     sender.className = 'message-sender';
@@ -1592,18 +1625,16 @@ function updateUsersList(users) {
             offlineNotificationsShown.delete(user);
         }
     });
+    
     // Get all users we've chatted with privately from storage
     const chattedUsers = new Set();
-    // Check private_chats.json format: keys like "user1_user2"
     for (const key in chatHistories.private) {
         const messages = chatHistories.private[key];
         if (!messages || messages.length === 0) continue;
-        // Check if current username is involved in this chat
         const hasMyMessages = messages.some(msg => 
             msg.sender === username || msg.receiver === username
         );
         if (hasMyMessages) {
-            // Extract the other user's name
             const parts = key.split('_');
             const otherUser = parts[0] === username ? parts[1] : parts[0];
             if (otherUser && otherUser !== username) {
@@ -1611,37 +1642,58 @@ function updateUsersList(users) {
             }
         }
     }
-    // Add current online users (if not already in chattedUsers and not yourself)
-    users.filter(u => u !== username && !chattedUsers.has(u)).forEach(user => {
-        chattedUsers.add(user);
-    });
-    const chatUsersArray = Array.from(chattedUsers);
+    
+    // Separate online users into active (not chatted) and chatted
+    const onlineUsers = users.filter(u => u !== username);
+    const activeOnlyUsers = onlineUsers.filter(u => !chattedUsers.has(u));
+    const chattedOnlineUsers = onlineUsers.filter(u => chattedUsers.has(u));
+    
+    // Update Active Users Section
+    updateActiveUsersSection(activeOnlyUsers);
+    
+    // Update Private Chats List (only show users we've chatted with)
     usersList.innerHTML = '';
-    if (chatUsersArray.length === 0) {
+    if (chattedUsers.size === 0) {
         noUsersMsg.style.display = 'block';
         return;
     }
     noUsersMsg.style.display = 'none';
-    chatUsersArray.forEach(user => {
+    
+    Array.from(chattedUsers).forEach(user => {
         const isOnline = users.includes(user);
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-item';
         chatItem.dataset.user = user;
         chatItem.onclick = () => switchToPrivateChat(user);
-        // Get last message for this user - check both key formats
-        let lastMessage = null;
-        const key1 = `${username}_${user}`;
-        const key2 = `${user}_${username}`;
-        const messages = chatHistories.private[key1] || chatHistories.private[key2] || [];
+        
+        // Get last message for this user
+        // Get last message from private chat history
+        const messages = chatHistories.private[user] || [];
+        let lastMsgText = 'No messages yet';
+        
         if (messages.length > 0) {
-            lastMessage = messages[messages.length - 1];
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage.content) {
+                // Truncate long messages
+                const content = lastMessage.content.substring(0, 35);
+                lastMsgText = content + (lastMessage.content.length > 35 ? '...' : '');
+                
+                // Add prefix if you sent it
+                if (lastMessage.sender === username) {
+                    lastMsgText = 'You: ' + lastMsgText;
+                }
+            } else if (lastMessage.type === 'private_file') {
+                lastMsgText = '📎 File shared';
+            } else if (lastMessage.type === 'private_audio') {
+                lastMsgText = '🎤 Audio message';
+            }
         }
-        const lastMsgText = lastMessage ? lastMessage.content.substring(0, 30) + (lastMessage.content.length > 30 ? '...' : '') : 'No messages yet';
+        
         chatItem.innerHTML = `
             <div class="chat-avatar">👤</div>
             <div class="chat-info">
                 <div class="chat-name">${user} 
-                    <span style="font-size: 14px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 4px;">●</span>
+                    <span style="font-size: 18px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 4px;">●</span>
                     <span class="unread-count" style="display: none; background: #2ecc71; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;">0</span>
                 </div>
                 <div class="chat-last-msg">${lastMsgText}</div>
@@ -1656,85 +1708,223 @@ function updateUsersList(users) {
     });
 }
 
-function updateGroupsList(groups = []) {
-    // Combine server groups with persistent groups
-    const allGroups = {};
+// Update Active Users Section
+function updateActiveUsersSection(activeUsers) {
+    const activeUsersSection = document.getElementById('activeUsersSection');
+    const activeUsersList = document.getElementById('activeUsersList');
+    const activeUsersCount = document.getElementById('activeUsersCount');
     
-    // Add persistent groups first
-    for (const groupId in persistentGroups) {
-        allGroups[groupId] = persistentGroups[groupId];
-    }
-    
-    // Add/update with server groups
-    if (groups && groups.length > 0) {
-        groups.forEach(group => {
-            allGroups[group.id] = group;
-        });
-    }
-    
-    // Get all groups we've chatted in (including inactive ones)
-    const chattedGroupIds = new Set();
-    for (const groupId in chatHistories.group) {
-        const messages = chatHistories.group[groupId];
-        if (messages.some(msg => msg.sender === username || (msg.members && msg.members.includes(username)))) {
-            chattedGroupIds.add(groupId);
-        }
-    }
-    
-    // Add ALL persistent groups (even if no messages yet)
-    for (const groupId in persistentGroups) {
-        const group = persistentGroups[groupId];
-        // Only add if current user is a member
-        if (group.members && group.members.includes(username)) {
-            chattedGroupIds.add(groupId);
-        }
-    }
-    
-    // Add current active groups (if not already in chattedGroupIds)
-    const userGroups = groups.filter(g => g.members && g.members.includes(username));
-    userGroups.forEach(group => {
-        chattedGroupIds.add(group.id);
-    });
-    
-    const groupIds = Array.from(chattedGroupIds);
-    groupsList.innerHTML = '';
-    if (groupIds.length === 0) {
-        noGroupsMsg.style.display = 'block';
+    if (activeUsers.length === 0) {
+        activeUsersSection.style.display = 'none';
         return;
     }
+    
+    activeUsersSection.style.display = 'block';
+    activeUsersCount.textContent = activeUsers.length;
+    activeUsersList.innerHTML = '';
+    
+    activeUsers.forEach(user => {
+        const userItem = document.createElement('div');
+        userItem.className = 'active-user-item';
+        userItem.dataset.user = user;
+        userItem.onclick = () => {
+            // Switch to private chat when clicked
+            switchToPrivateChat(user);
+        };
+        
+        userItem.innerHTML = `
+            <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
+            <div class="active-user-info">
+                <div class="active-user-name">${user}</div>
+                <div class="active-user-status">Online</div>
+            </div>
+        `;
+        
+        activeUsersList.appendChild(userItem);
+    });
+}
+
+// Move user from active to chatted when first message sent
+function moveUserToChattedList(user) {
+    console.log(`🚀 IMMEDIATE MOVE: Moving ${user} from active to chatted list`);
+    
+    // Immediately remove from active users section
+    const activeUserItem = document.querySelector(`.active-user-item[data-user="${user}"]`);
+    if (activeUserItem) {
+        activeUserItem.remove();
+        console.log(`✅ Removed ${user} from active users DOM`);
+    }
+    
+    // Update active users count
+    const activeUsersList = document.getElementById('activeUsersList');
+    const activeUsersCount = document.getElementById('activeUsersCount');
+    const activeUsersSection = document.getElementById('activeUsersSection');
+    
+    if (activeUsersList && activeUsersList.children.length === 0) {
+        activeUsersSection.style.display = 'none';
+    } else if (activeUsersCount) {
+        activeUsersCount.textContent = activeUsersList.children.length;
+    }
+    
+    // Add to private chats list immediately
+    const usersList = document.getElementById('usersList');
+    const noUsersMsg = document.getElementById('noUsersMsg');
+    
+    // Check if user already exists in private chats
+    if (!document.querySelector(`.chat-item[data-user="${user}"]`)) {
+        noUsersMsg.style.display = 'none';
+        
+        const chatItem = document.createElement('div');
+        chatItem.className = 'chat-item';
+        chatItem.dataset.user = user;
+        chatItem.onclick = () => switchToPrivateChat(user);
+        
+        const isOnline = allUsers.includes(user);
+        chatItem.innerHTML = `
+            <div class="chat-avatar">👤</div>
+            <div class="chat-info">
+                <div class="chat-name">${user} 
+                    <span style="font-size: 14px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 4px;">●</span>
+                    <span class="unread-count" style="display: none; background: #2ecc71; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;">0</span>
+                </div>
+                <div class="chat-last-msg">Just now</div>
+            </div>
+            <button class="chat-menu-btn" onclick="event.stopPropagation(); showChatContextMenu(event, '${user}')">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+            </button>
+        `;
+        usersList.insertBefore(chatItem, usersList.firstChild);
+        console.log(`✅ Added ${user} to private chats DOM`);
+    }
+}
+
+// Debounce timer for group list updates
+let groupListUpdateTimer = null;
+let pendingServerGroups = [];
+
+function updateGroupsList(groups = []) {
+    console.log(`📋 UPDATE GROUPS LIST CALLED`);
+    console.log(`📊 Persistent groups: ${Object.keys(persistentGroups).length}`);
+    console.log(`📊 Server groups received: ${groups.length}`);
+    
+    // Store server groups if provided
+    if (groups && groups.length > 0) {
+        pendingServerGroups = groups;
+    }
+    
+    // Clear any pending update
+    if (groupListUpdateTimer) {
+        clearTimeout(groupListUpdateTimer);
+    }
+    
+    // Debounce to prevent multiple rapid updates
+    groupListUpdateTimer = setTimeout(() => {
+        renderGroupsList();
+    }, 100);
+}
+
+function renderGroupsList() {
+    console.log(`🎨 RENDERING GROUPS LIST`);
+    
+    // Combine server groups with persistent groups (server groups take priority)
+    const allGroups = {};
+    
+    // First add persistent groups (only if user is a member)
+    for (const groupId in persistentGroups) {
+        const group = persistentGroups[groupId];
+        if (group.members && group.members.includes(username)) {
+            allGroups[groupId] = group;
+            console.log(`📦 Persistent: ${group.name} (${groupId.substring(0, 20)}...)`);
+        }
+    }
+    
+    // Then add/update with server groups (these override persistent ones)
+    if (pendingServerGroups && pendingServerGroups.length > 0) {
+        pendingServerGroups.forEach(group => {
+            if (group.members && group.members.includes(username)) {
+                // Update persistent storage with server data
+                persistentGroups[group.id] = group;
+                allGroups[group.id] = group;
+                console.log(`📡 Server: ${group.name} (${group.id.substring(0, 20)}...)`);
+            }
+        });
+        // Save updated groups to localStorage
+        saveGroupsToLocalStorage();
+        // Clear pending server groups
+        pendingServerGroups = [];
+    }
+    
+    console.log(`📊 Total unique groups for ${username}: ${Object.keys(allGroups).length}`);
+    
+    const groupIds = Object.keys(allGroups);
+    
+    // CLEAR the list completely before rendering
+    groupsList.innerHTML = '';
+    
+    if (groupIds.length === 0) {
+        noGroupsMsg.style.display = 'block';
+        console.log('📭 No groups to display');
+        return;
+    }
+    
     noGroupsMsg.style.display = 'none';
+    
+    // Render each unique group ONCE
     groupIds.forEach(groupId => {
-        // Try to find group info from server groups first
-        let groupInfo = userGroups.find(g => g.id === groupId);
+        const groupInfo = allGroups[groupId];
         
-        // If not found in server groups, check persistent groups
-        if (!groupInfo && allGroups[groupId]) {
-            groupInfo = allGroups[groupId];
+        if (!groupInfo || !groupInfo.name) {
+            console.error(`❌ Invalid group info for: ${groupId}`, groupInfo);
+            return;
         }
         
-        // Fallback if still not found
-        if (!groupInfo) {
-            groupInfo = {
-                id: groupId,
-                name: `Group ${groupId.substring(0, 8)}`,
-                members: []
-            };
-        }
+        console.log(`✅ Rendering: ${groupInfo.name} (${groupId.substring(0, 20)}...)`)
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-item';
         chatItem.dataset.groupId = groupInfo.id;
         chatItem.onclick = () => switchToGroupChat(groupInfo.id, groupInfo.name);
+        
+        // Check if any group member is online
+        const hasOnlineMembers = groupInfo.members && groupInfo.members.some(member => allUsers.includes(member));
+        const onlineStatusDot = hasOnlineMembers ? '<span style="font-size: 18px; vertical-align: middle; color: #2ecc71; margin-left: 4px;">●</span>' : '';
+        
         // Get last message for this group
-        const lastMessage = chatHistories.group[groupInfo.id]?.slice(-1)[0];
-        const lastMsgText = lastMessage ? lastMessage.content.substring(0, 30) + (lastMessage.content.length > 30 ? '...' : '') : 'No messages yet';
+        const messages = chatHistories.group[groupInfo.id] || [];
+        let lastMsgText = 'No messages yet';
+        
+        if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage.content) {
+                // Truncate long messages
+                const content = lastMessage.content.substring(0, 30);
+                lastMsgText = content + (lastMessage.content.length > 30 ? '...' : '');
+                
+                // Add sender name prefix
+                const senderName = lastMessage.sender === username ? 'You' : lastMessage.sender;
+                lastMsgText = `${senderName}: ${lastMsgText}`;
+            } else if (lastMessage.type === 'group_file') {
+                lastMsgText = '📎 File shared';
+            } else if (lastMessage.type === 'group_audio') {
+                lastMsgText = '🎤 Audio message';
+            } else if (lastMessage.type === 'group_created') {
+                lastMsgText = '✨ Group created';
+            }
+        }
         chatItem.innerHTML = `
             <div class="chat-avatar">👥</div>
             <div class="chat-info">
-                <div class="chat-name">${groupInfo.name}
+                <div class="chat-name">${groupInfo.name}${onlineStatusDot}
                     <span class="unread-count" style="display: none; background: #2ecc71; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 8px;">0</span>
                 </div>
                 <div class="chat-last-msg">${lastMsgText}</div>
             </div>
+            <button class="chat-menu-btn" onclick="event.stopPropagation(); showGroupContextMenu(event, '${groupInfo.id}', '${groupInfo.name}', ${JSON.stringify(groupInfo.members || []).replace(/"/g, '&quot;')}, '${groupInfo.admin || ''}')">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+            </button>
         `;
         groupsList.appendChild(chatItem);
     });
@@ -1761,6 +1951,8 @@ function displayRecentChats() {
 }
 
 async function switchToPrivateChat(user) {
+    console.log(`🔄 SWITCHING TO PRIVATE CHAT: ${user}`);
+    
     // Clean up viewed state for chats with no unread messages when leaving
     cleanupViewedChats();
     
@@ -1768,10 +1960,26 @@ async function switchToPrivateChat(user) {
     currentChatTarget = user;
     chatHeaderName.textContent = user;
     chatHeaderStatus.textContent = 'Private Chat';
+    
+    // Hide group settings button
+    const groupSettingsBtn = document.getElementById('groupSettingsHeaderBtn');
+    if (groupSettingsBtn) {
+        groupSettingsBtn.style.display = 'none';
+    }
+    
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
-    document.querySelector(`.chat-item[data-user="${user}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
     addToRecentChats(user);
+    
+    // Only set active if user already exists in private chats
+    // DON'T create temporary chat item - user should only move after sending first message
+    const existingChatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
+    if (existingChatItem) {
+        existingChatItem.classList.add('active');
+        console.log(`✅ User ${user} already in private chats, set as active`);
+    } else {
+        console.log(`📝 User ${user} from active section - just opening chat, not moving yet`);
+    }
     
     // Track this chat switch to prevent immediate re-render
     lastChatSwitchTime = Date.now();
@@ -1822,6 +2030,12 @@ async function switchToGroupChat(groupId, groupName) {
     chatHeaderName.textContent = groupName;
     chatHeaderStatus.textContent = 'Group Chat';
     
+    // Show group settings button in header
+    const groupSettingsBtn = document.getElementById('groupSettingsHeaderBtn');
+    if (groupSettingsBtn) {
+        groupSettingsBtn.style.display = 'block';
+    }
+    
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     document.querySelector(`.chat-item[data-group-id="${groupId}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
@@ -1849,6 +2063,12 @@ globalNetworkItem.addEventListener('click', async function() {
     currentChatTarget = null;
     chatHeaderName.textContent = 'Global Network';
     chatHeaderStatus.textContent = 'Secure broadcast channel';
+    
+    // Hide group settings button
+    const groupSettingsBtn = document.getElementById('groupSettingsHeaderBtn');
+    if (groupSettingsBtn) {
+        groupSettingsBtn.style.display = 'none';
+    }
     
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     this.classList.add('active');
@@ -2031,38 +2251,44 @@ async function startRecording() {
                 bottom: 80px;
                 left: 50%;
                 transform: translateX(-50%);
-                background: linear-gradient(135deg, #8B0000, #000000);
+                background: linear-gradient(135deg, #1a1d29, #252936);
+                border: 2px solid #c62828;
                 padding: 15px 25px;
                 border-radius: 12px;
                 display: flex;
                 align-items: center;
                 gap: 15px;
-                box-shadow: 0 4px 20px rgba(139, 0, 0, 0.5);
-                z-index: 1000;
+                box-shadow: 0 8px 32px rgba(198, 40, 40, 0.3), 0 0 20px rgba(0, 184, 212, 0.2);
+                z-index: 10001;
+                animation: slideUp 0.3s ease-out;
             ">
                 <div style="
                     width: 12px;
                     height: 12px;
-                    background: #FF4500;
+                    background: #c62828;
                     border-radius: 50%;
                     animation: pulse 1s infinite;
+                    box-shadow: 0 0 10px rgba(198, 40, 40, 0.5);
                 "></div>
                 <span id="recordingTime" style="
-                    color: white;
+                    color: #00b8d4;
                     font-family: 'Rajdhani', sans-serif;
+                    font-weight: bold;
                     font-size: 16px;
                     min-width: 50px;
                 ">0:00</span>
                 <button id="stopRecording" style="
-                    background: rgba(255, 255, 255, 0.2);
+                    background: linear-gradient(135deg, #c62828, #9c27b0);
                     border: none;
-                    border-radius: 6px;
-                    padding: 8px 15px;
+                    border-radius: 8px;
+                    padding: 8px 16px;
                     color: white;
                     cursor: pointer;
-                    transition: all 0.3s;
+                    transition: all 0.3s ease;
                     font-family: 'Rajdhani', sans-serif;
-                ">Stop Recording</button>
+                    font-weight: bold;
+                    box-shadow: 0 4px 12px rgba(198, 40, 40, 0.3);
+                ">⏹️ Stop</button>
             </div>
         `;
         document.body.appendChild(recordingUI);
@@ -2114,45 +2340,64 @@ function showAudioPreview(audioBlob) {
             bottom: 80px;
             left: 50%;
             transform: translateX(-50%);
-            background: linear-gradient(135deg, #8B0000, #000000);
+            background: linear-gradient(135deg, #1a1d29, #252936);
+            border: 2px solid #c62828;
             padding: 20px;
             border-radius: 12px;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 15px;
-            box-shadow: 0 4px 20px rgba(139, 0, 0, 0.5);
-            z-index: 1000;
+            box-shadow: 0 8px 32px rgba(198, 40, 40, 0.3), 0 0 20px rgba(0, 184, 212, 0.2);
+            z-index: 10001;
+            animation: slideUp 0.3s ease-out;
         ">
+            <div style="
+                color: #00b8d4;
+                font-family: 'Rajdhani', sans-serif;
+                font-weight: bold;
+                font-size: 16px;
+                margin-bottom: 5px;
+                text-align: center;
+            ">🎤 Audio Message</div>
             <audio id="audioPreviewPlayer" controls style="
-                width: 250px;
-                height: 40px;
-                border-radius: 20px;
+                width: 280px;
+                height: 45px;
+                border-radius: 25px;
+                background: rgba(198, 40, 40, 0.1);
+                border: 1px solid #c62828;
             "></audio>
             <div style="
                 display: flex;
-                gap: 10px;
+                gap: 12px;
+                margin-top: 5px;
             ">
                 <button id="discardAudio" style="
-                    background: rgba(255, 255, 255, 0.2);
+                    background: linear-gradient(135deg, #c62828, #9c27b0);
                     border: none;
-                    border-radius: 6px;
-                    padding: 8px 15px;
+                    border-radius: 8px;
+                    padding: 10px 20px;
                     color: white;
                     cursor: pointer;
-                    transition: all 0.3s;
+                    transition: all 0.3s ease;
                     font-family: 'Rajdhani', sans-serif;
-                ">Discard</button>
+                    font-weight: bold;
+                    font-size: 14px;
+                    box-shadow: 0 4px 12px rgba(198, 40, 40, 0.3);
+                ">🗑️ Discard</button>
                 <button id="sendAudio" style="
-                    background: linear-gradient(135deg, #FF4500, #8B0000);
+                    background: linear-gradient(135deg, #00b8d4, #9c27b0);
                     border: none;
-                    border-radius: 6px;
-                    padding: 8px 15px;
+                    border-radius: 8px;
+                    padding: 10px 20px;
                     color: white;
                     cursor: pointer;
-                    transition: all 0.3s;
+                    transition: all 0.3s ease;
                     font-family: 'Rajdhani', sans-serif;
-                ">Send</button>
+                    font-weight: bold;
+                    font-size: 14px;
+                    box-shadow: 0 4px 12px rgba(0, 184, 212, 0.3);
+                ">📤 Send</button>
             </div>
         </div>
     `;
@@ -2171,35 +2416,44 @@ function showAudioPreview(audioBlob) {
     };
 
     document.getElementById('sendAudio').onclick = async () => {
+        console.log('🎤 SEND AUDIO CLICKED');
+        console.log(`📊 Current chat: ${currentChatType} -> ${currentChatTarget}`);
+        console.log(`⏱️ Recording duration: ${recordingDuration}s`);
+        
         // Convert blob to base64
         const reader = new FileReader();
         reader.onloadend = async () => {
             const base64Audio = reader.result.split(',')[1];
+            console.log(`📦 Audio data size: ${base64Audio.length} characters`);
             
             try {
                 // Send the audio message based on current chat type
                 if (currentChatType === 'private' && currentChatTarget) {
+                    console.log(`📤 Sending private audio to: ${currentChatTarget}`);
                     await eel.send_message('private_audio', '', {
                         receiver: currentChatTarget,
                         audio_data: base64Audio,
                         duration: recordingDuration
                     })();
                 } else if (currentChatType === 'group' && currentChatTarget) {
+                    console.log(`📤 Sending group audio to: ${currentChatTarget}`);
                     await eel.send_message('group_audio', '', {
                         group_id: currentChatTarget,
                         audio_data: base64Audio,
                         duration: recordingDuration
                     })();
                 } else {
+                    console.log(`📤 Sending global audio message`);
                     await eel.send_message('audio_message', '', {
                         audio_data: base64Audio,
                         duration: recordingDuration
                     })();
                 }
                 
-                showNotification('Audio message sent', 'success');
+                console.log('✅ Audio message sent successfully');
+                showNotification('🎤 Audio message sent', 'success');
             } catch (error) {
-                console.error('Error sending audio:', error);
+                console.error('❌ Error sending audio:', error);
                 showNotification('Failed to send audio message', 'error');
             }
             
@@ -2273,11 +2527,11 @@ function showGroupModal(users) {
         <div class="modal-title">Create New Group</div>
         <div class="form-group">
             <label>Group Name</label>
-            <input type="text" id="groupNameInput" placeholder="Enter group name">
+            <input type="text" id="newGroupNameInput" placeholder="Enter group name" style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
         </div>
         <div class="admin-selector">
             <label>Group Admin</label>
-            <select id="adminSelect">
+            <select id="newGroupAdminSelect" style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
                 <option value="${username}">${username} (You)</option>
                 ${users.map(u => `<option value="${u}">${u}</option>`).join('')}
             </select>
@@ -2304,14 +2558,30 @@ function showGroupModal(users) {
     
     document.getElementById('cancelBtn').onclick = () => modal.remove();
     
+    // Prevent multiple clicks
+    let isCreating = false;
+    
     document.getElementById('createBtn').onclick = async () => {
-        const groupName = document.getElementById('groupNameInput').value.trim();
-        const admin = document.getElementById('adminSelect').value;
+        if (isCreating) {
+            console.log('⚠️ Group creation already in progress...');
+            return;
+        }
+        
+        const groupNameInput = document.getElementById('newGroupNameInput');
+        const groupName = groupNameInput.value.trim();
+        const admin = document.getElementById('newGroupAdminSelect').value;
         const checkboxes = document.querySelectorAll('.user-select-list input[type="checkbox"]:checked');
         const members = Array.from(checkboxes).map(cb => cb.value);
         
+        console.log(`📝 CREATE GROUP - Group name: "${groupName}"`);
+        console.log(`👑 Admin: ${admin}`);
+        console.log(`👥 Selected members: ${members.join(', ')}`);
+        
         if (!groupName) {
-            showNotification('Enter group name', 'warning');
+            console.log(`❌ Group name is empty!`);
+            groupNameInput.style.border = '2px solid #c62828';
+            groupNameInput.focus();
+            showNotification('Please enter a group name', 'error');
             return;
         }
         if (members.length === 0) {
@@ -2319,34 +2589,35 @@ function showGroupModal(users) {
             return;
         }
         
+        isCreating = true;
+        
         members.push(admin);
         const uniqueMembers = [...new Set(members)];
         
-        // Generate a unique group ID
-        const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Save group to persistent storage
-        persistentGroups[groupId] = {
-            id: groupId,
-            name: groupName,
-            members: uniqueMembers,
-            admin: admin,
-            created_at: new Date().toISOString()
-        };
-        localStorage.setItem('persistentGroups', JSON.stringify(persistentGroups));
-        
-        await eel.send_message('group_create', `Created group: ${groupName}`, {
-            group_id: groupId,
-            group_name: groupName,
-            members: uniqueMembers,
-            admin: admin
-        })();
-        
-        modal.remove();
-        showNotification(`Group "${groupName}" created`, 'success');
-        
-        // Update groups list immediately
-        updateGroupsList();
+        try {
+            // DON'T generate group ID on client - let server create it
+            // Just send the group creation request
+            await eel.send_message('group_create', `Created group: ${groupName}`, {
+                group_name: groupName,
+                members: uniqueMembers,
+                admin: admin
+            })();
+            
+            console.log(`✅ Group creation request sent: ${groupName}`);
+            console.log(`👥 Members: ${uniqueMembers.join(', ')}`);
+            
+            showNotification(`Group "${groupName}" created`, 'success');
+            
+            // Server will broadcast group_list with the new group
+            // which will automatically update the UI and save to localStorage
+            console.log('⏳ Waiting for server to broadcast group...');
+        } catch (error) {
+            console.error('❌ Error creating group:', error);
+            showNotification('Failed to create group', 'error');
+        } finally {
+            modal.remove();
+            isCreating = false;
+        }
     };
 }
 
@@ -2451,29 +2722,74 @@ function refreshChatData(force = false) {
     });
 }
 
-// Main polling function
+// Optimized polling with smart intervals and backoff
+let pollInterval = 3000; // Start with 3s
+let lastActivityTime = Date.now();
+let isUserActive = true;
+
+// Track user activity for smart polling
+function trackUserActivity() {
+    lastActivityTime = Date.now();
+    isUserActive = true;
+    
+    // Reset to fast polling when user is active
+    if (pollInterval > 3000) {
+        pollInterval = 3000;
+        resetPollingInterval();
+    }
+}
+
+// Add activity listeners
+['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'].forEach(event => {
+    document.addEventListener(event, trackUserActivity, { passive: true });
+});
+
+// Main optimized polling function
 function pollForData() {
-    console.log('===== STARTING POLLING =====');
+    console.log('===== STARTING OPTIMIZED POLLING =====');
     
     // Initial refresh
     refreshChatData();
     
-    // Set up periodic polling
+    // Set up adaptive polling
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
     
-    // Poll every 10 seconds, but only if tab is active
+    // Smart polling with adaptive intervals
     pollingInterval = setInterval(() => {
-        if (!document.hidden) {
-            refreshChatData();
+        // Only poll if tab is visible
+        if (document.hidden) return;
+        
+        const timeSinceActivity = Date.now() - lastActivityTime;
+        
+        // Adaptive polling intervals based on user activity
+        if (timeSinceActivity < 30000) { // 30s
+            pollInterval = 3000; // Fast: 3s when active
+        } else if (timeSinceActivity < 300000) { // 5m
+            pollInterval = 10000; // Medium: 10s when idle
+        } else {
+            pollInterval = 30000; // Slow: 30s when inactive
         }
-    }, 10000);
+        
+        // Only refresh if we need to (smart debouncing)
+        const shouldRefresh = 
+            isUserActive || 
+            timeSinceActivity < 60000 || // Always refresh within 1m of activity
+            Math.random() < 0.3; // Occasionally refresh when inactive
+        
+        if (shouldRefresh) {
+            refreshChatData(false); // Don't force refresh unless necessary
+        }
+        
+        isUserActive = false; // Reset until next activity
+    }, pollInterval);
     
-    // Also poll when tab becomes visible
+    // Immediate refresh when tab becomes visible
     const handleVisibilityChange = () => {
         if (!document.hidden) {
-            refreshChatData();
+            trackUserActivity(); // Mark as active
+            refreshChatData(false); // Quick refresh on focus
         }
     };
     
@@ -2761,7 +3077,17 @@ function getCurrentChatMessages() {
 
 // ===== CONTEXT MENUS =====
 function showChatContextMenu(event, user) {
+    console.log(`📋 CONTEXT MENU: Showing menu for user ${user}`);
+    event.preventDefault();
+    event.stopPropagation();
+    
     const menu = document.getElementById('chatContextMenu');
+    if (!menu) {
+        console.error('❌ Chat context menu not found!');
+        return;
+    }
+    
+    console.log(`✅ Menu found, positioning...`);
     
     // Calculate menu position
     const menuHeight = 150; // Approximate height
@@ -2786,6 +3112,8 @@ function showChatContextMenu(event, user) {
     menu.style.top = posY + 'px';
     menu.classList.add('show');
     menu.dataset.user = user;
+    
+    console.log(`✅ Menu shown at position (${posX}, ${posY}) for user ${user}`);
     
     // Close menu when clicking outside
     setTimeout(() => {
@@ -2847,12 +3175,20 @@ function showMessageContextMenu(event, messageElement) {
 // Handle context menu actions
 document.addEventListener('click', (e) => {
     if (e.target.closest('.context-menu-item')) {
+        console.log(`🖱️ CONTEXT MENU ITEM CLICKED`);
         const action = e.target.closest('.context-menu-item').dataset.action;
         const menu = e.target.closest('.context-menu');
         
+        console.log(`📋 Action: ${action}, Menu ID: ${menu.id}`);
+        
         if (menu.id === 'chatContextMenu') {
+            console.log(`✅ Handling chat context action: ${action} for user ${menu.dataset.user}`);
             handleChatContextAction(action, menu.dataset.user);
+        } else if (menu.id === 'groupContextMenu') {
+            console.log(`✅ Handling group context action: ${action}`);
+            handleGroupContextAction(action);
         } else if (menu.id === 'messageContextMenu') {
+            console.log(`✅ Handling message context action: ${action}`);
             handleMessageContextAction(action, menu.dataset.messageId);
         }
         
@@ -2861,14 +3197,20 @@ document.addEventListener('click', (e) => {
 });
 
 function handleChatContextAction(action, user) {
+    console.log(`🚀 EXECUTING ACTION: ${action} for user ${user}`);
     switch (action) {
         case 'archive':
+            console.log(`📦 CALLING archiveChat for ${user}`);
             archiveChat(user);
             break;
         case 'delete-chat':
+            console.log(`🗑️ CALLING deleteChat for ${user}`);
             deleteChat(user);
             break;
+        default:
+            console.log(`❌ Unknown action: ${action}`);
     }
+    console.log(`✅ ACTION ${action} COMPLETED for ${user}`);
 }
 
 function handleMessageContextAction(action, messageId) {
@@ -2903,54 +3245,501 @@ function handleMessageContextAction(action, messageId) {
     }
 }
 
+// ===== GROUP CONTEXT MENU =====
+let currentGroupContext = {
+    id: null,
+    name: null,
+    members: [],
+    admin: null
+};
+
+function showGroupContextMenu(event, groupId, groupName, members, admin) {
+    console.log(`📋 GROUP CONTEXT MENU: Showing menu for group ${groupName}`);
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const menu = document.getElementById('groupContextMenu');
+    if (!menu) {
+        console.error('❌ Group context menu not found!');
+        return;
+    }
+    
+    // Store group context
+    currentGroupContext = {
+        id: groupId,
+        name: groupName,
+        members: Array.isArray(members) ? members : [],
+        admin: admin
+    };
+    
+    console.log(`✅ Group context stored:`, currentGroupContext);
+    
+    // Calculate menu position
+    const menuHeight = 150;
+    const menuWidth = 180;
+    const windowHeight = window.innerHeight;
+    const windowWidth = window.innerWidth;
+    
+    let posX = event.pageX;
+    let posY = event.pageY;
+    
+    if (posY + menuHeight > windowHeight - 20) {
+        posY = windowHeight - menuHeight - 20;
+    }
+    
+    if (posX + menuWidth > windowWidth - 20) {
+        posX = windowWidth - menuWidth - 20;
+    }
+    
+    menu.style.left = posX + 'px';
+    menu.style.top = posY + 'px';
+    menu.classList.add('show');
+    
+    console.log(`✅ Menu shown at position (${posX}, ${posY})`);
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+        document.addEventListener('click', function closeMenu() {
+            menu.classList.remove('show');
+            document.removeEventListener('click', closeMenu);
+        });
+    }, 0);
+}
+
+function handleGroupContextAction(action) {
+    console.log(`🚀 GROUP ACTION: ${action} for group ${currentGroupContext.name}`);
+    
+    switch (action) {
+        case 'settings':
+            openGroupSettings();
+            break;
+        case 'leave':
+            leaveGroup();
+            break;
+        case 'delete-group':
+            deleteGroup();
+            break;
+        default:
+            console.log(`❌ Unknown group action: ${action}`);
+    }
+}
+
+function openGroupSettings() {
+    console.log('📂 openGroupSettings called');
+    console.log('Current group context:', currentGroupContext);
+    
+    const modal = document.getElementById('groupSettingsModal');
+    const titleEl = document.getElementById('groupSettingsTitle');
+    const nameInput = document.getElementById('groupNameInput');
+    const adminSelect = document.getElementById('newAdminSelect');
+    const kickSelect = document.getElementById('kickUserSelect');
+    
+    if (!modal) {
+        console.error('❌ Modal not found!');
+        return;
+    }
+    
+    console.log('📝 Setting modal content...');
+    titleEl.textContent = `${currentGroupContext.name} Settings`;
+    nameInput.value = currentGroupContext.name;
+    
+    // Populate admin select
+    adminSelect.innerHTML = '<option value="">Select new admin...</option>';
+    currentGroupContext.members.forEach(member => {
+        if (member !== username) {
+            const option = document.createElement('option');
+            option.value = member;
+            option.textContent = member;
+            adminSelect.appendChild(option);
+        }
+    });
+    
+    // Populate kick select
+    kickSelect.innerHTML = '<option value="">Select user to kick...</option>';
+    currentGroupContext.members.forEach(member => {
+        if (member !== username) {
+            const option = document.createElement('option');
+            option.value = member;
+            option.textContent = member;
+            kickSelect.appendChild(option);
+        }
+    });
+    
+    console.log('✅ Displaying modal...');
+    modal.style.display = 'flex';
+    console.log('Modal display set to:', modal.style.display);
+}
+
+function closeGroupSettings() {
+    document.getElementById('groupSettingsModal').style.display = 'none';
+}
+
+function changeGroupName() {
+    const newName = document.getElementById('groupNameInput').value.trim();
+    if (!newName) {
+        showNotification('Please enter a group name', 'error');
+        return;
+    }
+    
+    console.log(`📝 Changing group name to: ${newName}`);
+    
+    // Update persistent groups
+    if (persistentGroups[currentGroupContext.id]) {
+        persistentGroups[currentGroupContext.id].name = newName;
+        saveGroupsToLocalStorage();
+    }
+    
+    currentGroupContext.name = newName;
+    showNotification(`Group name changed to "${newName}"`, 'success');
+    closeGroupSettings();
+    
+    // Refresh groups list
+    updateGroupsList();
+}
+
+function changeGroupAdmin() {
+    const newAdmin = document.getElementById('newAdminSelect').value;
+    if (!newAdmin) {
+        showNotification('Please select a new admin', 'error');
+        return;
+    }
+    
+    // Check if current user is admin
+    if (currentGroupContext.admin !== username) {
+        showNotification('Only admin can transfer admin rights', 'error');
+        return;
+    }
+    
+    console.log(`👑 Transferring admin to: ${newAdmin}`);
+    
+    // Update persistent groups
+    if (persistentGroups[currentGroupContext.id]) {
+        persistentGroups[currentGroupContext.id].admin = newAdmin;
+        saveGroupsToLocalStorage();
+    }
+    
+    currentGroupContext.admin = newAdmin;
+    showNotification(`Admin transferred to ${newAdmin}`, 'success');
+    closeGroupSettings();
+}
+
+function kickUser() {
+    const userToKick = document.getElementById('kickUserSelect').value;
+    if (!userToKick) {
+        showNotification('Please select a user to kick', 'error');
+        return;
+    }
+    
+    // Check if current user is admin
+    if (currentGroupContext.admin !== username) {
+        showNotification('Only admin can kick users', 'error');
+        return;
+    }
+    
+    if (!confirm(`Kick ${userToKick} from the group?`)) {
+        return;
+    }
+    
+    console.log(`🚫 Kicking user: ${userToKick}`);
+    
+    // Remove from members
+    const index = currentGroupContext.members.indexOf(userToKick);
+    if (index > -1) {
+        currentGroupContext.members.splice(index, 1);
+    }
+    
+    // Update persistent groups
+    if (persistentGroups[currentGroupContext.id]) {
+        persistentGroups[currentGroupContext.id].members = currentGroupContext.members;
+        saveGroupsToLocalStorage();
+    }
+    
+    showNotification(`${userToKick} has been kicked from the group`, 'success');
+    closeGroupSettings();
+}
+
+function leaveGroup() {
+    if (!confirm(`Leave "${currentGroupContext.name}"?`)) {
+        return;
+    }
+    
+    console.log(`🚪 Leaving group: ${currentGroupContext.name}`);
+    
+    // Remove from persistent groups
+    delete persistentGroups[currentGroupContext.id];
+    saveGroupsToLocalStorage();
+    
+    // Remove from chat histories
+    delete chatHistories.group[currentGroupContext.id];
+    
+    // Remove from UI
+    const groupItem = document.querySelector(`.chat-item[data-group-id="${currentGroupContext.id}"]`);
+    if (groupItem) {
+        groupItem.remove();
+    }
+    
+    // If this was the current chat, switch to global
+    if (currentChatType === 'group' && currentChatTarget === currentGroupContext.id) {
+        globalNetworkItem.click();
+    }
+    
+    showNotification(`Left "${currentGroupContext.name}"`, 'success');
+    updateGroupsList();
+}
+
+function deleteGroup() {
+    // Check if current user is admin
+    if (currentGroupContext.admin !== username) {
+        showNotification('Only admin can delete the group', 'error');
+        return;
+    }
+    
+    if (!confirm(`Delete "${currentGroupContext.name}"? This action cannot be undone.`)) {
+        return;
+    }
+    
+    console.log(`🗑️ Deleting group: ${currentGroupContext.name}`);
+    
+    // Remove from persistent groups
+    delete persistentGroups[currentGroupContext.id];
+    saveGroupsToLocalStorage();
+    
+    // Remove from chat histories
+    delete chatHistories.group[currentGroupContext.id];
+    
+    // Remove from UI
+    const groupItem = document.querySelector(`.chat-item[data-group-id="${currentGroupContext.id}"]`);
+    if (groupItem) {
+        groupItem.remove();
+    }
+    
+    // If this was the current chat, switch to global
+    if (currentChatType === 'group' && currentChatTarget === currentGroupContext.id) {
+        globalNetworkItem.click();
+    }
+    
+    showNotification(`Group "${currentGroupContext.name}" deleted`, 'success');
+    updateGroupsList();
+}
+
 // Context menu action implementations
 function archiveChat(user) {
-    if (confirm(`Archive chat with ${user}?`)) {
-        // Store archived state
-        const chatKey = Object.keys(chatHistories.private).find(key => 
-            key.includes(user) && key.includes(username)
-        );
+    console.log(`📦 archiveChat called for user: ${user}`);
+    console.log(`📊 Current username: ${username}`);
+    console.log(`📊 Private chat keys: ${Object.keys(chatHistories.private)}`);
+    
+    const confirmed = confirm(`Archive chat with ${user}?`);
+    console.log(`🔔 Confirm dialog result: ${confirmed}`);
+    
+    if (confirmed) {
+        // Find the correct chat key - handle different formats
+        const chatKey = Object.keys(chatHistories.private).find(key => {
+            // Handle simple username keys (e.g., "hi")
+            if (key === user) return true;
+            
+            // Handle combined keys (e.g., "hi_hello", "hello_hi", "['hi','hello']")
+            const lowerKey = key.toLowerCase();
+            const lowerUser = user.toLowerCase();
+            const lowerUsername = username.toLowerCase();
+            
+            return (lowerKey.includes(lowerUser) && lowerKey.includes(lowerUsername));
+        });
+        
+        console.log(`🔍 Found chat key: ${chatKey}`);
         
         if (chatKey) {
+            console.log(`📦 ARCHIVING: ${user} - FAST MODE`);
+            
+            // Store chat history in archived state but keep it intact
+            const chatHistory = chatHistories.private[chatKey];
+            localStorage.setItem(`archived_chat_${chatKey}`, JSON.stringify(chatHistory));
             localStorage.setItem(`archived_${chatKey}`, 'true');
-            // Hide the chat item
+            
+            // Remove from active chat histories
+            delete chatHistories.private[chatKey];
+            
+            // FAST: Remove chat item from UI immediately
             const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
             if (chatItem) {
-                chatItem.style.opacity = '0.5';
+                chatItem.remove();
+                console.log(`✅ FAST: Removed ${user} from private chats`);
             }
+            
+            // If this was the current chat, switch to global
+            if (currentChatType === 'private' && currentChatTarget === user) {
+                globalNetworkItem.click();
+            }
+            
+            // FAST: Direct DOM manipulation - no list refresh
+            const usersList = document.getElementById('usersList');
+            const activeUsersList = document.getElementById('activeUsersList');
+            const activeUsersSection = document.getElementById('activeUsersSection');
+            const activeUsersCount = document.getElementById('activeUsersCount');
+            
+            console.log(`📊 ARCHIVE: allUsers = ${JSON.stringify(allUsers)}, checking ${user}`);
+            const isUserOnline = allUsers && allUsers.includes(user);
+            console.log(`🔍 ARCHIVE: Is ${user} online? ${isUserOnline}`);
+            
+            // If user is online, move them back to active section FAST
+            if (isUserOnline) {
+                console.log(`✅ ARCHIVE: User ${user} is ONLINE, moving to active`);
+                
+                // Check if not already in active list
+                if (!document.querySelector(`.active-user-item[data-user="${user}"]`)) {
+                    // Show active users section
+                    activeUsersSection.style.display = 'block';
+                    
+                    // Create and add user item
+                    const userItem = document.createElement('div');
+                    userItem.className = 'active-user-item';
+                    userItem.dataset.user = user;
+                    userItem.onclick = () => switchToPrivateChat(user);
+                    
+                    userItem.innerHTML = `
+                        <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
+                        <div class="active-user-info">
+                            <div class="active-user-name">${user}</div>
+                            <div class="active-user-status">Online</div>
+                        </div>
+                    `;
+                    
+                    activeUsersList.appendChild(userItem);
+                    activeUsersCount.textContent = activeUsersList.children.length;
+                    console.log(`✅ ARCHIVE: Added ${user} to active users`);
+                }
+            } else {
+                console.log(`❌ ARCHIVE: User ${user} is OFFLINE`);
+            }
+            
+            // FAST: Show "no users" message if empty
+            if (usersList.children.length === 0) {
+                const noUsersMsg = document.getElementById('noUsersMsg');
+                if (noUsersMsg) {
+                    noUsersMsg.style.display = 'block';
+                }
+            }
+            
             showNotification(`Chat with ${user} archived`, 'success');
         }
     }
 }
 
 function deleteChat(user) {
-    if (confirm(`Delete chat with ${user}? This action cannot be undone.`)) {
-        // Find the correct chat key
-        const chatKey = Object.keys(chatHistories.private).find(key => 
-            key.includes(user) && key.includes(username)
-        );
+    console.log(`🗑️ deleteChat called for user: ${user}`);
+    console.log(`📊 Current username: ${username}`);
+    console.log(`📊 Private chat keys: ${Object.keys(chatHistories.private)}`);
+    
+    const confirmed = confirm(`Delete chat with ${user}? This action cannot be undone.`);
+    console.log(`🔔 Confirm dialog result: ${confirmed}`);
+    
+    if (confirmed) {
+        // Find the correct chat key - handle different formats
+        const chatKey = Object.keys(chatHistories.private).find(key => {
+            // Handle simple username keys (e.g., "hi")
+            if (key === user) return true;
+            
+            // Handle combined keys (e.g., "hi_hello", "hello_hi", "['hi','hello']")
+            const lowerKey = key.toLowerCase();
+            const lowerUser = user.toLowerCase();
+            const lowerUsername = username.toLowerCase();
+            
+            return (lowerKey.includes(lowerUser) && lowerKey.includes(lowerUsername));
+        });
+        
+        console.log(`🔍 Found chat key: ${chatKey}`);
         
         if (chatKey) {
+            console.log(`🗑️ DELETING: ${user} - FAST MODE`);
+            
+            // Delete chat history from server JSON file
+            console.log(`🗄️ Deleting chat history from server for key: ${chatKey}`);
+            eel.delete_private_chat(chatKey)().then(() => {
+                console.log(`✅ Server confirmed deletion of chat: ${chatKey}`);
+            }).catch(err => {
+                console.error(`❌ Failed to delete from server: ${err}`);
+            });
+            
+            // Delete chat history from frontend
             delete chatHistories.private[chatKey];
-            // Remove from localStorage
+            
+            // Remove all related localStorage entries
             localStorage.removeItem(`archived_${chatKey}`);
-            // Remove chat item from UI
+            localStorage.removeItem(`archived_chat_${chatKey}`);
+            
+            // FAST: Remove chat item from UI immediately
             const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
             if (chatItem) {
                 chatItem.remove();
+                console.log(`✅ FAST: Removed ${user} from private chats`);
             }
+            
             // If this was the current chat, switch to global
             if (currentChatType === 'private' && currentChatTarget === user) {
                 globalNetworkItem.click();
             }
+            
+            // FAST: Direct DOM manipulation - no list refresh
+            const usersList = document.getElementById('usersList');
+            const activeUsersList = document.getElementById('activeUsersList');
+            const activeUsersSection = document.getElementById('activeUsersSection');
+            const activeUsersCount = document.getElementById('activeUsersCount');
+            
+            console.log(`📊 DELETE: allUsers = ${JSON.stringify(allUsers)}, checking ${user}`);
+            const isUserOnline = allUsers && allUsers.includes(user);
+            console.log(`🔍 DELETE: Is ${user} online? ${isUserOnline}`);
+            
+            // If user is online, move them back to active section FAST
+            if (isUserOnline) {
+                console.log(`✅ DELETE: User ${user} is ONLINE, moving to active`);
+                
+                // Check if not already in active list
+                if (!document.querySelector(`.active-user-item[data-user="${user}"]`)) {
+                    // Show active users section
+                    activeUsersSection.style.display = 'block';
+                    
+                    // Create and add user item
+                    const userItem = document.createElement('div');
+                    userItem.className = 'active-user-item';
+                    userItem.dataset.user = user;
+                    userItem.onclick = () => switchToPrivateChat(user);
+                    
+                    userItem.innerHTML = `
+                        <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
+                        <div class="active-user-info">
+                            <div class="active-user-name">${user}</div>
+                            <div class="active-user-status">Online</div>
+                        </div>
+                    `;
+                    
+                    activeUsersList.appendChild(userItem);
+                    activeUsersCount.textContent = activeUsersList.children.length;
+                    console.log(`✅ DELETE: Added ${user} to active users`);
+                }
+            } else {
+                console.log(`❌ DELETE: User ${user} is OFFLINE`);
+            }
+            
+            // FAST: Show "no users" message if empty
+            if (usersList.children.length === 0) {
+                const noUsersMsg = document.getElementById('noUsersMsg');
+                if (noUsersMsg) {
+                    noUsersMsg.style.display = 'block';
+                }
+            }
+            
             showNotification(`Chat with ${user} deleted`, 'success');
         }
     }
 }
 
 function replyToMessage(messageElement) {
+    console.log('🎯 Reply to message called!', messageElement);
+    
     const messageBubble = messageElement.querySelector('.message-bubble');
-    if (!messageBubble) return;
+    if (!messageBubble) {
+        console.log('❌ No message bubble found');
+        return;
+    }
     
     // Get message content, handling different message types
     let messageText = '';
@@ -2965,7 +3754,12 @@ function replyToMessage(messageElement) {
     const sender = messageElement.dataset.sender || messageElement.querySelector('.message-sender')?.textContent || 'User';
     const messageId = messageElement.dataset.messageId;
     
-    if (!messageText || !messageId) return;
+    console.log('📋 Reply details:', { messageText, sender, messageId });
+    
+    if (!messageText || !messageId) {
+        console.log('❌ Missing messageText or messageId');
+        return;
+    }
     
     // Create reply preview
     const replyPreview = document.createElement('div');
@@ -3430,6 +4224,104 @@ function insertEmoji(emoji) {
 }
 
 // ===== SEARCH FUNCTIONALITY =====
+function searchUsersAndMessages(query) {
+    if (!query.trim()) {
+        clearSearch();
+        return;
+    }
+    
+    // Search and reorder users
+    searchAndReorderUsers(query);
+    
+    // If in a chat, also search messages
+    if (currentChatType !== 'global') {
+        searchMessages(query);
+    }
+}
+
+function searchAndReorderUsers(query) {
+    const lowerQuery = query.toLowerCase();
+    
+    // Get current theme for highlight color
+    const currentTheme = document.body.className || 'default';
+    let highlightColor;
+    if (currentTheme.includes('theme-red')) {
+        highlightColor = 'rgba(198, 40, 40, 0.2)'; // Red theme
+    } else if (currentTheme.includes('theme-alt')) {
+        highlightColor = 'rgba(198, 40, 40, 0.2)'; // Alt theme (also red)
+    } else {
+        highlightColor = 'rgba(0, 184, 212, 0.2)'; // Default cyan theme
+    }
+    
+    // Search active users
+    const activeUsersList = document.getElementById('activeUsersList');
+    const activeUsers = Array.from(activeUsersList.children);
+    const matchingActiveUsers = [];
+    const nonMatchingActiveUsers = [];
+    
+    activeUsers.forEach(userItem => {
+        const userName = userItem.dataset.user.toLowerCase();
+        if (userName.includes(lowerQuery)) {
+            userItem.style.background = highlightColor;
+            matchingActiveUsers.push(userItem);
+        } else {
+            userItem.style.background = '';
+            nonMatchingActiveUsers.push(userItem);
+        }
+    });
+    
+    // Reorder active users: matching first
+    activeUsersList.innerHTML = '';
+    [...matchingActiveUsers, ...nonMatchingActiveUsers].forEach(item => {
+        activeUsersList.appendChild(item);
+    });
+    
+    // Search private chat users
+    const usersList = document.getElementById('usersList');
+    const chatUsers = Array.from(usersList.children);
+    const matchingChatUsers = [];
+    const nonMatchingChatUsers = [];
+    
+    chatUsers.forEach(userItem => {
+        const userName = userItem.dataset.user?.toLowerCase() || '';
+        if (userName.includes(lowerQuery)) {
+            userItem.style.background = highlightColor;
+            matchingChatUsers.push(userItem);
+        } else {
+            userItem.style.background = '';
+            nonMatchingChatUsers.push(userItem);
+        }
+    });
+    
+    // Reorder chat users: matching first
+    usersList.innerHTML = '';
+    [...matchingChatUsers, ...nonMatchingChatUsers].forEach(item => {
+        usersList.appendChild(item);
+    });
+}
+
+function clearSearch() {
+    // Remove highlights from active users
+    const activeUsers = document.querySelectorAll('.active-user-item');
+    activeUsers.forEach(item => {
+        item.style.background = '';
+    });
+    
+    // Remove highlights from chat users
+    const chatUsers = document.querySelectorAll('.chat-item');
+    chatUsers.forEach(item => {
+        item.style.background = '';
+    });
+    
+    // Restore original order by refreshing user lists
+    updateUsersList(allUsers);
+    
+    // If in a chat, restore original messages
+    if (currentChatType !== 'global') {
+        renderCurrentChat();
+    }
+}
+
 function searchMessages(query) {
     if (!query.trim()) {
         renderCurrentChat();
@@ -3510,6 +4402,44 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Connect group settings header button
+    const groupSettingsHeaderBtn = document.getElementById('groupSettingsHeaderBtn');
+    if (groupSettingsHeaderBtn) {
+        console.log('✅ Group settings button found, adding listener');
+        groupSettingsHeaderBtn.addEventListener('click', (e) => {
+            console.log('🎯 GROUP SETTINGS BUTTON CLICKED!');
+            console.log(`Current chat type: ${currentChatType}`);
+            console.log(`Current chat target: ${currentChatTarget}`);
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (currentChatType === 'group' && currentChatTarget) {
+                // Get group info from persistentGroups
+                const groupInfo = persistentGroups[currentChatTarget];
+                console.log('Group info:', groupInfo);
+                
+                if (groupInfo) {
+                    // Set current group context for settings
+                    currentGroupContext = {
+                        id: currentChatTarget,
+                        name: groupInfo.name,
+                        members: groupInfo.members || [],
+                        admin: groupInfo.admin || groupInfo.created_by || username
+                    };
+                    console.log('Opening group settings modal...');
+                    openGroupSettings();
+                } else {
+                    console.error('❌ Group info not found in persistentGroups');
+                }
+            } else {
+                console.warn('⚠️ Not in group chat or no target');
+            }
+        });
+    } else {
+        console.error('❌ Group settings button not found!');
+    }
+    
     // Add keyboard shortcut for refresh (Ctrl+R)
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
@@ -3566,19 +4496,34 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
-            searchMessages(e.target.value);
+            const query = e.target.value.trim();
+            if (query) {
+                searchUsersAndMessages(query);
+            } else {
+                clearSearch();
+            }
         });
         
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                searchMessages(e.target.value);
+                const query = e.target.value.trim();
+                if (query) {
+                    searchUsersAndMessages(query);
+                } else {
+                    clearSearch();
+                }
             }
         });
     }
     
     if (searchBtn) {
         searchBtn.addEventListener('click', () => {
-            searchMessages(searchInput.value);
+            const query = searchInput.value.trim();
+            if (query) {
+                searchUsersAndMessages(query);
+            } else {
+                clearSearch();
+            }
         });
     }
     

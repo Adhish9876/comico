@@ -112,6 +112,46 @@ class Storage:
                     return True
         return False
 
+    def delete_private_chat(self, chat_key: str) -> bool:
+        """Delete entire private chat history"""
+        try:
+            # Handle different key formats
+            if '_' in chat_key:
+                # Format: "user1_user2"
+                users = chat_key.split('_')
+                if len(users) == 2:
+                    key = tuple(sorted(users))
+                else:
+                    # Try as single username (chat_key is just the username)
+                    # Find any chat involving this user
+                    for k in list(self.private_chats.keys()):
+                        if chat_key in k:
+                            del self.private_chats[k]
+                            self.save_private_chats()
+                            print(f"✅ Deleted private chat: {k}")
+                            return True
+                    return False
+            else:
+                # Single username - find and delete chat
+                for k in list(self.private_chats.keys()):
+                    if chat_key in k:
+                        del self.private_chats[k]
+                        self.save_private_chats()
+                        print(f"✅ Deleted private chat: {k}")
+                        return True
+                return False
+            
+            # Delete the chat if key exists
+            if key in self.private_chats:
+                del self.private_chats[key]
+                self.save_private_chats()
+                print(f"✅ Deleted private chat: {key}")
+                return True
+            return False
+        except Exception as e:
+            print(f"❌ Error deleting private chat: {e}")
+            return False
+
     def save_private_chats(self) -> None:
         """Save all private chats"""
         try:

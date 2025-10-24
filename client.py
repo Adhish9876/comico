@@ -579,6 +579,22 @@ def delete_message(message_id: str, chat_type: str, chat_target: str = None):
         print(f"Delete message error: {e}")
         return {'success': False, 'message': str(e)}
 
+@eel.expose
+def delete_private_chat(chat_key: str):
+    """Delete entire private chat history from server"""
+    try:
+        from storage import storage
+        result = storage.delete_private_chat(chat_key)
+        if result:
+            print(f"[CLIENT] Deleted private chat: {chat_key}")
+            return {'success': True}
+        else:
+            print(f"[CLIENT] Failed to delete private chat: {chat_key}")
+            return {'success': False, 'message': 'Chat not found'}
+    except Exception as e:
+        print(f"[CLIENT] Error deleting private chat: {e}")
+        return {'success': False, 'message': str(e)}
+
 # Start the Eel app
 if __name__ == '__main__':
     import sys

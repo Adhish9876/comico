@@ -362,6 +362,19 @@ body {
     border: 3px solid var(--border-main);
     border-radius: 12px;
     background: var(--bg-card);
+    margin-bottom: 15px;
+    position: relative;
+}
+
+.global-network-item::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 1px;
 }
 
 .global-network-item:hover {
@@ -523,6 +536,12 @@ body {
     display: flex;
     align-items: center;
     gap: 16px; /* increased gap between icon and text */
+}
+
+.chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .chat-header-avatar {
@@ -1823,6 +1842,162 @@ textarea {
     color: var(--accent-cyan);
 }
 
+/* ===== ACTIVE USERS SECTION ===== */
+.active-users-section {
+    border-bottom: 1px solid var(--border-main);
+    background: var(--bg-panel);
+    max-height: 280px; /* Fixed height: header + 3 users */
+    overflow: hidden;
+}
+
+.active-users-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: rgba(198, 40, 40, 0.1);
+    border-bottom: 1px solid rgba(198, 40, 40, 0.3);
+    flex-shrink: 0;
+}
+
+.active-users-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #c62828;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.active-users-count {
+    background: #c62828;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.active-users-list {
+    max-height: 240px; /* ~3 users (80px each) */
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Themed Scrollbar for Active Users */
+.active-users-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.active-users-list::-webkit-scrollbar-track {
+    background: var(--bg-deep);
+    border-radius: 3px;
+}
+
+.active-users-list::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #c62828, #9c27b0);
+    border-radius: 3px;
+    transition: background 0.2s ease;
+}
+
+.active-users-list::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #e74c3c, #c62828);
+}
+
+/* Active User Item */
+.active-user-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+}
+
+.active-user-item:hover {
+    background: rgba(198, 40, 40, 0.1);
+    transform: translateX(3px);
+}
+
+.active-user-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 3px;
+    background: #c62828;
+    transform: scaleY(0);
+    transition: transform 0.2s ease;
+}
+
+.active-user-item:hover::before {
+    transform: scaleY(1);
+}
+
+.active-user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--accent-cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: #000000;
+    margin-right: 12px;
+    position: relative;
+    border: 2px solid #000000;
+    flex-shrink: 0;
+}
+
+.active-user-avatar::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 10px;
+    height: 10px;
+    background: #2ecc71;
+    border: 2px solid var(--bg-panel);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+.active-user-info {
+    flex: 1;
+}
+
+.active-user-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-normal);
+    margin-bottom: 2px;
+}
+
+.active-user-status {
+    font-size: 11px;
+    color: #2ecc71;
+    font-weight: 500;
+}
+
+
 /* ===== EMOJI PICKER ===== */
 .emoji-picker {
     position: fixed;
@@ -1923,7 +2098,7 @@ textarea {
 
 .reply-preview {
     background: var(--bg-card);
-    border-left: 3px solid var(--accent-cyan);
+    border-left: 3px solid #c62828;
     border-radius: 4px;
     padding: 10px 12px;
     position: relative;
@@ -1946,7 +2121,7 @@ textarea {
 .reply-sender {
     font-size: 12px;
     font-weight: 600;
-    color: var(--accent-cyan);
+    color: #c62828;
     display: flex;
     align-items: center;
     gap: 5px;
@@ -1991,7 +2166,7 @@ textarea {
 /* Message reply indicator */
 .message-reply {
     font-size: 11px;
-    color: var(--accent-cyan);
+    color: #c62828;
     margin-bottom: 2px;
     display: flex;
     align-items: center;
@@ -2006,11 +2181,25 @@ textarea {
 
 /* WhatsApp-style reply quote */
 .reply-quote {
+    background: rgba(198, 40, 40, 0.2) !important;
+    border-left: 4px solid #c62828 !important;
+    padding: 8px 10px !important;
+    margin-bottom: 6px !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
     transition: background-color 0.2s ease;
 }
 
+.reply-quote div {
+    color: white !important;
+    margin-bottom: 3px !important;
+}
+
 .reply-quote:hover {
-    background: rgba(0, 150, 136, 0.25) !important;
+    background: rgba(198, 40, 40, 0.3) !important;
 }
 
 .message:not(.own) .reply-quote:hover {
