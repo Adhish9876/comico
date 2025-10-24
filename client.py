@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 client_eel.py - Eel-based Client with Extraordinary Sleek Dark UI
+Updated for hotspot networking with correct server IP
 """
 
 import eel
@@ -452,9 +453,14 @@ def start_video_call(chat_type, chat_id):
             session_name = f'Group Video Call - {chat_id}'
         else:
             session_name = 'Video Call'
-        
+        #print chat_id
+        print(f"[CLIENT] Chat ID: {chat_id}")
+        #print session_name
+        print(f"[CLIENT] Session Name: {session_name}")
+        #print chat_type
+        print(f"[CLIENT] Chat Type: {chat_type}")
         # Call video server API to create session with chat_id
-        response = requests.post('http://10.200.14.204:5000/api/create_session', json={
+        response = requests.post('http://192.168.137.175:5000/api/create_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,
