@@ -288,9 +288,70 @@ if __name__ == '__main__':
     
     if not os.path.exists(cert_file) or not os.path.exists(key_file):
         print("[VIDEO SERVER] Generating self-signed certificate...")
-        os.system(f'openssl req -x509 -newkey rsa:4096 -nodes -out {cert_file} -keyout {key_file} -days 365 -subj "/CN=10.200.14.204"')
-        print("[VIDEO SERVER] Certificate generated successfully\n")
+        try:
+            from cryptography import x509
+            from cryptography.x509.oid import NameOID
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives.asymmetric import rsa
+            from cryptography.hazmat.primitives import serialization
+            from datetime import datetime, timedelta
+            import ipaddress
+            
+            # Generate private key
+            private_key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=2048,
+                backend=default_backend()
+            )
+            
+            # Generate certificate
+            subject = issuer = x509.Name([
+                x509.NameAttribute(NameOID.COMMON_NAME, u"10.200.14.204"),
+            ])
+            
+            cert = x509.CertificateBuilder().subject_name(
+                subject
+            ).issuer_name(
+                issuer
+            ).public_key(
+                private_key.public_key()
+            ).serial_number(
+                x509.random_serial_number()
+            ).not_valid_before(
+                datetime.utcnow()
+            ).not_valid_after(
+                datetime.utcnow() + timedelta(days=365)
+            ).add_extension(
+                x509.SubjectAlternativeName([
+                    x509.IPAddress(ipaddress.IPv4Address("10.200.14.204")),
+                    x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+                ]),
+                critical=False,
+            ).sign(private_key, hashes.SHA256(), default_backend())
+            
+            # Write certificate
+            with open(cert_file, "wb") as f:
+                f.write(cert.public_bytes(serialization.Encoding.PEM))
+            
+            # Write private key
+            with open(key_file, "wb") as f:
+                f.write(private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.TraditionalOpenSSL,
+                    encryption_algorithm=serialization.NoEncryption()
+                ))
+            
+            print("[VIDEO SERVER] Certificate generated successfully\n")
+        except ImportError:
+            print("[VIDEO SERVER] Installing cryptography library...")
+            os.system("pip install cryptography")
+            print("[VIDEO SERVER] Please run the server again after installation\n")
+            exit(1)
     
-    # Run with HTTPS
+    # Run with HTTPS using SSL context
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_context.load_cert_chain(cert_file, key_file)
+    
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True, 
-                 ssl_context=(cert_file, key_file))
+                 ssl_context=ssl_context)
