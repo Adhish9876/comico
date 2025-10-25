@@ -352,7 +352,12 @@ function setupPasswordToggle(toggleBtn, passwordInput) {
 
 // Check device registration on page load
 window.addEventListener('DOMContentLoaded', async () => {
-    console.log('[AUTH] Checking device registration...');
+    console.log('[AUTH] Starting app with splash screen...');
+    
+    // Force default cyan/pink theme on app launch
+    document.body.classList.remove('theme-alt');
+    localStorage.setItem('theme', 'default');
+    console.log('[AUTH] Forced default cyan/pink theme on launch');
     
     // Setup password toggle buttons
     const signupPasswordToggle = document.getElementById('signupPasswordToggle');
@@ -360,34 +365,59 @@ window.addEventListener('DOMContentLoaded', async () => {
     setupPasswordToggle(signupPasswordToggle, signupPasswordInput);
     setupPasswordToggle(loginPasswordToggle, loginPasswordInput);
     
-    if (typeof eel === 'undefined') {
-        console.log('[AUTH] Eel not available, showing signup screen');
-        return;
-    }
+    const splashScreen = document.getElementById('splashScreen');
+    const signupScreen = document.getElementById('signupScreen');
+    const loginScreen = document.getElementById('loginScreen');
     
-    try {
-        const result = await eel.check_device_registration()();
-        console.log('[AUTH] Registration check result:', result);
+    // Show splash screen briefly, then check registration
+    setTimeout(() => {
+        console.log('[AUTH] Logo spinning...');
+        // Logo spins fast for visual effect
+    }, 200);
+    
+    // After 1.2s total, check registration and transition (faster)
+    setTimeout(async () => {
+        console.log('[AUTH] Checking device registration...');
         
-        if (result.is_registered && result.username) {
-            // Device is registered, show login screen
-            console.log('[AUTH] Device registered, showing login screen');
-            loginUsername.textContent = result.username;
-            username = result.username; // Store username globally
-            
-            spinLogo(signupScreen);
-            setTimeout(() => {
-                signupScreen.classList.remove('active');
-                loginScreen.classList.add('active');
-                spinLogo(loginScreen);
-            }, 1000);
+        let targetScreen = signupScreen; // Default to signup
+        
+        if (typeof eel !== 'undefined') {
+            try {
+                const result = await eel.check_device_registration()();
+                console.log('[AUTH] Registration check result:', result);
+                
+                if (result.is_registered && result.username) {
+                    // Device is registered, show login screen
+                    console.log('[AUTH] Device registered, will show login screen');
+                    loginUsername.textContent = result.username;
+                    username = result.username; // Store username globally
+                    targetScreen = loginScreen;
+                } else {
+                    // Device not registered, show signup screen
+                    console.log('[AUTH] Device not registered, will show signup screen');
+                    targetScreen = signupScreen;
+                }
+            } catch (error) {
+                console.error('[AUTH] Error checking registration:', error);
+                // Default to signup on error
+                targetScreen = signupScreen;
+            }
         } else {
-            // Device not registered, stay on signup screen
-            console.log('[AUTH] Device not registered, showing signup screen');
+            console.log('[AUTH] Eel not available, showing signup screen');
+            targetScreen = signupScreen;
         }
-    } catch (error) {
-        console.error('[AUTH] Error checking registration:', error);
-    }
+        
+        // Fade out splash screen
+        splashScreen.classList.add('fade-out');
+        
+        // After fade out completes, show target screen
+        setTimeout(() => {
+            splashScreen.classList.remove('active', 'fade-out');
+            targetScreen.classList.add('active');
+            console.log('[AUTH] Transitioned to target screen');
+        }, 300); // Match faster fade-out animation
+        
+    }, 1200); // Total time: faster at 1.2s
 });
 
 // Signup button handler
