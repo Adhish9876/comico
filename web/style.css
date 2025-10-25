@@ -905,6 +905,7 @@ body {
     background: var(--bg-deep);
     min-width: 0;
     overflow: hidden;
+    position: relative; /* Allow absolute positioning of children */
 }
 
 .chat-header {
@@ -1017,8 +1018,10 @@ body {
 
 .message {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     max-width: 70%;
+    align-content: flex-start;
 }
 
 .message.own {
@@ -1037,13 +1040,14 @@ body {
     flex-shrink: 0;
     font-size: 16px;
     border: 2px solid #000000;
+    flex-basis: auto;
 }
 
 .message-content {
-    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 5px;
+    flex-basis: auto;
 }
 
 .message-header {
@@ -2441,7 +2445,7 @@ textarea {
 
 /* ===== AUDIO PREVIEW MODAL ===== */
 .audio-preview-modal {
-    position: fixed;
+    position: absolute;
     bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
@@ -2564,41 +2568,31 @@ textarea {
 /* ===== EMOJI PICKER ===== */
 .emoji-picker {
     position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     background: var(--bg-card);
-    border: 1px solid var(--border-main);
+    border: 3px solid var(--border-main);
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
-    width: 400px;
-    max-height: 500px;
-    display: none !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    min-width: 280px;
+    max-height: 250px;
+    display: none;
     flex-direction: column;
-    pointer-events: none;
-    visibility: hidden;
-    opacity: 0;
-}
-
-.emoji-picker.show {
-    display: flex !important;
-    pointer-events: auto;
-    visibility: visible;
-    opacity: 1;
 }
 
 .emoji-picker-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-    padding: 15px 20px;
-    border-bottom: 1px solid var(--border-main);
-}
-
-.emoji-picker-header span {
-    font-weight: 600;
-    color: var(--text-normal);
+    padding: 12px 16px;
+    border-bottom: 2px solid var(--border-main);
+    background: var(--bg-deep);
+    border-radius: 12px 12px 0 0;
+    font-family: 'Comic Neue', cursive;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-bright);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .close-emoji-btn {
@@ -2617,9 +2611,12 @@ textarea {
 }
 
 .emoji-grid {
-    padding: 15px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    padding: 16px;
     overflow-y: auto;
-    max-height: 400px;
+    max-height: 180px;
 }
 
 .emoji-category {
@@ -2659,10 +2656,9 @@ textarea {
 .reply-container {
     display: none;
     background: var(--bg-deep);
-    border-bottom: 1px solid var(--border-main);
-    padding: 10px 15px;
-    position: relative;
-    transition: all 0.3s ease;
+    border-bottom: 2px solid var(--border-main);
+    padding: 12px 16px;
+    z-index: 10;
 }
 
 .reply-preview {
@@ -3223,4 +3219,237 @@ textarea {
         opacity: 0;
         pointer-events: none;
     }
+}
+
+/* ===== EMOJI REACTIONS ===== */
+.emoji-reaction-picker {
+    position: fixed;
+    background: var(--bg-card);
+    border: 3px solid var(--border-main);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    min-width: 280px;
+    max-height: 250px;
+    display: none;
+    flex-direction: column;
+}
+
+.emoji-option {
+    font-size: 32px;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: inline-block;
+    user-select: none;
+}
+
+.emoji-option:hover {
+    background: var(--bg-deep);
+    transform: scale(1.2);
+}
+
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    padding: 16px;
+}
+
+.message-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+    margin-left: 52px;
+    padding: 0;
+    width: 100%;
+    clear: both;
+    flex-basis: 100%;
+}
+
+.message.own .message-reactions {
+    margin-right: 52px;
+    margin-left: 0;
+    justify-content: flex-end;
+}
+
+.reaction-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: transparent;
+    border: none;
+    padding: 2px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    user-select: none;
+}
+
+.reaction-item:hover {
+    transform: scale(1.2);
+}
+
+.reaction-item.own-reaction .reaction-emoji {
+    filter: drop-shadow(0 0 4px rgba(0, 184, 212, 0.8));
+}
+
+.reaction-emoji {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.reaction-count {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-normal);
+    min-width: 8px;
+    text-align: center;
+    font-family: 'Comic Neue', cursive;
+}
+
+/* ===== PINNED MESSAGES BAR ===== */
+.pinned-messages-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(135deg, rgba(198, 40, 40, 0.95), rgba(156, 39, 176, 0.95));
+    border-bottom: 3px solid var(--border-main);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    animation: slideDown 0.3s ease-out;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.pinned-messages-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    cursor: pointer;
+    color: white;
+}
+
+.pinned-message-text {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: 'Comic Neue', cursive;
+}
+
+.pinned-message-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: white;
+    flex-shrink: 0;
+}
+
+.pinned-message-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+/* Adjust chat area when pinned bar is shown */
+.chat-area.has-pinned-bar .messages-container {
+    height: calc(100% - 100px); /* Adjust for pinned bar */
+}
+
+/* ===== IMAGE MESSAGES ===== */
+.image-message {
+    position: relative;
+    max-width: 300px;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: transform 0.2s ease;
+}
+
+.image-message:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.image-message img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 12px;
+}
+
+.image-message::after {
+    content: '🔍 Click to enlarge';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+    color: white;
+    padding: 8px;
+    font-size: 12px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.image-message:hover::after {
+    opacity: 1;
+}
+
+/* ===== EMOJI REACTION MODAL ===== */
+.emoji-reaction-modal-overlay {
+    animation: fadeIn 0.2s ease !important;
+}
+
+.emoji-reaction-modal {
+    animation: scaleIn 0.3s ease !important;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Custom scrollbar for modal users list */
+.emoji-reaction-modal ::-webkit-scrollbar {
+    width: 8px;
+}
+
+.emoji-reaction-modal ::-webkit-scrollbar-track {
+    background: rgba(0, 184, 212, 0.1);
+    border-radius: 4px;
+}
+
+.emoji-reaction-modal ::-webkit-scrollbar-thumb {
+    background: rgba(0, 184, 212, 0.4);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.emoji-reaction-modal ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 184, 212, 0.6);
 }
