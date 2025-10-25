@@ -345,6 +345,7 @@ class CollaborationServer:
             'request_chat_history': self._handle_chat_history_request,
             'file_share': self._handle_global_file_share,
             'audio_share': self._handle_global_audio_share,
+            'audio_message': self._handle_global_audio_share,  # Handle audio_message same as audio_share
             'video_invite': self._handle_video_invite,
             'video_invite_private': self._handle_video_invite_private,
             'video_invite_group': self._handle_video_invite_group,

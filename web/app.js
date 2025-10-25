@@ -6,12 +6,50 @@ let username = '';
 let recentChats = [];
 let allUsers = [];
 
-// Store all chat histories locally
+// Store all chat histories locally with localStorage persistence
 const chatHistories = {
-    global: [],
-    private: {},  // username -> messages[]
-    group: {}     // groupId -> messages[]
+    global: JSON.parse(localStorage.getItem('chatHistories_global') || '[]'),
+    private: JSON.parse(localStorage.getItem('chatHistories_private') || '{}'),
+    group: JSON.parse(localStorage.getItem('chatHistories_group') || '{}')
 };
+
+// Log loaded messages on startup
+console.log('🔄 Loaded from localStorage:', {
+    globalMessages: chatHistories.global.length,
+    privateChats: Object.keys(chatHistories.private).length,
+    groupChats: Object.keys(chatHistories.group).length
+});
+
+// Test localStorage functionality
+try {
+    localStorage.setItem('test', 'working');
+    const test = localStorage.getItem('test');
+    if (test === 'working') {
+        console.log('✅ localStorage is working');
+        localStorage.removeItem('test');
+    } else {
+        console.log('❌ localStorage test failed');
+    }
+} catch (e) {
+    console.log('❌ localStorage error:', e);
+}
+
+// Function to save chat histories to localStorage
+function saveChatHistoriesToStorage() {
+    try {
+        // Keep only the last 500 messages for global chat to prevent localStorage from growing too large
+        if (chatHistories.global.length > 500) {
+            chatHistories.global = chatHistories.global.slice(-500);
+        }
+        
+        localStorage.setItem('chatHistories_global', JSON.stringify(chatHistories.global));
+        localStorage.setItem('chatHistories_private', JSON.stringify(chatHistories.private));
+        localStorage.setItem('chatHistories_group', JSON.stringify(chatHistories.group));
+        console.log('💾 Saved chat histories to localStorage');
+    } catch (error) {
+        console.error('❌ Error saving chat histories:', error);
+    }
+}
 
 // Track archived chats (prevent them from appearing in private chats list)
 const archivedChats = new Set();
@@ -73,6 +111,76 @@ const offlineNotificationsShown = new Set();
 // Track recent chat switches to prevent immediate re-render
 let lastChatSwitchTime = 0;
 let lastChatSwitchTarget = null;
+
+// Track if we're in a page refresh/reload state
+let isPageRefresh = true;
+
+// Track last date to show dividers - reset per chat
+var lastMessageDate = null;
+
+// Add a more aggressive message rendering for page refreshes
+function ensureMessagesVisible() {
+    if (currentChatType === 'global' && chatHistories.global.length > 0 && messagesContainer.children.length === 0) {
+        console.log('ENSURE: Messages not visible, forcing render...');
+        renderCurrentChat(false);
+        return true;
+    }
+    return false;
+}
+
+// Debug function to check chat state
+function debugChatState() {
+    console.log('=== CHAT DEBUG STATE ===');
+    console.log('Current chat type:', currentChatType);
+    console.log('Current chat target:', currentChatTarget);
+    console.log('Global messages in memory:', chatHistories.global.length);
+    console.log('Messages in DOM:', messagesContainer.children.length);
+    console.log('localStorage global:', JSON.parse(localStorage.getItem('chatHistories_global') || '[]').length);
+    console.log('First few messages:', chatHistories.global.slice(0, 3));
+    console.log('========================');
+}
+
+// Make debug function available globally for testing
+window.debugChatState = debugChatState;
+
+// Test function to manually save/load messages
+window.testLocalStorage = function() {
+    console.log('=== TESTING LOCALSTORAGE ===');
+    
+    // Save a test message
+    const testMessage = {
+        type: 'chat',
+        sender: 'TEST',
+        content: 'Test message ' + Date.now(),
+        timestamp: new Date().toLocaleTimeString()
+    };
+    
+    chatHistories.global.push(testMessage);
+    saveChatHistoriesToStorage();
+    
+    console.log('Saved test message, total messages:', chatHistories.global.length);
+    
+    // Try to reload from localStorage
+    const reloaded = JSON.parse(localStorage.getItem('chatHistories_global') || '[]');
+    console.log('Reloaded from localStorage:', reloaded.length);
+    
+    // Render
+    if (currentChatType === 'global') {
+        renderCurrentChat(false);
+    }
+};
+
+// Add keyboard shortcut for debugging (Ctrl+Shift+D)
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        debugChatState();
+        
+        // Also try to force request chat history
+        console.log('🔧 Manual chat history request triggered');
+        eel.send_message('request_chat_history', '', {})();
+    }
+});
 
 // Track which chats have had their new messages divider viewed
 const viewedChats = new Set();
@@ -554,6 +662,11 @@ loginBtn.addEventListener('click', async () => {
                 loginLoader.classList.remove('login-loader--active');
                 mainApp.classList.add('active', 'main-app-fade-in');
                 
+                
+                // Initialize global chat state
+                currentChatType = 'global';
+                currentChatTarget = null;
+                
                 // Highlight the global network item
                 document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
                 globalNetworkItem.classList.add('active');
@@ -588,11 +701,16 @@ loginBtn.addEventListener('click', async () => {
                     console.log('===== FORCE RENDERING AFTER CONNECT =====');
                     console.log('Global history length:', chatHistories.global.length);
                     
-                    // If we still don't have data, request it explicitly
+                    // Always request chat history explicitly to ensure we get it
+                    console.log('Requesting chat history explicitly...');
+                    eel.send_message('request_chat_history', '', {})();
+                    eel.refresh_user_list()();
+                    
+                    // If we still don't have data after localStorage, show what we have
                     if (chatHistories.global.length === 0) {
-                        console.log('No chat history received, requesting explicitly...');
-                        eel.send_message('request_chat_history', '', {})();
-                        eel.refresh_user_list()();
+                        console.log('No messages in localStorage or from server yet');
+                    } else {
+                        console.log('Have messages from localStorage:', chatHistories.global.length);
                     }
                     
                     // Load persistent groups
@@ -600,8 +718,39 @@ loginBtn.addEventListener('click', async () => {
                     console.log(`Found ${Object.keys(persistentGroups).length} groups in localStorage`);
                     updateGroupsList();
                     
-                    // Render and scroll to appropriate position
-                    renderCurrentChat(false);
+                    // Always render to ensure messages are displayed (including from localStorage)
+                    console.log('Initial render with localStorage messages:', chatHistories.global.length);
+                    if (chatHistories.global.length > 0) {
+                        console.log('📱 Displaying messages from localStorage - no refresh delay!');
+                        // Set scroll to bottom BEFORE rendering to prevent glitch
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        
+                        renderCurrentChat(false);
+                        
+                        // Ensure we stay at bottom after render
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    } else {
+                        // No messages in localStorage, just render empty chat
+                        renderCurrentChat(false);
+                    }
+                    
+                    // Add a backup render after a short delay to handle race conditions
+                    setTimeout(() => {
+                        if (currentChatType === 'global' && messagesContainer.children.length === 0 && chatHistories.global.length > 0) {
+                            console.log('BACKUP: Messages not displayed, forcing render...');
+                            renderCurrentChat(false);
+                        }
+                        // Mark page refresh as complete
+                        isPageRefresh = false;
+                    }, 1000);
+                    
+                    // Backup request for chat history if we still don't have any after 2 seconds
+                    setTimeout(() => {
+                        if (chatHistories.global.length === 0) {
+                            console.log('BACKUP: Still no chat history, requesting again...');
+                            eel.send_message('request_chat_history', '', {})();
+                        }
+                    }, 2000);
                 }, 800);
                 
                 // Clean up animation class
@@ -639,6 +788,44 @@ loginPasswordInput.addEventListener('keypress', (e) => {
     });
 });
 
+// ===== DRAFT MESSAGE MANAGEMENT =====
+// Save draft message to localStorage whenever user types
+function saveDraftMessage() {
+    const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
+    const draftText = messageInput.value;
+    
+    const drafts = JSON.parse(localStorage.getItem('messageDrafts') || '{}');
+    if (draftText.trim()) {
+        drafts[chatKey] = draftText;
+    } else {
+        delete drafts[chatKey];
+    }
+    localStorage.setItem('messageDrafts', JSON.stringify(drafts));
+}
+
+// Restore draft message when switching chats
+function restoreDraftMessage() {
+    const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
+    const drafts = JSON.parse(localStorage.getItem('messageDrafts') || '{}');
+    
+    if (drafts[chatKey]) {
+        messageInput.value = drafts[chatKey];
+    } else {
+        messageInput.value = '';
+    }
+}
+
+// Clear draft for current chat
+function clearDraftMessage() {
+    const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
+    const drafts = JSON.parse(localStorage.getItem('messageDrafts') || '{}');
+    delete drafts[chatKey];
+    localStorage.setItem('messageDrafts', JSON.stringify(drafts));
+}
+
+// Save draft as user types
+messageInput.addEventListener('input', saveDraftMessage);
+
 // ===== MESSAGING =====
 sendBtn.addEventListener('click', sendMessage);
 messageInput.addEventListener('keypress', (e) => {
@@ -673,6 +860,32 @@ async function sendMessage() {
         };
     }
 
+    // Create the message object immediately
+    const timestamp = new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+    });
+    
+    const messageObj = {
+        type: currentChatType === 'global' ? 'chat' : (currentChatType === 'private' ? 'private' : 'group_message'),
+        sender: username,
+        content: content,
+        timestamp: timestamp,
+        metadata: metadata.replyTo ? metadata : null
+    };
+    
+    // Add additional fields for non-global messages
+    if (currentChatType === 'private') {
+        messageObj.receiver = currentChatTarget;
+    } else if (currentChatType === 'group') {
+        messageObj.group_id = currentChatTarget;
+    }
+
+    // DON'T add to local storage immediately - let server handle it
+    // This prevents duplication issues
+
     messageInput.value = '';
     messageInput.focus();
     
@@ -680,6 +893,35 @@ async function sendMessage() {
     if (replyContainer && replyContainer.dataset.replyTo) {
         replyContainer.style.display = 'none';
         replyContainer.dataset.replyTo = '';
+    }
+    
+    // Clear draft message when sent
+    clearDraftMessage();
+    
+    // Mark chat as viewed and update last seen index when sending
+    const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
+    viewedChats.add(chatKey);
+    
+    // Update last seen index to current message count (will include the sent message once received)
+    if (currentChatType === 'global') {
+        lastSeenMessageIndex.global = chatHistories.global.length;
+    } else if (currentChatType === 'private' && currentChatTarget) {
+        if (!lastSeenMessageIndex.private[currentChatTarget]) {
+            lastSeenMessageIndex.private[currentChatTarget] = 0;
+        }
+        lastSeenMessageIndex.private[currentChatTarget] = (chatHistories.private[currentChatTarget] || []).length;
+    } else if (currentChatType === 'group' && currentChatTarget) {
+        if (!lastSeenMessageIndex.group[currentChatTarget]) {
+            lastSeenMessageIndex.group[currentChatTarget] = 0;
+        }
+        lastSeenMessageIndex.group[currentChatTarget] = (chatHistories.group[currentChatTarget] || []).length;
+    }
+    
+    // Save last seen index to localStorage
+    try {
+        localStorage.setItem('lastSeenMessageIndex', JSON.stringify(lastSeenMessageIndex));
+    } catch (e) {
+        console.log('Could not save last seen index:', e);
     }
     
     try {
@@ -839,6 +1081,13 @@ function handleMessage(message) {
     console.log('===== MESSAGE RECEIVED =====');
     console.log('Type:', message.type);
     console.log('Current chat:', currentChatType, currentChatTarget);
+    
+    // Special logging for chat_history messages
+    if (message.type === 'chat_history') {
+        console.log('🎯 CHAT HISTORY RECEIVED!');
+        console.log('Messages count:', message.messages?.length || 0);
+    }
+    
     console.log('Message data:', message);
     console.log('Message keys:', Object.keys(message));
     
@@ -852,6 +1101,8 @@ function handleMessage(message) {
     // Store messages in appropriate history and display if in correct chat
     if (msgType === 'chat') {
         chatHistories.global.push(message);
+        saveChatHistoriesToStorage(); // Save to localStorage
+        
         if (isViewingGlobal) {
             addMessage(message);
         } else {
@@ -870,19 +1121,30 @@ function handleMessage(message) {
         if (!chatHistories.private[otherUser]) {
             chatHistories.private[otherUser] = [];
         }
-        chatHistories.private[otherUser].push(message);
         
-        if (isViewingPrivateWith(otherUser)) {
-            addMessage(message);
-        } else if (message.sender !== username) {
-            unreadCounts.private[otherUser] = (unreadCounts.private[otherUser] || 0) + 1;
-            updateTotalUnreadCount();
-            updateUnreadCountsUI();
-            const preview = (message.content || '').slice(0, 40);
-            if (isWindowFocused) {
-                showInAppBanner(`New message from ${message.sender}${preview ? ': ' + preview : ''}`);
-            } else {
-                notifySystem(`Message from ${message.sender}`, preview || 'New message');
+        // Check for duplicates
+        const isDuplicate = message.sender === username && 
+            chatHistories.private[otherUser].some(m => 
+                m.sender === message.sender && 
+                m.content === message.content && 
+                Math.abs(new Date(m.timestamp) - new Date(message.timestamp)) < 2000
+            );
+        
+        if (!isDuplicate) {
+            chatHistories.private[otherUser].push(message);
+            
+            if (isViewingPrivateWith(otherUser)) {
+                addMessage(message);
+            } else if (message.sender !== username) {
+                unreadCounts.private[otherUser] = (unreadCounts.private[otherUser] || 0) + 1;
+                updateTotalUnreadCount();
+                updateUnreadCountsUI();
+                const preview = (message.content || '').slice(0, 40);
+                if (isWindowFocused) {
+                    showInAppBanner(`New message from ${message.sender}${preview ? ': ' + preview : ''}`);
+                } else {
+                    notifySystem(`Message from ${message.sender}`, preview || 'New message');
+                }
             }
         }
         
@@ -911,19 +1173,39 @@ function handleMessage(message) {
         if (!chatHistories.group[message.group_id]) {
             chatHistories.group[message.group_id] = [];
         }
-        chatHistories.group[message.group_id].push(message);
         
-        if (isViewingGroup(message.group_id)) {
-            addMessage(message);
-        } else if (message.sender !== username) {
-            unreadCounts.group[message.group_id] = (unreadCounts.group[message.group_id] || 0) + 1;
-            updateTotalUnreadCount();
-            updateUnreadCountsUI();
-            const preview = (message.content || '').slice(0, 40);
-            if (isWindowFocused) {
-                showInAppBanner(`New message in group`);
-            } else {
-                notifySystem('Group message', preview || 'New group message');
+        // Check for duplicates
+        const isDuplicate = message.sender === username && 
+            chatHistories.group[message.group_id].some(m => 
+                m.sender === message.sender && 
+                m.content === message.content && 
+                Math.abs(new Date(m.timestamp) - new Date(message.timestamp)) < 2000
+            );
+        
+        if (!isDuplicate) {
+            chatHistories.group[message.group_id].push(message);
+            
+            // Cache to localStorage
+            try {
+                const allGroups = JSON.parse(localStorage.getItem('chatHistories_group') || '{}');
+                allGroups[message.group_id] = chatHistories.group[message.group_id];
+                localStorage.setItem('chatHistories_group', JSON.stringify(allGroups));
+            } catch (e) {
+                console.log('Could not cache group message:', e);
+            }
+            
+            if (isViewingGroup(message.group_id)) {
+                addMessage(message);
+            } else if (message.sender !== username) {
+                unreadCounts.group[message.group_id] = (unreadCounts.group[message.group_id] || 0) + 1;
+                updateTotalUnreadCount();
+                updateUnreadCountsUI();
+                const preview = (message.content || '').slice(0, 40);
+                if (isWindowFocused) {
+                    showInAppBanner(`New message in group`);
+                } else {
+                    notifySystem('Group message', preview || 'New group message');
+                }
             }
         }
     }
@@ -939,6 +1221,7 @@ function handleMessage(message) {
         }
     }
     else if (msgType === 'system') {
+        console.log('📢 System message received:', message.content);
         addSystemMessage(message.content);
     }
     else if (msgType === 'message_deleted') {
@@ -969,28 +1252,26 @@ function handleMessage(message) {
     else if (msgType === 'chat_history') {
         console.log('===== PROCESSING CHAT HISTORY =====');
         console.log('Received messages:', message.messages?.length || 0);
-        const oldMessageCount = chatHistories.global.length;
+        
         const newMessages = message.messages || [];
+        
+        // SIMPLE APPROACH: Just use server messages, save to localStorage
         chatHistories.global = newMessages;
-        console.log('Stored in chatHistories.global:', chatHistories.global.length);
+        saveChatHistoriesToStorage();
+        
+        console.log('Stored messages count:', chatHistories.global.length);
         console.log('Current chat type:', currentChatType);
         
         if (isViewingGlobal) {
             console.log('Rendering global chat...');
             
-            // Check if we just switched to global chat (within 2 seconds)
-            const timeSinceSwitch = Date.now() - lastChatSwitchTime;
-            const isRecentSwitch = lastChatSwitchTarget === 'global' && timeSinceSwitch < 2000;
+            // Set scroll to bottom BEFORE rendering to prevent glitch
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
             
-            // Only skip re-render if it's a recent switch AND message count is the same
-            const shouldSkipRender = isRecentSwitch && (oldMessageCount === newMessages.length);
+            renderCurrentChat(false);
             
-            if (!shouldSkipRender) {
-                // Re-render (will use last seen index for divider)
-                renderCurrentChat(true);
-            }
-        } else {
-            console.log('Not in global chat, not rendering yet');
+            // Ensure we stay at bottom after render
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     }
     else if (msgType === 'private_history') {
@@ -1062,16 +1343,20 @@ function handleMessage(message) {
     else if (msgType === 'file_metadata') {
         message.files.forEach(file => addFileToList(file));
     }
-    else if (msgType === 'audio_message' || msgType === 'private_audio' || msgType === 'group_audio') {
+    else if (msgType === 'audio_share' || msgType === 'audio_message' || msgType === 'private_audio' || msgType === 'group_audio') {
         console.log('🎤 Audio message received:', msgType, 'from:', message.sender);
         console.log('🎤 Current chat:', currentChatType, currentChatTarget);
         
-        if (msgType === 'audio_message') {
+        if (msgType === 'audio_share' || msgType === 'audio_message') {
             console.log('🎤 Adding to global history');
             chatHistories.global.push(message);
+            saveChatHistoriesToStorage(); // Save to localStorage
+            
             if (currentChatType === 'global') {
                 console.log('🎤 Displaying in global chat');
                 addMessage(message);
+            } else {
+                console.log('🎤 Not in global chat, not displaying');
             }
         }
         else if (msgType === 'private_audio') {
@@ -1184,6 +1469,9 @@ function renderCurrentChat(preserveScroll = true) {
     console.log('===== RENDERING CURRENT CHAT =====');
     console.log('Chat type:', currentChatType);
     console.log('Global history length:', chatHistories.global.length);
+    console.log('First few messages:', chatHistories.global.slice(0, 3));
+    console.log('Messages container exists:', !!messagesContainer);
+    console.log('Current container children:', messagesContainer ? messagesContainer.children.length : 'N/A');
     
     // Reset date tracker when rendering a new chat
     resetDateTracker();
@@ -1333,6 +1621,9 @@ function addMessage(message, autoScroll = true) {
     if (message.sender === 'VideoServer' || message.sender === 'VIDEOSERVER') {
         return null;
     }
+    
+    // Check if we were at bottom before adding message
+    const wasAtBottom = isAtBottom();
     
     // Check if this message was deleted by the user
     const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
@@ -1549,6 +1840,13 @@ function addMessage(message, autoScroll = true) {
     messageDiv.appendChild(content);
     
     messagesContainer.appendChild(messageDiv);
+    
+    // Auto-scroll to bottom if we were at bottom or if this is our own message
+    if (autoScroll && (wasAtBottom || message.sender === username)) {
+        setTimeout(() => {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 10);
+    }
     
     // Restore emoji reactions if any
     const allReactions = JSON.parse(localStorage.getItem('messageReactions') || '{}');
@@ -1997,6 +2295,12 @@ function restoreVideoCallStates() {
 function addSystemMessage(content) {
     // Skip VideoServer messages
     if (content && (content.includes('VideoServer') || content.includes('VIDEOSERVER') || content.includes('Missed video call (session'))) {
+        return;
+    }
+    
+    // Skip empty or undefined content
+    if (!content || content.trim() === '') {
+        console.log('⚠️ Skipping empty system message');
         return;
     }
     
@@ -2509,6 +2813,9 @@ async function switchToPrivateChat(user) {
     // Clear unread count and update last seen AFTER rendering
     clearUnreadForCurrentChat();
     
+    // Restore draft message for this chat
+    restoreDraftMessage();
+    
     // Then request updated history from server
     await eel.send_message('request_private_history', '', {target_user: user})();
     await eel.set_current_chat('private', user)();
@@ -2543,6 +2850,9 @@ async function switchToGroupChat(groupId, groupName) {
     // Clear unread count and update last seen AFTER rendering
     clearUnreadForCurrentChat();
     
+    // Restore draft message for this chat
+    restoreDraftMessage();
+    
     // Then request updated history from server
     await eel.send_message('request_group_history', '', {group_id: groupId})();
     await eel.set_current_chat('group', groupId)();
@@ -2576,9 +2886,26 @@ globalNetworkItem.addEventListener('click', async function() {
     // Clear unread count and update last seen AFTER rendering
     clearUnreadForCurrentChat();
     
+    // Restore draft message for this chat
+    restoreDraftMessage();
+    
     // Then request updated history from server
+    console.log('🔄 Requesting chat history for global chat...');
     await eel.send_message('request_chat_history', '', {})();
     await eel.set_current_chat('global', null)();
+    
+    // Ensure messages are visible after a short delay
+    setTimeout(() => {
+        ensureMessagesVisible();
+    }, 200);
+    
+    // Additional backup request if no messages appear
+    setTimeout(() => {
+        if (messagesContainer.children.length === 0) {
+            console.log('🔄 BACKUP: No messages visible, requesting chat history again...');
+            eel.send_message('request_chat_history', '', {})();
+        }
+    }, 1000);
 });
 
 // ===== VIDEO CALL =====
@@ -2919,21 +3246,24 @@ function showAudioPreview(audioBlob) {
                 // Send the audio message based on current chat type
                 if (currentChatType === 'private' && currentChatTarget) {
                     console.log(`📤 Sending private audio to: ${currentChatTarget}`);
-                    await eel.send_message('private_audio', '', {
+                    await eel.send_message('private_audio', base64Audio, {
                         receiver: currentChatTarget,
                         audio_data: base64Audio,
                         duration: recordingDuration
                     })();
                 } else if (currentChatType === 'group' && currentChatTarget) {
                     console.log(`📤 Sending group audio to: ${currentChatTarget}`);
-                    await eel.send_message('group_audio', '', {
+                    await eel.send_message('group_audio', base64Audio, {
                         group_id: currentChatTarget,
                         audio_data: base64Audio,
                         duration: recordingDuration
                     })();
                 } else {
                     console.log(`📤 Sending global audio message`);
-                    await eel.send_message('audio_message', '', {
+                    console.log(`📤 Audio data length: ${base64Audio.length}`);
+                    console.log(`📤 Duration: ${recordingDuration}s`);
+                    
+                    await eel.send_message('audio_share', base64Audio, {
                         audio_data: base64Audio,
                         duration: recordingDuration
                     })();
@@ -3156,9 +3486,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     });
 });
 
-refreshUsersBtn.addEventListener('click', () => {
-    eel.refresh_user_list()();
-});
+if (refreshUsersBtn) {
+    refreshUsersBtn.addEventListener('click', () => {
+        eel.refresh_user_list()();
+    });
+}
 
 
 
@@ -3222,7 +3554,10 @@ function refreshChatData(force = false) {
                 }
                 
                 if (hasNewMessages) {
-                    showNotification(`Loaded ${filteredMessages.length - oldLength} new messages`, 'info');
+                    const newCount = Math.max(0, filteredMessages.length - oldLength);
+                    if (newCount > 0) {
+                        showNotification(`Loaded ${newCount} new messages`, 'info');
+                    }
                 }
             }
         }
@@ -3686,9 +4021,6 @@ function getDateFromTimestamp(timestamp) {
     }
 }
 
-// Track last date to show dividers - reset per chat
-let lastMessageDate = null;
-
 // Reset date tracker when switching chats
 function resetDateTracker() {
     lastMessageDate = null;
@@ -3804,12 +4136,19 @@ function showMessageContextMenu(event, messageElement) {
 
 // Handle context menu actions
 document.addEventListener('click', (e) => {
+    console.log(`🖱️ Document click detected on:`, e.target);
+    
     if (e.target.closest('.context-menu-item')) {
         console.log(`🖱️ CONTEXT MENU ITEM CLICKED`);
-        const action = e.target.closest('.context-menu-item').dataset.action;
+        console.log(`🖱️ Target element:`, e.target);
+        console.log(`🖱️ Closest context-menu-item:`, e.target.closest('.context-menu-item'));
+        
+        const contextMenuItem = e.target.closest('.context-menu-item');
+        const action = contextMenuItem.dataset.action;
         const menu = e.target.closest('.context-menu');
         
-        console.log(`📋 Action: ${action}, Menu ID: ${menu.id}`);
+        console.log(`📋 Action: ${action}, Menu ID: ${menu ? menu.id : 'NO MENU FOUND'}`);
+        console.log(`📋 Menu dataset:`, menu ? menu.dataset : 'NO DATASET');
         
         if (menu.id === 'chatContextMenu') {
             console.log(`✅ Handling chat context action: ${action} for user ${menu.dataset.user}`);
@@ -3819,6 +4158,11 @@ document.addEventListener('click', (e) => {
             handleGroupContextAction(action);
         } else if (menu.id === 'messageContextMenu') {
             console.log(`✅ Handling message context action: ${action}`);
+            console.log(`✅ Message ID from menu dataset: ${menu.dataset.messageId}`);
+            
+            // Add a simple test notification to see if this code is reached
+            showNotification(`Testing: ${action} clicked`, 'info');
+            
             handleMessageContextAction(action, menu.dataset.messageId);
         }
         
@@ -3844,38 +4188,47 @@ function handleChatContextAction(action, user) {
 }
 
 function handleMessageContextAction(action, messageId) {
+    console.log(`🎯 handleMessageContextAction called with action: ${action}, messageId: ${messageId}`);
+    
     const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!messageElement) return;
+    if (!messageElement) {
+        console.log(`❌ No message element found for ID: ${messageId}`);
+        return;
+    }
+    
+    console.log(`✅ Found message element:`, messageElement);
     
     switch (action) {
         case 'reply':
+            console.log(`📤 Calling replyToMessage`);
             replyToMessage(messageElement);
             break;
         case 'emoji':
+            console.log(`😀 Calling showEmojiReactionPicker`);
             showEmojiReactionPicker(messageElement);
             break;
         case 'copy':
+            console.log(`📋 Calling copyMessage`);
             copyMessage(messageElement);
             break;
         case 'forward':
+            console.log(`➡️ Calling forwardMessage`);
             forwardMessage(messageElement);
             break;
-        case 'star':
-            starMessage(messageElement);
-            break;
-        case 'pin':
-            pinMessage(messageElement);
-            updatePinnedMessagesBar();
-            break;
         case 'delete':
+            console.log(`🗑️ Calling deleteMessage`);
             deleteMessage(messageElement);
             break;
         case 'select':
+            console.log(`✅ Calling selectMessage`);
             selectMessage(messageElement);
             break;
         case 'share':
+            console.log(`📤 Calling shareMessage`);
             shareMessage(messageElement);
             break;
+        default:
+            console.log(`❌ Unknown action: ${action}`);
     }
 }
 
@@ -4319,6 +4672,7 @@ function deleteChat(user) {
 
 function replyToMessage(messageElement) {
     console.log('🎯 Reply to message called!', messageElement);
+    showNotification('Reply function called!', 'success');
     
     const messageBubble = messageElement.querySelector('.message-bubble');
     if (!messageBubble) {
@@ -4394,6 +4748,8 @@ function replyToMessage(messageElement) {
 }
 
 function copyMessage(messageElement) {
+    console.log('📋 Copy message called!', messageElement);
+    showNotification('Copy function called!', 'success');
     const messageText = messageElement.querySelector('.message-bubble')?.textContent;
     if (messageText) {
         navigator.clipboard.writeText(messageText).then(() => {
@@ -5254,12 +5610,32 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('===== LOADING PERSISTENT GROUPS ON STARTUP =====');
     updateGroupsList();
     
-    // Connect refresh button to reload the page
+    // Connect refresh button to soft refresh chat data instead of full page reload
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            location.reload(); // Reload the entire page
+            console.log('===== SOFT REFRESH TRIGGERED =====');
+            
+            // Show loading state
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+            
+            // Request fresh data from server
+            Promise.all([
+                eel.send_message('request_chat_history', '', {})(),
+                eel.refresh_user_list()()
+            ]).then(() => {
+                // Reset button state
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+                showNotification('Chat refreshed', 'success');
+            }).catch((error) => {
+                console.error('Refresh failed:', error);
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+                showNotification('Refresh failed', 'error');
+            });
         });
     }
     
