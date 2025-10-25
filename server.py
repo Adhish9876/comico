@@ -174,7 +174,10 @@ class CollaborationServer:
                 except ConnectionResetError:
                     break
                 except Exception as e:
+                    import traceback
                     print(f"❌ Error handling message from {username}: {e}")
+                    print(f"❌ Full traceback:")
+                    traceback.print_exc()
                     break
                     
         except socket.timeout:
@@ -352,9 +355,14 @@ class CollaborationServer:
         }
         handler = handlers.get(msg_type)
         if handler:
-            if 'video_invite' in msg_type:
-                print(f"[SERVER] Found handler for {msg_type}, calling it")
-            handler(client_socket, message)
+            try:
+                if 'video_invite' in msg_type:
+                    print(f"[SERVER] Found handler for {msg_type}, calling it")
+                handler(client_socket, message)
+            except Exception as e:
+                import traceback
+                print(f"❌ Error in handler for {msg_type}: {e}")
+                traceback.print_exc()
         else:
             if 'video_invite' in msg_type:
                 print(f"[SERVER] ERROR: No handler found for {msg_type}")
@@ -536,14 +544,14 @@ class CollaborationServer:
         """Handle public chat message"""
         sender = message.get('sender')
         content = message.get('content', '')
-        metadata = message.get('metadata', {})
+        metadata = message.get('metadata')
         
         print(f" Global message from {sender}: {content[:50]}")
-        if metadata.get('replyTo'):
+        if metadata and isinstance(metadata, dict) and metadata.get('replyTo'):
             print(f"   Reply to: {metadata['replyTo'].get('sender')} - {metadata['replyTo'].get('text', '')[:30]}")
         
-        # Preserve metadata in the message
-        if metadata:
+        # Preserve metadata in the message if it exists
+        if metadata and isinstance(metadata, dict):
             message['metadata'] = metadata
         
         self.chat_history.append(message)
@@ -560,13 +568,13 @@ class CollaborationServer:
    
         sender = message.get('sender')
         receiver = message.get('receiver')
-        metadata = message.get('metadata', {})
+        metadata = message.get('metadata')
         
         if not receiver:
             return
         
-        # Preserve metadata in the message
-        if metadata:
+        # Preserve metadata in the message if it exists
+        if metadata and isinstance(metadata, dict):
             message['metadata'] = metadata
             if metadata.get('replyTo'):
                 print(f"   Reply to: {metadata['replyTo'].get('sender')} - {metadata['replyTo'].get('text', '')[:30]}")

@@ -66,11 +66,19 @@ def receive_messages():
             if not state.socket:
                 print("[CLIENT] No socket, breaking receive loop")
                 break
-                
-            data = state.socket.recv(4096)
-            if not data:
-                print("[CLIENT] No data received, connection closed")
-                break
+            
+            # Set a timeout to prevent blocking forever
+            state.socket.settimeout(1.0)
+            try:
+                data = state.socket.recv(4096)
+                if not data:
+                    print("[CLIENT] No data received, connection may be closed")
+                    # Don't break immediately - the server might just be slow
+                    time.sleep(0.1)
+                    continue
+            except socket.timeout:
+                # Timeout is normal, just continue
+                continue
             
             state.buffer += data
             print(f"[CLIENT] Received {len(data)} bytes, buffer now {len(state.buffer)} bytes")

@@ -563,11 +563,11 @@ loginBtn.addEventListener('click', async () => {
                 // Ensure badges are created
                 ensureBadges();
                 
-                // Start polling for data
-                setTimeout(() => {
-                    console.log('===== STARTING DATA POLLING =====');
-                    pollForData();
-                }, 500);
+                // Polling disabled - messages come via WebSocket in real-time
+                // setTimeout(() => {
+                //     console.log('===== STARTING DATA POLLING =====');
+                //     pollForData();
+                // }, 500);
                 
                 // Test Eel bridge first
                 setTimeout(() => {
@@ -651,6 +651,13 @@ messageInput.addEventListener('keypress', (e) => {
 async function sendMessage() {
     const content = messageInput.value.trim();
     if (!content) return;
+    
+    // Prevent crashes from extremely large content
+    const MAX_MESSAGE_LENGTH = 10000; // 10k characters
+    if (content.length > MAX_MESSAGE_LENGTH) {
+        showNotification(`Message too long (${content.length} chars). Maximum ${MAX_MESSAGE_LENGTH} characters.`, 'error');
+        return;
+    }
 
     // Check if this is a reply
     const replyContainer = document.querySelector('.reply-container');
@@ -675,34 +682,41 @@ async function sendMessage() {
         replyContainer.dataset.replyTo = '';
     }
     
-    if (currentChatType === 'private' && currentChatTarget) {
-        // Check if user is offline and show notification only once
-        if (!allUsers.includes(currentChatTarget) && !offlineNotificationsShown.has(currentChatTarget)) {
-            showNotification(`${currentChatTarget} is offline. They will receive your message when they come online.`, 'warning');
-            offlineNotificationsShown.add(currentChatTarget);
+    try {
+        if (currentChatType === 'private' && currentChatTarget) {
+            // Check if user is offline and show notification only once
+            if (!allUsers.includes(currentChatTarget) && !offlineNotificationsShown.has(currentChatTarget)) {
+                showNotification(`${currentChatTarget} is offline. They will receive your message when they come online.`, 'warning');
+                offlineNotificationsShown.add(currentChatTarget);
+            }
+            
+            // Check if this user was in active list and move them to private chats immediately
+            const activeUserItem = document.querySelector(`.active-user-item[data-user="${currentChatTarget}"]`);
+            if (activeUserItem) {
+                console.log(`Moving ${currentChatTarget} from active to private chats immediately`);
+                moveUserToChattedList(currentChatTarget);
+            }
+            
+            addToRecentChats(currentChatTarget);
+            await eel.send_message('private', content, {
+                receiver: currentChatTarget,
+                metadata: metadata.replyTo ? metadata : undefined
+            })();
+        } else if (currentChatType === 'group') {
+            await eel.send_message('group_message', content, {
+                group_id: currentChatTarget,
+                metadata: metadata.replyTo ? metadata : undefined
+            })();
+        } else {
+            await eel.send_message('chat', content, {
+                metadata: metadata.replyTo ? metadata : undefined
+            })();
         }
-        
-        // Check if this user was in active list and move them to private chats immediately
-        const activeUserItem = document.querySelector(`.active-user-item[data-user="${currentChatTarget}"]`);
-        if (activeUserItem) {
-            console.log(`Moving ${currentChatTarget} from active to private chats immediately`);
-            moveUserToChattedList(currentChatTarget);
-        }
-        
-        addToRecentChats(currentChatTarget);
-        await eel.send_message('private', content, {
-            receiver: currentChatTarget,
-            metadata: metadata.replyTo ? metadata : undefined
-        })();
-    } else if (currentChatType === 'group') {
-        await eel.send_message('group_message', content, {
-            group_id: currentChatTarget,
-            metadata: metadata.replyTo ? metadata : undefined
-        })();
-    } else {
-        await eel.send_message('chat', content, {
-            metadata: metadata.replyTo ? metadata : undefined
-        })();
+    } catch (error) {
+        console.error('Failed to send message:', error);
+        showNotification('Failed to send message. Please check your connection.', 'error');
+        // Restore the message in input so user doesn't lose it
+        messageInput.value = content;
     }
 }
 
@@ -1277,17 +1291,7 @@ function renderCurrentChat(preserveScroll = true) {
     
     // Handle scroll position restoration
     if (preserveScroll) {
-        if (showNewMessagesDivider && !hasBeenViewed) {
-            // Only scroll to divider if chat hasn't been viewed yet
-            setTimeout(() => {
-                const divider = messagesContainer.querySelector('.new-messages-divider');
-                if (divider) {
-                    divider.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Mark as viewed after scrolling
-                    viewedChats.add(chatKey);
-                }
-            }, 100);
-        } else if (wasAtBottom) {
+        if (wasAtBottom) {
             // Scroll to bottom if we were at bottom
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         } else {
@@ -1297,17 +1301,17 @@ function renderCurrentChat(preserveScroll = true) {
             messagesContainer.scrollTop = scrollPosition + heightDiff;
         }
     } else {
-        // When not preserving scroll (initial render), scroll to bottom or divider
+        // When not preserving scroll (initial render ONLY)
         if (showNewMessagesDivider && !hasBeenViewed) {
-            // Only scroll to divider on first view
+            // Only scroll to divider on FIRST view of this chat ever
             setTimeout(() => {
                 const divider = messagesContainer.querySelector('.new-messages-divider');
                 if (divider) {
-                    divider.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Mark as viewed after scrolling
+                    divider.scrollIntoView({ behavior: 'instant', block: 'center' });
+                    // Mark as viewed immediately to prevent future scrolls
                     viewedChats.add(chatKey);
                 }
-            }, 100);
+            }, 50);
         } else {
             // Scroll to bottom for new users or when no divider
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -3458,12 +3462,12 @@ document.addEventListener('DOMContentLoaded', function() {
 // ===== UTILITY FUNCTIONS =====
 eel.expose(onDisconnected);
 function onDisconnected() {
-    showNotification('Disconnected', 'error');
+    showNotification('Disconnected from server', 'error');
     setTimeout(() => {
         mainApp.classList.remove('active');
-        connectionScreen.classList.add('active');
-        connectBtn.disabled = false;
-        connectBtn.textContent = 'CONNECT';
+        loginScreen.classList.add('active');
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'CONNECT';
     }, 2000);
 }
 
