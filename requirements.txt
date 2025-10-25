@@ -1,7 +1,18 @@
-eel
-flask
-opencv-python
-pyaudio
-numpy
-requests
-flask-socketio
+# Core Framework
+eel>=0.14.0
+flask>=2.0.0
+flask-socketio>=5.0.0
+
+# Audio/Video Processing
+pyaudio>=0.2.11
+numpy>=1.21.0
+opencv-python>=4.5.0
+
+# Networking & Security
+requests>=2.25.0
+urllib3>=1.26.0
+cryptography>=3.4.0
+
+# Note: The following are built-in Python modules and don't need installation:
+# base64, uuid, hashlib, threading, queue, socket, json, os, time
+# datetime, typing, signal, sys, ssl, warnings, ipaddress

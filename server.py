@@ -217,29 +217,14 @@ class CollaborationServer:
         print(f"[SERVER] Sending welcome messages to {username}")
         print(f"[SERVER] Client socket: {client_socket}")
         
-        # First, send chat history to the NEW user (so they see old messages)
-        print(f"[SERVER] About to send chat history to {username}")
+        # Send welcome data to the new user
         self.send_chat_history(client_socket)
-        print(f"[SERVER] Sent chat history to {username}")
-        
-        # Send file metadata
-        print(f"[SERVER] About to send file metadata to {username}")
         self.send_file_metadata(client_socket)
-        print(f"[SERVER] Sent file metadata to {username}")
-        
-        # Send group list
-        print(f"[SERVER] About to send group list to {username}")
         self.send_group_list(client_socket)
-        print(f"[SERVER] Sent group list to {username}")
-        
-        # Also send a tailored user list directly to this client
-        print(f"[SERVER] About to send user list to {username}")
         self.send_user_list_to_client(client_socket)
-        print(f"[SERVER] Sent user list to {username}")
         
         # Send any private chat histories involving this user so the client can populate local state
         try:
-            print(f"[SERVER] Sending private chat histories to {username} if any exist")
             # storage.private_chats keys are tuples (user1, user2)
             for key, msgs in getattr(storage, 'private_chats', {}).items():
                 try:
@@ -260,7 +245,6 @@ class CollaborationServer:
                         'messages': messages
                     }
                     self._send_to_client(client_socket, history_msg)
-            print(f"[SERVER] Finished sending private chat histories to {username}")
         except Exception as e:
             print(f"[SERVER] Error sending private histories: {e}")
 
@@ -283,7 +267,6 @@ class CollaborationServer:
             'timestamp': self._timestamp()
         }
         self.broadcast(json.dumps(welcome_msg), exclude=client_socket)
-        print(f"[SERVER] Broadcasted join message for {username}")
         
         # Send welcome message to the new user themselves
         welcome_msg_self = {
@@ -296,7 +279,6 @@ class CollaborationServer:
         
         # Broadcast updated user list to EVERYONE (including new user)
         self.broadcast_user_list()
-        print(f"[SERVER] Broadcasted user list to all clients")
 
     def _process_messages(self, client_socket: socket.socket, buffer: str) -> str:
         """Process received messages from buffer"""
@@ -1211,16 +1193,11 @@ class CollaborationServer:
             # GET FROM STORAGE (send a larger slice to feel buffered even after idle)
             messages = storage.get_global_chat(300)
             
-            print(f"📜 Sending {len(messages)} chat history messages to client")
-            print(f"📜 First few messages: {messages[:3] if messages else 'No messages'}")
-            
             history_msg = {
                 'type': 'chat_history',
                 'messages': messages
             }
-            print(f"📜 History message: {history_msg}")
             self._send_to_client(client_socket, history_msg)
-            print(f"📜 Successfully sent history to client")
         except Exception as e:
             print(f"❌ Error sending chat history: {e}")
 
@@ -1333,7 +1310,6 @@ class CollaborationServer:
                         'type': 'user_list',
                         'users': users_for_client
                     }) + '\n').encode('utf-8'))
-                    print(f"📋 Sent tailored user list to '{requester}': {users_for_client}")
                 except Exception as e:
                     print(f"   ❌ Failed to send user list to {requester}: {e}")
 
@@ -1398,13 +1374,9 @@ class CollaborationServer:
         """Send message to a specific client"""
         try:
             message_str = json.dumps(message) + '\n'
-            print(f"[SERVER] Sending to client: {message.get('type')} ({len(message_str)} bytes)")
             client_socket.send(message_str.encode('utf-8'))
-            print(f"[SERVER] Successfully sent {message.get('type')} to client")
         except Exception as e:
             print(f"❌ Error sending to client: {e}")
-            print(f"❌ Message type: {message.get('type')}")
-            print(f"❌ Client socket: {client_socket}")
 
     def _send_error(self, client_socket: socket.socket, error_message: str):
         """Send error message to client"""
@@ -1452,7 +1424,7 @@ class CollaborationServer:
 
     def _timestamp(self) -> str:
         """Get current timestamp"""
-        return datetime.now().strftime("%H:%M:%S")
+        return datetime.now().strftime("%I:%M %p")
 
     def _format_bytes(self, size: int) -> str:
         """Format bytes to human-readable string"""

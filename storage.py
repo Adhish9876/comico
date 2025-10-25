@@ -68,8 +68,8 @@ class Storage:
         """Save global chat to file"""
         try:
             path = os.path.join(self.data_dir, 'global_chat.json')
-            with open(path, 'w') as f:
-                json.dump(self.global_chat, f, indent=2)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(self.global_chat, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving global chat: {e}")
 
@@ -78,7 +78,7 @@ class Storage:
         try:
             path = os.path.join(self.data_dir, 'global_chat.json')
             if os.path.exists(path):
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     self.global_chat = json.load(f)
                 print(f"Loaded {len(self.global_chat)} global messages")
         except Exception as e:
@@ -158,8 +158,8 @@ class Storage:
             path = os.path.join(self.data_dir, 'private_chats.json')
             # Convert tuple keys to strings for JSON
             serializable = {f"{k[0]}_{k[1]}": v for k, v in self.private_chats.items()}
-            with open(path, 'w') as f:
-                json.dump(serializable, f, indent=2)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(serializable, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving private chats: {e}")
 
@@ -168,7 +168,7 @@ class Storage:
         try:
             path = os.path.join(self.data_dir, 'private_chats.json')
             if os.path.exists(path):
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 # Convert string keys back to tuples
                 for key_str, messages in data.items():
@@ -209,8 +209,8 @@ class Storage:
         """Save all group chats"""
         try:
             path = os.path.join(self.data_dir, 'group_chats.json')
-            with open(path, 'w') as f:
-                json.dump(self.group_chats, f, indent=2)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(self.group_chats, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving group chats: {e}")
 
@@ -219,7 +219,7 @@ class Storage:
         try:
             path = os.path.join(self.data_dir, 'group_chats.json')
             if os.path.exists(path):
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     self.group_chats = json.load(f)
                 total = sum(len(m) for m in self.group_chats.values())
                 print(f"Loaded {len(self.group_chats)} group chats ({total} messages)")
@@ -241,8 +241,8 @@ class Storage:
         """Save file metadata"""
         try:
             path = os.path.join(self.data_dir, 'files.json')
-            with open(path, 'w') as f:
-                json.dump(self.file_metadata, f, indent=2)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(self.file_metadata, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving files: {e}")
 
@@ -251,7 +251,7 @@ class Storage:
         try:
             path = os.path.join(self.data_dir, 'files.json')
             if os.path.exists(path):
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     self.file_metadata = json.load(f)
                 print(f"Loaded {len(self.file_metadata)} files")
         except Exception as e:
@@ -275,8 +275,8 @@ class Storage:
         """Save users"""
         try:
             path = os.path.join(self.data_dir, 'users.json')
-            with open(path, 'w') as f:
-                json.dump(self.users, f, indent=2)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(self.users, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Error saving users: {e}")
 
@@ -285,7 +285,7 @@ class Storage:
         try:
             path = os.path.join(self.data_dir, 'users.json')
             if os.path.exists(path):
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     self.users = json.load(f)
                 print(f"Loaded {len(self.users)} user records")
         except Exception as e:

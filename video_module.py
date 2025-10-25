@@ -4,6 +4,10 @@ video_server.py - Flask WebRTC Signaling Server with Session Tracking
 Handles WebRTC signaling and notifies when sessions become empty
 """
 
+# Suppress all warnings for cleaner output
+import warnings
+warnings.filterwarnings("ignore")
+
 from flask import Flask, render_template, request, jsonify
 import json
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -13,13 +17,6 @@ from datetime import datetime
 from typing import Dict, List
 import os
 import ssl
-
-# Use eventlet for better Windows compatibility
-try:
-    import eventlet
-    eventlet.monkey_patch()
-except ImportError:
-    pass
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'shadow_nexus_video_secret'
@@ -254,7 +251,7 @@ def notify_chat_server_session_empty(session_id: str):
             'session_id': session_id,
             'session_type': session.get('type', 'global'),
             'chat_id': session.get('chat_id', 'global'),
-            'timestamp': datetime.now().strftime('%H:%M:%S')
+            'timestamp': datetime.now().strftime('%I:%M %p')
         }
 
         print(f"[VIDEO SERVER] Notifying chat server about empty session: {payload}")
@@ -356,26 +353,7 @@ if __name__ == '__main__':
             print("[VIDEO SERVER] Please run the server again after installation\n")
             exit(1)
     
-    # Run with HTTPS using eventlet
-    try:
-        import eventlet
-        from eventlet import wsgi
-        
-        # Create SSL context for eventlet
-        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        ssl_context.load_cert_chain(cert_file, key_file)
-        
-        # Wrap socket with SSL
-        listener = eventlet.listen(('0.0.0.0', 5000), backlog=128)
-        listener = ssl.wrap_socket(listener, 
-                                   certfile=cert_file, 
-                                   keyfile=key_file,
-                                   server_side=True)
-        
-        print("[VIDEO SERVER] Server running on https://0.0.0.0:5000\n")
-        wsgi.server(listener, app)
-    except ImportError:
-        print("[VIDEO SERVER] eventlet not installed, installing...")
-        os.system("pip install eventlet")
-        print("[VIDEO SERVER] Please run the server again\n")
-        exit(1)
+    # Run with HTTPS using Flask-SocketIO built-in server
+    print("[VIDEO SERVER] Server running on https://0.0.0.0:5000\n")
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, 
+                certfile=cert_file, keyfile=key_file)

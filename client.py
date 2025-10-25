@@ -11,25 +11,52 @@ import json
 import time
 import os
 import base64
-import requests
 from datetime import datetime
 from typing import Optional, Dict, List
 
-# Disable SSL verification for self-signed certificates
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# Ultra-lazy imports for fastest startup
+_requests = None
+_audio_module = None
+_auth_module = None
+_numpy = None
+_cv2 = None
 
-# Import audio module
-from audio_module import AudioEngine, audio_engine as global_audio_engine
+def get_requests():
+    global _requests
+    if _requests is None:
+        import requests
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        _requests = requests
+    return _requests
 
-# Import authentication module
-from auth_module import (
-    get_mac_address, 
-    check_mac_registered, 
-    register_user, 
-    verify_login,
-    get_username_by_mac
-)
+def get_audio_module():
+    global _audio_module
+    if _audio_module is None:
+        import audio_module
+        _audio_module = audio_module
+    return _audio_module
+
+def get_auth_module():
+    global _auth_module
+    if _auth_module is None:
+        import auth_module
+        _auth_module = auth_module
+    return _auth_module
+
+def get_numpy():
+    global _numpy
+    if _numpy is None:
+        import numpy
+        _numpy = numpy
+    return _numpy
+
+def get_cv2():
+    global _cv2
+    if _cv2 is None:
+        import cv2
+        _cv2 = cv2
+    return _cv2
 
 # Initialize Eel with web folder
 eel.init('web')
@@ -165,8 +192,9 @@ def connect_to_server(username: str, host: str, port: int):
         # Small delay to ensure socket is ready
         time.sleep(0.1)
         
-        # Initialize audio engine
-        state.audio_engine = AudioEngine(username, host, state.audio_port)
+        # Initialize audio engine (lazy import)
+        audio_module = get_audio_module()
+        state.audio_engine = audio_module.AudioEngine(username, host, state.audio_port)
         
         # Set the global audio_engine reference
         import audio_module
@@ -236,7 +264,7 @@ def send_message(message_type: str, content: str, extra_params: dict = None):
             'type': message_type,
             'sender': state.username,
             'content': content,
-            'timestamp': datetime.now().strftime("%H:%M:%S")
+            'timestamp': datetime.now().strftime("%I:%M %p")
         }
         
         # Add extra parameters if provided
@@ -426,7 +454,7 @@ def set_current_chat(chat_type: str, chat_target: str = None):
             'type': 'request_private_history',
             'sender': state.username,
             'receiver': chat_target,
-            'timestamp': datetime.now().strftime("%H:%M:%S")
+            'timestamp': datetime.now().strftime("%I:%M %p")
         }
         state.socket.send((json.dumps(request_msg) + '\n').encode('utf-8'))
         print(f"[CLIENT] Requested private chat history with {chat_target}")
@@ -435,7 +463,7 @@ def set_current_chat(chat_type: str, chat_target: str = None):
             'type': 'request_group_history',
             'sender': state.username,
             'group_id': chat_target,
-            'timestamp': datetime.now().strftime("%H:%M:%S")
+            'timestamp': datetime.now().strftime("%I:%M %p")
         }
         state.socket.send((json.dumps(request_msg) + '\n').encode('utf-8'))
         print(f"[CLIENT] Requested group chat history for {chat_target}")
@@ -444,7 +472,7 @@ def set_current_chat(chat_type: str, chat_target: str = None):
             'type': 'request_chat_history',
             'sender': state.username,
             'chat_type': 'global',
-            'timestamp': datetime.now().strftime("%H:%M:%S")
+            'timestamp': datetime.now().strftime("%I:%M %p")
         }
         state.socket.send((json.dumps(request_msg) + '\n').encode('utf-8'))
         print(f"[CLIENT] Requested global chat history")
@@ -455,7 +483,7 @@ def set_current_chat(chat_type: str, chat_target: str = None):
 def start_video_call(chat_type, chat_id):
     """Start a video call"""
     try:
-        import requests
+        requests = get_requests()
         
         # Determine session name
         if chat_type == 'global':
@@ -501,7 +529,7 @@ def start_video_call(chat_type, chat_id):
                     'sender': state.username,
                     'session_id': session_id,
                     'link': link,
-                    'timestamp': datetime.now().strftime("%H:%M:%S")
+                    'timestamp': datetime.now().strftime("%I:%M %p")
                 }
                 print(f"[CLIENT] Sending global video invite")
             elif chat_type == 'private':
@@ -512,7 +540,7 @@ def start_video_call(chat_type, chat_id):
                     'receiver': chat_id,
                     'session_id': session_id,
                     'link': link,
-                    'timestamp': datetime.now().strftime("%H:%M:%S")
+                    'timestamp': datetime.now().strftime("%I:%M %p")
                 }
                 print(f"[CLIENT] Sending private video invite to: {chat_id}")
             elif chat_type == 'group':
@@ -523,7 +551,7 @@ def start_video_call(chat_type, chat_id):
                     'group_id': chat_id,
                     'session_id': session_id,
                     'link': link,
-                    'timestamp': datetime.now().strftime("%H:%M:%S")
+                    'timestamp': datetime.now().strftime("%I:%M %p")
                 }
                 print(f"[CLIENT] Sending group video invite to group: {chat_id}")
             else:
@@ -569,15 +597,17 @@ def test_connection():
 @eel.expose
 def get_device_mac():
     """Get the MAC address of the current device"""
-    mac = get_mac_address()
+    auth_module = get_auth_module()
+    mac = auth_module.get_mac_address()
     print(f"[AUTH] MAC Address: {mac}")
     return {'success': True, 'mac_address': mac}
 
 @eel.expose
 def check_device_registration():
     """Check if the current device is registered"""
-    mac = get_mac_address()
-    is_registered, username = check_mac_registered(mac)
+    auth_module = get_auth_module()
+    mac = auth_module.get_mac_address()
+    is_registered, username = auth_module.check_mac_registered(mac)
     print(f"[AUTH] Device registered: {is_registered}, Username: {username}")
     return {
         'success': True,
@@ -589,8 +619,9 @@ def check_device_registration():
 @eel.expose
 def signup_user(username: str, password: str):
     """Register a new user with the current device's MAC address"""
-    mac = get_mac_address()
-    success, message = register_user(mac, username, password)
+    auth_module = get_auth_module()
+    mac = auth_module.get_mac_address()
+    success, message = auth_module.register_user(mac, username, password)
     print(f"[AUTH] Signup attempt: {success}, {message}")
     return {
         'success': success,
@@ -601,8 +632,9 @@ def signup_user(username: str, password: str):
 @eel.expose
 def login_user(password: str):
     """Login with password for the current device"""
-    mac = get_mac_address()
-    success, message, username = verify_login(mac, password)
+    auth_module = get_auth_module()
+    mac = auth_module.get_mac_address()
+    success, message, username = auth_module.verify_login(mac, password)
     print(f"[AUTH] Login attempt: {success}, {message}")
     return {
         'success': success,
@@ -614,8 +646,8 @@ def login_user(password: str):
 def reset_password(new_password: str):
     """Reset password for the current device"""
     try:
-        import auth_module
-        mac = get_mac_address()
+        auth_module = get_auth_module()
+        mac = auth_module.get_mac_address()
         success = auth_module.update_password(mac, new_password)
         print(f"[AUTH] Password reset: {success}")
         return {
@@ -669,7 +701,7 @@ def refresh_user_list():
             request = {
                 'type': 'get_users',
                 'sender': state.username,
-                'timestamp': datetime.now().strftime("%H:%M:%S")
+                'timestamp': datetime.now().strftime("%I:%M %p")
             }
             state.socket.send((json.dumps(request) + '\n').encode('utf-8'))
             print("[CLIENT] Refreshing user list")
@@ -693,7 +725,7 @@ def delete_message(message_id: str, chat_type: str, chat_target: str = None):
             'chat_type': chat_type,
             'chat_target': chat_target,
             'sender': state.username,
-            'timestamp': datetime.now().strftime("%H:%M:%S")
+            'timestamp': datetime.now().strftime("%I:%M %p")
         }
         state.socket.send((json.dumps(request) + '\n').encode('utf-8'))
         print(f"[CLIENT] Delete message request sent: {message_id}")
@@ -718,11 +750,20 @@ def delete_private_chat(chat_key: str):
         print(f"[CLIENT] Error deleting private chat: {e}")
         return {'success': False, 'message': str(e)}
 
-# Start the Eel app
-if __name__ == '__main__':
+# Fast startup - minimal initialization
+def start_application():
+    """Start the application with minimal initial loading"""
     import sys
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8081
+    
+    print("[CLIENT] Starting ShadowNexus Client...")
+    
     try:
-        eel.start('index.html', size=(1600, 1000), port=port)
+        # Start Eel immediately without heavy imports
+        eel.start('index.html', size=(1600, 1000), port=port, block=True)
     except Exception as e:
         print(f"Error starting Eel: {e}")
+        input("Press Enter to exit...")
+
+if __name__ == '__main__':
+    start_application()

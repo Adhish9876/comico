@@ -152,7 +152,7 @@ window.testLocalStorage = function() {
         type: 'chat',
         sender: 'TEST',
         content: 'Test message ' + Date.now(),
-        timestamp: new Date().toLocaleTimeString()
+        timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
     };
     
     chatHistories.global.push(testMessage);
@@ -1168,8 +1168,12 @@ messageInput.addEventListener('input', saveDraftMessage);
 sendBtn.addEventListener('click', sendMessage);
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
+        // Check if send on enter is enabled
+        const sendOnEnter = localStorage.getItem('sendOnEnter') !== 'false';
+        if (sendOnEnter) {
+            e.preventDefault();
+            sendMessage();
+        }
     }
 });
 
@@ -1200,10 +1204,9 @@ async function sendMessage() {
 
     // Create the message object immediately
     const timestamp = new Date().toLocaleTimeString('en-US', { 
-        hour12: false, 
-        hour: '2-digit', 
+        hour: 'numeric', 
         minute: '2-digit', 
-        second: '2-digit' 
+        hour12: true 
     });
     
     const messageObj = {
@@ -1447,10 +1450,24 @@ function handleMessage(message) {
             unreadCounts.global = (unreadCounts.global || 0) + 1;
             updateTotalUnreadCount();
             updateUnreadCountsUI();
+            
+            // Play notification sound
+            if (message.sender !== username) {
+                playNotificationSound();
+            }
+            
             if (isWindowFocused) {
                 showInAppBanner(`New message in Global Network`);
             } else {
                 notifySystem('New message', 'New message in Global Network');
+                // Show desktop notification
+                if (message.sender !== username) {
+                    showDesktopNotification(
+                        'Shadow Nexus - Global Network',
+                        `${message.sender}: ${message.content?.slice(0, 50) || 'New message'}`,
+                        null
+                    );
+                }
             }
         }
     }
@@ -1478,10 +1495,20 @@ function handleMessage(message) {
                 updateTotalUnreadCount();
                 updateUnreadCountsUI();
                 const preview = (message.content || '').slice(0, 40);
+                
+                // Play notification sound
+                playNotificationSound();
+                
                 if (isWindowFocused) {
                     showInAppBanner(`New message from ${message.sender}${preview ? ': ' + preview : ''}`);
                 } else {
                     notifySystem(`Message from ${message.sender}`, preview || 'New message');
+                    // Show desktop notification
+                    showDesktopNotification(
+                        `Shadow Nexus - ${message.sender}`,
+                        preview || 'New message',
+                        null
+                    );
                 }
             }
         }
@@ -1539,10 +1566,20 @@ function handleMessage(message) {
                 updateTotalUnreadCount();
                 updateUnreadCountsUI();
                 const preview = (message.content || '').slice(0, 40);
+                
+                // Play notification sound
+                playNotificationSound();
+                
                 if (isWindowFocused) {
                     showInAppBanner(`New message in group`);
                 } else {
                     notifySystem('Group message', preview || 'New group message');
+                    // Show desktop notification
+                    showDesktopNotification(
+                        `Shadow Nexus - Group Chat`,
+                        `${message.sender}: ${preview || 'New message'}`,
+                        null
+                    );
                 }
             }
         }
@@ -2049,6 +2086,12 @@ function addMessage(message, autoScroll = true) {
     const time = document.createElement('span');
     time.className = 'message-time';
     time.textContent = formatTimeWithoutSeconds(message.timestamp || getCurrentTime());
+    
+    // Check timestamp visibility setting
+    const showTimestamps = localStorage.getItem('timestamps') !== 'false';
+    if (!showTimestamps) {
+        time.style.display = 'none';
+    }
     
     header.appendChild(sender);
     header.appendChild(time);
@@ -3289,46 +3332,11 @@ videoCallBtn.addEventListener('click', async () => {
         const result = await eel.start_video_call(currentChatType, chatId)();
         
         if (result.success) {
-            // Create video invite message for sender to display locally
-            const videoInviteMessage = {
-                type: currentChatType === 'private' ? 'video_invite_private' : 
-                      currentChatType === 'group' ? 'video_invite_group' : 'video_invite',
-                sender: username,
-                link: result.link,
-                session_id: result.session_id,
-                timestamp: getCurrentTime(),
-                is_acknowledged: false
-            };
-            
-            // Add receiver/group_id if needed
-            if (currentChatType === 'private' && currentChatTarget) {
-                videoInviteMessage.receiver = currentChatTarget;
-            }
-            if (currentChatType === 'group' && currentChatTarget) {
-                videoInviteMessage.group_id = currentChatTarget;
-            }
-            
-            // Store in appropriate history
-            if (currentChatType === 'global') {
-                chatHistories.global.push(videoInviteMessage);
-            } else if (currentChatType === 'private' && currentChatTarget) {
-                if (!chatHistories.private[currentChatTarget]) {
-                    chatHistories.private[currentChatTarget] = [];
-                }
-                chatHistories.private[currentChatTarget].push(videoInviteMessage);
-            } else if (currentChatType === 'group' && currentChatTarget) {
-                if (!chatHistories.group[currentChatTarget]) {
-                    chatHistories.group[currentChatTarget] = [];
-                }
-                chatHistories.group[currentChatTarget].push(videoInviteMessage);
-            }
-            
-            // Display the video invite in the chat
-            handleVideoInvite(videoInviteMessage);
-            
-            // Open video call window
+            // Open video call window immediately
             window.open(`${result.link}?username=${encodeURIComponent(username)}`, 'video_call', 'width=1200,height=800');
             showNotification('Video call started!', 'success');
+            
+            // Note: The video invite message will be displayed when the server broadcasts it back
         } else {
             showNotification(`Failed to start call: ${result.error}`, 'error');
         }
@@ -4319,8 +4327,11 @@ function showAudioPlayback(audioData, duration, sender) {
 
 function getCurrentTime() {
     const now = new Date();
-    return now.getHours().toString().padStart(2, '0') + ':' + 
-           now.getMinutes().toString().padStart(2, '0');
+    return now.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit', 
+        hour12: true 
+    });
 }
 
 function formatTimeWithoutSeconds(timestamp) {
@@ -4474,37 +4485,32 @@ function showMessageContextMenu(event, messageElement) {
 
 // Handle context menu actions
 document.addEventListener('click', (e) => {
-    console.log(`🖱️ Document click detected on:`, e.target);
+    // Ignore clicks if a modal is open
+    if (document.querySelector('.modal-overlay[data-modal-open="true"]')) {
+        return;
+    }
     
     if (e.target.closest('.context-menu-item')) {
-        console.log(`🖱️ CONTEXT MENU ITEM CLICKED`);
-        console.log(`🖱️ Target element:`, e.target);
-        console.log(`🖱️ Closest context-menu-item:`, e.target.closest('.context-menu-item'));
+        e.preventDefault();
+        e.stopPropagation();
         
         const contextMenuItem = e.target.closest('.context-menu-item');
         const action = contextMenuItem.dataset.action;
         const menu = e.target.closest('.context-menu');
         
-        console.log(`📋 Action: ${action}, Menu ID: ${menu ? menu.id : 'NO MENU FOUND'}`);
-        console.log(`📋 Menu dataset:`, menu ? menu.dataset : 'NO DATASET');
-        
-        if (menu.id === 'chatContextMenu') {
-            console.log(`✅ Handling chat context action: ${action} for user ${menu.dataset.user}`);
-            handleChatContextAction(action, menu.dataset.user);
-        } else if (menu.id === 'groupContextMenu') {
-            console.log(`✅ Handling group context action: ${action}`);
-            handleGroupContextAction(action);
-        } else if (menu.id === 'messageContextMenu') {
-            console.log(`✅ Handling message context action: ${action}`);
-            console.log(`✅ Message ID from menu dataset: ${menu.dataset.messageId}`);
-            
-            // Add a simple test notification to see if this code is reached
-            showNotification(`Testing: ${action} clicked`, 'info');
-            
-            handleMessageContextAction(action, menu.dataset.messageId);
-        }
-        
+        // Close the context menu first
         menu.classList.remove('show');
+        
+        // Add a small delay before executing the action to prevent event conflicts
+        setTimeout(() => {
+            if (menu.id === 'chatContextMenu') {
+                handleChatContextAction(action, menu.dataset.user);
+            } else if (menu.id === 'groupContextMenu') {
+                handleGroupContextAction(action);
+            } else if (menu.id === 'messageContextMenu') {
+                handleMessageContextAction(action, menu.dataset.messageId);
+            }
+        }, 100);
     }
 });
 
@@ -5010,7 +5016,6 @@ function deleteChat(user) {
 
 function replyToMessage(messageElement) {
     console.log('🎯 Reply to message called!', messageElement);
-    showNotification('Reply function called!', 'success');
     
     const messageBubble = messageElement.querySelector('.message-bubble');
     if (!messageBubble) {
@@ -5112,6 +5117,14 @@ function forwardMessage(messageElement) {
     const dialog = document.createElement('div');
     dialog.className = 'modal-overlay';
     
+    // Prevent immediate closure
+    dialog.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (e.target === dialog) {
+            dialog.remove();
+        }
+    });
+    
     // Get list of users to forward to
     const users = [];
     Object.keys(chatHistories.private).forEach(key => {
@@ -5138,24 +5151,48 @@ function forwardMessage(messageElement) {
         </div>
     `;
     
-    document.body.appendChild(dialog);
-    
-    // Handle forward selection
-    dialog.querySelectorAll('.user-forward-option').forEach(option => {
-        option.onclick = async () => {
-            const targetUser = option.dataset.user;
-            try {
-                await eel.send_message('private', `📩 Forwarded: ${messageText}`, {receiver: targetUser})();
+    // Add modal with a delay to prevent immediate closure
+    setTimeout(() => {
+        document.body.appendChild(dialog);
+        
+        // Add a flag to prevent other handlers from interfering
+        dialog.dataset.modalOpen = 'true';
+        
+        // Prevent ALL event bubbling on the entire dialog
+        dialog.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (e.target === dialog) {
                 dialog.remove();
-                showNotification(`Message forwarded to ${targetUser}`, 'success');
-            } catch (error) {
-                showNotification('Failed to forward message', 'error');
             }
-        };
-    });
-    
-    dialog.querySelector('.cancel').onclick = () => dialog.remove();
-    dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
+        }, true); // Use capture phase
+        
+        // Stop all propagation on the modal content
+        const modalContent = dialog.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.addEventListener('click', (e) => {
+                e.stopPropagation();
+            }, true); // Use capture phase
+        }
+        
+        // Handle forward selection
+        dialog.querySelectorAll('.user-forward-option').forEach(option => {
+            option.onclick = async () => {
+                const targetUser = option.dataset.user;
+                try {
+                    await eel.send_message('private', `📩 Forwarded: ${messageText}`, {receiver: targetUser})();
+                    dialog.remove();
+                    showNotification(`Message forwarded to ${targetUser}`, 'success');
+                } catch (error) {
+                    showNotification('Failed to forward message', 'error');
+                }
+            };
+        });
+        
+        const cancelBtn = dialog.querySelector('.cancel');
+        if (cancelBtn) {
+            cancelBtn.onclick = () => dialog.remove();
+        }
+    }, 200);
 }
 
 function starMessage(messageElement) {
@@ -5311,7 +5348,29 @@ async function deleteMessage(messageElement) {
         `;
     }
     
-    document.body.appendChild(dialog);
+    // Add modal with a delay to prevent immediate closure
+    setTimeout(() => {
+        document.body.appendChild(dialog);
+        
+        // Add a flag to prevent other handlers from interfering
+        dialog.dataset.modalOpen = 'true';
+        
+        // Prevent ALL event bubbling on the entire dialog
+        dialog.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (e.target === dialog) {
+                dialog.remove();
+            }
+        }, true); // Use capture phase
+        
+        // Stop all propagation on the modal content
+        const modalContent = dialog.querySelector('.modal-content');
+        if (modalContent) {
+            modalContent.addEventListener('click', (e) => {
+                e.stopPropagation();
+            }, true); // Use capture phase
+        }
+    }, 200);
     
     // Handle delete action
     dialog.querySelector('.danger').onclick = async () => {
@@ -5391,13 +5450,7 @@ async function deleteMessage(messageElement) {
         };
     }
     
-    // Close on overlay click
-    dialog.onclick = (e) => {
-        if (e.target === dialog) {
-            dialog.style.opacity = '0';
-            setTimeout(() => dialog.remove(), 200);
-        }
-    };
+
 }
 
 function selectMessage(messageElement) {
@@ -5422,11 +5475,20 @@ function shareMessage(messageElement) {
 // ===== EMOJI PICKER =====
 function showEmojiPicker() {
     const picker = document.getElementById('emojiPicker');
+    if (!picker) {
+        console.error('❌ Emoji picker element not found!');
+        return;
+    }
+    console.log('✅ Opening emoji picker');
+    picker.style.display = 'flex';
     picker.classList.add('show');
 }
 
 function hideEmojiPicker() {
     const picker = document.getElementById('emojiPicker');
+    if (!picker) return;
+    console.log('❌ Closing emoji picker');
+    picker.style.display = 'none';
     picker.classList.remove('show');
 }
 
@@ -6043,7 +6105,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeEmojiBtn = document.getElementById('closeEmojiBtn');
     
     if (emojiBtn) {
-        emojiBtn.addEventListener('click', showEmojiPicker);
+        emojiBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('😀 Emoji button clicked!');
+            showEmojiPicker();
+        });
     }
     
     if (closeEmojiBtn) {
@@ -6052,6 +6119,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Close emoji picker when clicking outside (only if mainApp is active)
     document.addEventListener('click', (e) => {
+        // Ignore if a modal is open
+        if (document.querySelector('.modal-overlay[data-modal-open="true"]')) {
+            return;
+        }
+        
         const mainApp = document.getElementById('mainApp');
         if (mainApp && mainApp.classList.contains('active')) {
             if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
@@ -6062,6 +6134,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Emoji selection (only if mainApp is active)
     document.addEventListener('click', (e) => {
+        // Ignore if a modal is open
+        if (document.querySelector('.modal-overlay[data-modal-open="true"]')) {
+            return;
+        }
+        
         const mainApp = document.getElementById('mainApp');
         if (mainApp && mainApp.classList.contains('active')) {
             if (e.target.classList.contains('emoji')) {
@@ -6159,3 +6236,257 @@ function addMessageMenuButtons() {
 }
 
 console.log('Shadow Nexus initialized');
+
+// ===== SETTINGS MODAL FUNCTIONALITY =====
+document.addEventListener('DOMContentLoaded', () => {
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+
+    // Open settings modal
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('🔧 Opening settings modal');
+            if (settingsModal) {
+                settingsModal.style.display = 'flex';
+                // Add fade-in animation
+                settingsModal.style.opacity = '0';
+                setTimeout(() => {
+                    settingsModal.style.opacity = '1';
+                }, 10);
+            }
+        });
+    }
+
+    // Close settings modal
+    if (closeSettingsBtn) {
+        closeSettingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('❌ Closing settings modal');
+            closeSettingsModal();
+        });
+    }
+
+    // Close modal when clicking outside
+    if (settingsModal) {
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                console.log('🖱️ Clicked outside modal, closing');
+                closeSettingsModal();
+            }
+        });
+    }
+
+    // Theme selector functionality
+    const themeOptions = document.querySelectorAll('.theme-option');
+    themeOptions.forEach(option => {
+        option.addEventListener('click', (e) => {
+            e.preventDefault();
+            const theme = option.dataset.theme;
+            console.log('🎨 Changing theme to:', theme);
+            
+            // Remove active class from all options
+            themeOptions.forEach(opt => opt.classList.remove('active'));
+            // Add active class to clicked option
+            option.classList.add('active');
+            
+            // Apply theme
+            applyTheme(theme);
+            
+            // Save theme preference
+            localStorage.setItem('selectedTheme', theme);
+        });
+    });
+
+    // Load saved theme on startup
+    const savedTheme = localStorage.getItem('selectedTheme') || 'default';
+    applyTheme(savedTheme);
+    
+    // Update active theme option
+    const activeThemeOption = document.querySelector(`[data-theme="${savedTheme}"]`);
+    if (activeThemeOption) {
+        themeOptions.forEach(opt => opt.classList.remove('active'));
+        activeThemeOption.classList.add('active');
+    }
+
+    // Settings toggles functionality
+    const notificationsToggle = document.getElementById('notificationsToggle');
+    const soundsToggle = document.getElementById('soundsToggle');
+    const onlineStatusToggle = document.getElementById('onlineStatusToggle');
+    const desktopNotificationsToggle = document.getElementById('desktopNotificationsToggle');
+    const readReceiptsToggle = document.getElementById('readReceiptsToggle');
+    const timestampsToggle = document.getElementById('timestampsToggle');
+    const sendOnEnterToggle = document.getElementById('sendOnEnterToggle');
+
+    // Load saved settings
+    if (notificationsToggle) {
+        notificationsToggle.checked = localStorage.getItem('notifications') !== 'false';
+        notificationsToggle.addEventListener('change', () => {
+            localStorage.setItem('notifications', notificationsToggle.checked);
+            console.log('🔔 Notifications:', notificationsToggle.checked ? 'enabled' : 'disabled');
+        });
+    }
+
+    if (soundsToggle) {
+        soundsToggle.checked = localStorage.getItem('sounds') !== 'false';
+        soundsToggle.addEventListener('change', () => {
+            localStorage.setItem('sounds', soundsToggle.checked);
+            console.log('🔊 Sounds:', soundsToggle.checked ? 'enabled' : 'disabled');
+        });
+    }
+
+    if (onlineStatusToggle) {
+        onlineStatusToggle.checked = localStorage.getItem('onlineStatus') !== 'false';
+        onlineStatusToggle.addEventListener('change', () => {
+            localStorage.setItem('onlineStatus', onlineStatusToggle.checked);
+            console.log('🟢 Online status:', onlineStatusToggle.checked ? 'visible' : 'hidden');
+        });
+    }
+
+    if (desktopNotificationsToggle) {
+        desktopNotificationsToggle.checked = localStorage.getItem('desktopNotifications') !== 'false';
+        desktopNotificationsToggle.addEventListener('change', () => {
+            localStorage.setItem('desktopNotifications', desktopNotificationsToggle.checked);
+            console.log('📳 Desktop notifications:', desktopNotificationsToggle.checked ? 'enabled' : 'disabled');
+            
+            // Request permission for desktop notifications
+            if (desktopNotificationsToggle.checked && 'Notification' in window) {
+                Notification.requestPermission().then(permission => {
+                    console.log('🔔 Notification permission:', permission);
+                });
+            }
+        });
+    }
+
+    if (readReceiptsToggle) {
+        readReceiptsToggle.checked = localStorage.getItem('readReceipts') !== 'false';
+        readReceiptsToggle.addEventListener('change', () => {
+            localStorage.setItem('readReceipts', readReceiptsToggle.checked);
+            console.log('👁️ Read receipts:', readReceiptsToggle.checked ? 'enabled' : 'disabled');
+        });
+    }
+
+    if (timestampsToggle) {
+        timestampsToggle.checked = localStorage.getItem('timestamps') !== 'false';
+        timestampsToggle.addEventListener('change', () => {
+            localStorage.setItem('timestamps', timestampsToggle.checked);
+            console.log('⏰ Timestamps:', timestampsToggle.checked ? 'visible' : 'hidden');
+            // Update all visible timestamps
+            updateTimestampVisibility(timestampsToggle.checked);
+        });
+    }
+
+    if (sendOnEnterToggle) {
+        sendOnEnterToggle.checked = localStorage.getItem('sendOnEnter') !== 'false';
+        sendOnEnterToggle.addEventListener('change', () => {
+            localStorage.setItem('sendOnEnter', sendOnEnterToggle.checked);
+            console.log('⌨️ Send on Enter:', sendOnEnterToggle.checked ? 'enabled' : 'disabled');
+        });
+    }
+});
+
+// Function to update timestamp visibility
+function updateTimestampVisibility(show) {
+    const allTimestamps = document.querySelectorAll('.message-time');
+    allTimestamps.forEach(timestamp => {
+        timestamp.style.display = show ? '' : 'none';
+    });
+}
+
+// Function to play notification sound
+function playNotificationSound() {
+    const soundEnabled = localStorage.getItem('sounds') !== 'false';
+    if (soundEnabled) {
+        // Create a simple notification beep
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+    }
+}
+
+// Function to show desktop notification
+function showDesktopNotification(title, body, icon) {
+    const desktopNotificationsEnabled = localStorage.getItem('desktopNotifications') !== 'false';
+    const notificationsEnabled = localStorage.getItem('notifications') !== 'false';
+    
+    if (desktopNotificationsEnabled && notificationsEnabled && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+            new Notification(title, {
+                body: body,
+                icon: icon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="%2300b8d4"/></svg>',
+                badge: icon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="%2300b8d4"/></svg>'
+            });
+        }
+    }
+}
+
+// Function to close settings modal
+function closeSettingsModal() {
+    const settingsModal = document.getElementById('settingsModal');
+    if (settingsModal) {
+        settingsModal.style.opacity = '0';
+        setTimeout(() => {
+            settingsModal.style.display = 'none';
+        }, 200);
+    }
+}
+
+// Function to apply theme
+function applyTheme(theme) {
+    const root = document.documentElement;
+    
+    if (theme === 'alt') {
+        // Red theme
+        root.style.setProperty('--accent-cyan', '#c62828');
+        root.style.setProperty('--accent-purple', '#d32f2f');
+        root.style.setProperty('--accent-pink', '#f44336');
+        root.style.setProperty('--accent-green', '#388e3c');
+        root.style.setProperty('--accent-orange', '#f57c00');
+        root.style.setProperty('--accent-blue', '#1976d2');
+        console.log('🎨 Applied red theme');
+    } else if (theme === 'green') {
+        // Green theme
+        root.style.setProperty('--accent-cyan', '#2e7d32');
+        root.style.setProperty('--accent-purple', '#388e3c');
+        root.style.setProperty('--accent-pink', '#4caf50');
+        root.style.setProperty('--accent-green', '#66bb6a');
+        root.style.setProperty('--accent-orange', '#8bc34a');
+        root.style.setProperty('--accent-blue', '#009688');
+        console.log('🎨 Applied green theme');
+    } else {
+        // Default cyan theme
+        root.style.setProperty('--accent-cyan', '#00b8d4');
+        root.style.setProperty('--accent-purple', '#9c27b0');
+        root.style.setProperty('--accent-pink', '#e91e63');
+        root.style.setProperty('--accent-green', '#4caf50');
+        root.style.setProperty('--accent-orange', '#ff9800');
+        root.style.setProperty('--accent-blue', '#2196f3');
+        console.log('🎨 Applied default cyan theme');
+    }
+}
+
+// Keyboard shortcut to open settings (Ctrl+,)
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === ',') {
+        e.preventDefault();
+        const settingsBtn = document.getElementById('settingsBtn');
+        if (settingsBtn) {
+            settingsBtn.click();
+        }
+    }
+});
+
+console.log('✅ Settings modal functionality loaded');

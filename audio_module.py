@@ -4,23 +4,42 @@ audio_module.py - Real-time audio conferencing for Shadow Nexus
 Handles audio capture, encoding, transmission, mixing, and playback
 """
 
-import pyaudio
 import queue
 import threading
 import socket
-import numpy as np
 import json
 import base64
 import time
 from datetime import datetime
 from typing import Optional, Dict, List
 
+# Lazy imports for heavy modules
+_pyaudio = None
+_numpy = None
+
+def get_pyaudio():
+    global _pyaudio
+    if _pyaudio is None:
+        import pyaudio
+        _pyaudio = pyaudio
+    return _pyaudio
+
+def get_numpy():
+    global _numpy
+    if _numpy is None:
+        import numpy as np
+        _numpy = np
+    return _numpy
+
 # Audio configuration
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 512
 CHANNELS = 1
-AUDIO_FORMAT = pyaudio.paInt16
 FRAME_SIZE = SAMPLE_RATE // 50  # 20ms frames
+
+def get_audio_format():
+    pyaudio = get_pyaudio()
+    return pyaudio.paInt16
 
 class AudioEngine:
     """Handles all audio operations"""
@@ -30,14 +49,15 @@ class AudioEngine:
         self.server_host = server_host
         self.audio_port = audio_port
         
-        self.audio = pyaudio.PyAudio()
+        # Defer heavy initialization
+        self.audio = None
         self.running = False
         self.enabled = False
         
         # Audio queues
         self.input_queue: queue.Queue = queue.Queue(maxsize=10)
         self.output_queue: queue.Queue = queue.Queue(maxsize=50)
-        self.playback_buffer: np.ndarray = np.zeros(FRAME_SIZE, dtype=np.int16)
+        self.playback_buffer = None
         
         # Socket for audio
         self.audio_socket: Optional[socket.socket] = None
@@ -47,17 +67,29 @@ class AudioEngine:
         self.output_stream = None
         
         # Participants audio (for mixing)
-        self.participant_audio: Dict[str, np.ndarray] = {}
+        self.participant_audio: Dict[str, dict] = {}
         
         print(f"[AUDIO] Engine initialized for {username}")
     
     def initialize_streams(self):
         """Initialize audio input and output streams"""
         try:
+            # Initialize PyAudio only when needed
+            if self.audio is None:
+                pyaudio = get_pyaudio()
+                self.audio = pyaudio.PyAudio()
+                
+                # Initialize numpy buffer
+                if self.playback_buffer is None:
+                    np = get_numpy()
+                    self.playback_buffer = np.zeros(FRAME_SIZE, dtype=np.int16)
+            
+            audio_format = get_audio_format()
+            
             # Input stream (microphone) - without callback for better compatibility
             try:
                 self.input_stream = self.audio.open(
-                    format=AUDIO_FORMAT,
+                    format=audio_format,
                     channels=CHANNELS,
                     rate=SAMPLE_RATE,
                     input=True,
@@ -73,7 +105,7 @@ class AudioEngine:
             # Output stream (speaker) - without callback for better compatibility
             try:
                 self.output_stream = self.audio.open(
-                    format=AUDIO_FORMAT,
+                    format=audio_format,
                     channels=CHANNELS,
                     rate=SAMPLE_RATE,
                     output=True,
@@ -158,6 +190,7 @@ class AudioEngine:
                 # Read directly from input stream
                 if self.input_stream and self.input_stream.is_active():
                     audio_data = self.input_stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                    np = get_numpy()
                     frame = np.frombuffer(audio_data, dtype=np.int16)
                     
                     # Queue for processing
@@ -190,12 +223,13 @@ class AudioEngine:
         self.audio_socket = sock
         print("[AUDIO] Audio socket configured")
     
-    def add_participant_audio(self, username: str, audio_data: np.ndarray):
+    def add_participant_audio(self, username: str, audio_data):
         """Add participant audio for mixing"""
         self.participant_audio[username] = audio_data
     
-    def mix_audio(self) -> np.ndarray:
+    def mix_audio(self):
         """Mix all participant audio streams"""
+        np = get_numpy()
         if not self.participant_audio:
             return np.zeros(FRAME_SIZE, dtype=np.int16)
         
@@ -221,7 +255,7 @@ class AudioEngine:
         
         return mixed
     
-    def queue_playback(self, audio_data: np.ndarray):
+    def queue_playback(self, audio_data):
         """Queue audio for playback"""
         try:
             self.output_queue.put_nowait(audio_data)
@@ -258,7 +292,7 @@ class ServerAudioHandler:
             del self.participant_streams[username]
             print(f"[SERVER AUDIO] Removed participant: {username}")
     
-    def process_audio_frame(self, username: str, audio_data: np.ndarray):
+    def process_audio_frame(self, username: str, audio_data):
         """Process incoming audio frame and distribute to others"""
         # Broadcast to all other participants
         for participant, queue_obj in self.participant_streams.items():
@@ -268,8 +302,9 @@ class ServerAudioHandler:
                 except queue.Full:
                     print(f"[SERVER AUDIO] Queue full for {participant}")
     
-    def get_mixed_audio(self) -> np.ndarray:
+    def get_mixed_audio(self):
         """Get mixed audio from all participants"""
+        np = get_numpy()
         mixed = np.zeros(FRAME_SIZE, dtype=np.float32)
         count = 0
         
@@ -345,7 +380,7 @@ def stop_audio():
 def start_audio_recording():
     """Start audio recording"""
     try:
-        import pyaudio
+        pyaudio = get_pyaudio()
         import threading
         import time
         
@@ -500,7 +535,7 @@ recording_state = {
 def play_audio(audio_data):
     """Play audio from base64 data"""
     try:
-        import pyaudio
+        pyaudio = get_pyaudio()
         import wave
         import tempfile
         import os

@@ -31,7 +31,7 @@ def load_auth_data() -> Dict:
     try:
         os.makedirs(os.path.dirname(AUTH_DATA_FILE), exist_ok=True)
         if os.path.exists(AUTH_DATA_FILE):
-            with open(AUTH_DATA_FILE, 'r') as f:
+            with open(AUTH_DATA_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return {}
     except Exception as e:
@@ -42,8 +42,8 @@ def save_auth_data(data: Dict) -> bool:
     """Save authentication data to file"""
     try:
         os.makedirs(os.path.dirname(AUTH_DATA_FILE), exist_ok=True)
-        with open(AUTH_DATA_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
+        with open(AUTH_DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
         print(f"[AUTH] Error saving auth data: {e}")
