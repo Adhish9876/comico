@@ -182,6 +182,330 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// ===== FORGOT PASSWORD SYSTEM =====
+const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+const closeForgotPasswordBtn = document.getElementById('closeForgotPasswordBtn');
+const submitAnswersBtn = document.getElementById('submitAnswersBtn');
+const passwordResetModal = document.getElementById('passwordResetModal');
+const resetPasswordBtn = document.getElementById('resetPasswordBtn');
+const rejectionModal = document.getElementById('rejectionModal');
+
+// Forgot password link click
+if (forgotPasswordLink) {
+    forgotPasswordLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        forgotPasswordModal.style.display = 'flex';
+        
+        // Reset form
+        document.querySelectorAll('input[name="question1"]').forEach(input => input.checked = false);
+        document.querySelectorAll('input[name="question2"]').forEach(input => input.checked = false);
+    });
+}
+
+// Close forgot password modal
+if (closeForgotPasswordBtn) {
+    closeForgotPasswordBtn.addEventListener('click', () => {
+        forgotPasswordModal.style.display = 'none';
+    });
+}
+
+// Submit answers
+if (submitAnswersBtn) {
+    submitAnswersBtn.addEventListener('click', () => {
+        const answer1 = document.querySelector('input[name="question1"]:checked')?.value;
+        const answer2 = document.querySelector('input[name="question2"]:checked')?.value;
+        
+        if (!answer1 || !answer2) {
+            showNotification('Please answer both questions!', 'error');
+            return;
+        }
+        
+        // Correct answers: 1)d and 2)b
+        if (answer1 === 'd' && answer2 === 'b') {
+            // Correct answers - reset password automatically and go to login
+            forgotPasswordModal.style.animation = 'modalExit 0.3s ease-in forwards';
+            
+            setTimeout(async () => {
+                forgotPasswordModal.style.display = 'none';
+                forgotPasswordModal.style.animation = '';
+                
+                try {
+                    // Generate a default password or use a predefined one
+                    const defaultPassword = 'member123'; // You can change this to any default
+                    
+                    // Call backend to reset password
+                    const result = await eel.reset_password(defaultPassword)();
+                    
+                    if (result.success) {
+                        // Hide forgot password container
+                        document.getElementById('forgotPasswordContainer').style.display = 'none';
+                        failedLoginAttempts = 0;
+                        
+                        // Add success animation to login screen
+                        loginScreen.classList.add('password-reset-success');
+                        
+                        // Show success message on login screen
+                        const successBanner = document.createElement('div');
+                        successBanner.className = 'password-reset-banner';
+                        successBanner.innerHTML = `
+                            <div class="success-icon">✅</div>
+                            <div class="success-text">Welcome Back, Member!</div>
+                            <div class="success-subtext">Your password has been reset to: <strong>${defaultPassword}</strong></div>
+                        `;
+                        loginScreen.appendChild(successBanner);
+                        
+                        // Pre-fill the password field
+                        loginPasswordInput.value = defaultPassword;
+                        
+                        // Remove success elements after animation
+                        setTimeout(() => {
+                            loginScreen.classList.remove('password-reset-success');
+                            if (successBanner.parentNode) {
+                                successBanner.remove();
+                            }
+                        }, 5000); // Show for 5 seconds so user can see the password
+                        
+                        // Focus on password input
+                        setTimeout(() => {
+                            loginPasswordInput.focus();
+                        }, 500);
+                        
+                        showNotification('✅ Password reset to: ' + defaultPassword, 'success');
+                    } else {
+                        showNotification('❌ Failed to reset password: ' + result.message, 'error');
+                    }
+                } catch (error) {
+                    showNotification('❌ Error resetting password', 'error');
+                    console.error('Reset password error:', error);
+                }
+            }, 300);
+        } else {
+            // Wrong answers - show dramatic rejection
+            forgotPasswordModal.style.display = 'none';
+            showDramaticRejection();
+        }
+    });
+}
+
+// Real-time password matching validation
+const newPasswordInput = document.getElementById('newPassword');
+const confirmPasswordInput = document.getElementById('confirmPassword');
+const passwordMatchIndicator = document.getElementById('passwordMatchIndicator');
+
+function checkPasswordMatch() {
+    const newPass = newPasswordInput.value;
+    const confirmPass = confirmPasswordInput.value;
+    
+    if (!confirmPass) {
+        passwordMatchIndicator.classList.remove('show');
+        return;
+    }
+    
+    passwordMatchIndicator.classList.add('show');
+    
+    if (newPass === confirmPass && newPass.length >= 4) {
+        passwordMatchIndicator.classList.remove('no-match');
+        passwordMatchIndicator.classList.add('match');
+        passwordMatchIndicator.textContent = '✓ Passwords match!';
+        resetPasswordBtn.disabled = false;
+    } else if (newPass === confirmPass && newPass.length < 4) {
+        passwordMatchIndicator.classList.remove('match');
+        passwordMatchIndicator.classList.add('no-match');
+        passwordMatchIndicator.textContent = '✗ Password must be at least 4 characters';
+        resetPasswordBtn.disabled = true;
+    } else {
+        passwordMatchIndicator.classList.remove('match');
+        passwordMatchIndicator.classList.add('no-match');
+        passwordMatchIndicator.textContent = '✗ Passwords do not match';
+        resetPasswordBtn.disabled = true;
+    }
+}
+
+if (newPasswordInput && confirmPasswordInput) {
+    newPasswordInput.addEventListener('input', checkPasswordMatch);
+    confirmPasswordInput.addEventListener('input', checkPasswordMatch);
+}
+
+// Password reset functionality
+if (resetPasswordBtn) {
+    resetPasswordBtn.addEventListener('click', async () => {
+        const newPassword = newPasswordInput.value.trim();
+        const confirmPassword = confirmPasswordInput.value.trim();
+        
+        if (!newPassword || !confirmPassword) {
+            showNotification('Please fill in both password fields!', 'error');
+            return;
+        }
+        
+        if (newPassword.length < 4) {
+            showNotification('Password must be at least 4 characters!', 'error');
+            return;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            showNotification('Passwords do not match!', 'error');
+            return;
+        }
+        
+        try {
+            resetPasswordBtn.disabled = true;
+            resetPasswordBtn.textContent = '🔄 Resetting...';
+            
+            // Call backend to reset password
+            const result = await eel.reset_password(newPassword)();
+            
+            if (result.success) {
+                showNotification('✅ Password reset successfully!', 'success');
+                
+                // Smooth transition animation
+                passwordResetModal.style.animation = 'modalExit 0.3s ease-in forwards';
+                
+                setTimeout(() => {
+                    // Close modal and return to login
+                    passwordResetModal.style.display = 'none';
+                    passwordResetModal.style.animation = '';
+                    document.getElementById('forgotPasswordContainer').style.display = 'none';
+                    failedLoginAttempts = 0;
+                    
+                    // Clear password fields
+                    newPasswordInput.value = '';
+                    confirmPasswordInput.value = '';
+                    passwordMatchIndicator.classList.remove('show');
+                    
+                    // Add success animation to login screen
+                    loginScreen.classList.add('password-reset-success');
+                    
+                    // Show success message on login screen
+                    const successBanner = document.createElement('div');
+                    successBanner.className = 'password-reset-banner';
+                    successBanner.innerHTML = `
+                        <div class="success-icon">✅</div>
+                        <div class="success-text">Password Reset Complete!</div>
+                        <div class="success-subtext">You can now login with your new password</div>
+                    `;
+                    loginScreen.appendChild(successBanner);
+                    
+                    // Remove success elements after animation
+                    setTimeout(() => {
+                        loginScreen.classList.remove('password-reset-success');
+                        if (successBanner.parentNode) {
+                            successBanner.remove();
+                        }
+                    }, 3000);
+                    
+                    // Focus on password input with slight delay
+                    setTimeout(() => {
+                        loginPasswordInput.focus();
+                    }, 500);
+                }, 300);
+            } else {
+                showNotification('❌ Failed to reset password: ' + result.message, 'error');
+            }
+        } catch (error) {
+            showNotification('❌ Error resetting password', 'error');
+            console.error('Reset password error:', error);
+        } finally {
+            resetPasswordBtn.disabled = false;
+            resetPasswordBtn.textContent = '🚀 Reset Password';
+        }
+    });
+}
+
+// Dramatic rejection function
+function showDramaticRejection() {
+    rejectionModal.style.display = 'flex';
+    
+    let countdown = 3;
+    const countdownElement = document.getElementById('countdown');
+    
+    const countdownInterval = setInterval(() => {
+        countdown--;
+        countdownElement.textContent = countdown;
+        
+        if (countdown <= 0) {
+            clearInterval(countdownInterval);
+            
+            // Close the application with multiple fallback methods
+            console.log('🚫 Closing application - unauthorized access detected');
+            
+            try {
+                // Method 1: Try Eel close_application
+                if (typeof eel !== 'undefined') {
+                    eel.close_application()();
+                    console.log('✅ Called eel.close_application()');
+                }
+                
+                // Method 2: Try to close the window
+                setTimeout(() => {
+                    try {
+                        window.close();
+                        console.log('✅ Called window.close()');
+                    } catch (e) {
+                        console.log('❌ window.close() failed:', e);
+                    }
+                }, 100);
+                
+                // Method 3: Try to navigate away
+                setTimeout(() => {
+                    try {
+                        window.location.href = 'about:blank';
+                        console.log('✅ Navigated to about:blank');
+                    } catch (e) {
+                        console.log('❌ Navigation failed:', e);
+                    }
+                }, 200);
+                
+                // Method 4: Hide the entire app
+                setTimeout(() => {
+                    try {
+                        document.body.style.display = 'none';
+                        document.title = 'Access Denied';
+                        console.log('✅ Hidden application');
+                    } catch (e) {
+                        console.log('❌ Hide failed:', e);
+                    }
+                }, 300);
+                
+            } catch (error) {
+                console.error('❌ Error during application closure:', error);
+                
+                // Final fallback - just hide everything
+                document.body.innerHTML = `
+                    <div style="
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100vw;
+                        height: 100vh;
+                        background: #000;
+                        color: #ff0000;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-family: 'Comic Neue', cursive;
+                        font-size: 24px;
+                        z-index: 99999;
+                    ">
+                        🚫 ACCESS DENIED - APPLICATION TERMINATED 🚫
+                    </div>
+                `;
+            }
+        }
+    }, 1000);
+}
+
+// Close modals when clicking outside
+[forgotPasswordModal, passwordResetModal, rejectionModal].forEach(modal => {
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
+});
+
 // Track which chats have had their new messages divider viewed
 const viewedChats = new Set();
 
@@ -578,6 +902,9 @@ signupBtn.addEventListener('click', async () => {
     }
 });
 
+// Track failed login attempts
+let failedLoginAttempts = 0;
+
 // Login button handler
 loginBtn.addEventListener('click', async () => {
     const password = loginPasswordInput.value.trim();
@@ -597,6 +924,8 @@ loginBtn.addEventListener('click', async () => {
         const authResult = await eel.login_user(password)();
         
         if (!authResult.success) {
+            failedLoginAttempts++;
+            
             // Show specific error message for wrong password
             const errorMsg = authResult.message === 'Incorrect password' 
                 ? '❌ Wrong Password! Please try again.' 
@@ -615,6 +944,12 @@ loginBtn.addEventListener('click', async () => {
                 loginPasswordInput.classList.remove('error-state');
             }, 1000);
             
+            // Show forgot password option after 2 failed attempts
+            if (failedLoginAttempts >= 2) {
+                document.getElementById('forgotPasswordContainer').style.display = 'block';
+                showNotification('🔐 Forgot your password? Click the link below!', 'info');
+            }
+            
             // Clear password field
             loginPasswordInput.value = '';
             loginPasswordInput.focus();
@@ -623,6 +958,9 @@ loginBtn.addEventListener('click', async () => {
             loginBtn.textContent = 'CONNECT';
             return;
         }
+        
+        // Reset failed attempts on successful login
+        failedLoginAttempts = 0;
         
         username = authResult.username;
         loginBtn.textContent = 'CONNECTING...';

@@ -67,6 +67,713 @@ body {
     background: var(--accent-purple);
 }
 
+/* ===== FORGOT PASSWORD SYSTEM ===== */
+.forgot-password-container {
+    text-align: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-main);
+    animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.forgot-password-link {
+    color: var(--accent-cyan);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 400;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.forgot-password-link::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(198, 40, 40, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.forgot-password-link:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+.forgot-password-link:hover {
+    color: var(--accent-pink);
+    border-color: var(--accent-pink);
+    transform: translateY(-2px);
+}
+
+/* Comic Modal Styling with Advanced Animations */
+.comic-modal {
+    background: linear-gradient(145deg, var(--bg-panel), var(--bg-deep)) !important;
+    border: 2px solid transparent !important;
+    border-radius: 20px !important;
+    box-shadow: 
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(0, 184, 212, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+    max-width: 580px !important;
+    max-height: 90vh !important;
+    animation: modalEnter 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+    position: relative !important;
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Removed annoying shimmer animation */
+
+@keyframes modalEnter {
+    0% {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.comic-modal .modal-header {
+    background: linear-gradient(135deg, 
+        rgba(0, 184, 212, 0.2), 
+        rgba(156, 39, 176, 0.2),
+        rgba(0, 184, 212, 0.1)
+    ) !important;
+    color: var(--text-bright) !important;
+    padding: 24px !important;
+    border-radius: 18px 18px 0 0 !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 2px solid rgba(0, 184, 212, 0.3) !important;
+    overflow: hidden !important;
+}
+
+.comic-modal .modal-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, 
+        transparent,
+        var(--accent-cyan),
+        var(--accent-purple),
+        transparent
+    );
+    animation: headerGlow 2s ease-in-out infinite;
+}
+
+@keyframes headerGlow {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+.comic-modal .modal-header h2 {
+    font-family: 'Comic Neue', cursive !important;
+    font-size: 22px !important;
+    font-weight: 600 !important;
+    margin: 0 !important;
+    letter-spacing: 1px !important;
+    text-shadow: 0 2px 10px rgba(0, 184, 212, 0.5) !important;
+    animation: titleFloat 3s ease-in-out infinite !important;
+}
+
+@keyframes titleFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+.comic-modal .modal-body {
+    padding: 28px !important;
+    position: relative !important;
+    z-index: 1 !important;
+    overflow-y: auto !important;
+    max-height: calc(90vh - 120px) !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: var(--accent-cyan) var(--bg-deep) !important;
+}
+
+.comic-modal .modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.comic-modal .modal-body::-webkit-scrollbar-track {
+    background: var(--bg-deep);
+    border-radius: 4px;
+}
+
+.comic-modal .modal-body::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--accent-cyan), var(--accent-purple));
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.comic-modal .modal-body::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, var(--accent-purple), var(--accent-cyan));
+}
+
+/* Question Container with Stagger Animation */
+.question-container {
+    margin: 0;
+    padding-right: 4px; /* Space for scrollbar */
+}
+
+.question {
+    background: linear-gradient(135deg, var(--bg-deep), var(--bg-card));
+    border: 2px solid var(--border-main);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    position: relative;
+    overflow: hidden;
+    animation: questionSlideIn 0.4s ease-out backwards;
+}
+
+.question:nth-child(1) { animation-delay: 0.1s; }
+.question:nth-child(2) { animation-delay: 0.15s; }
+
+@keyframes questionSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.question::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--accent-cyan), var(--accent-purple));
+    transform: scaleY(0);
+    transition: transform 0.3s ease;
+}
+
+.question:hover::before {
+    transform: scaleY(1);
+}
+
+.question:hover {
+    border-color: var(--accent-cyan);
+    box-shadow: 
+        0 8px 25px rgba(0, 184, 212, 0.2),
+        inset 0 1px 0 rgba(0, 184, 212, 0.1);
+    transform: translateY(-2px);
+}
+
+.question h3 {
+    color: var(--text-bright);
+    font-family: 'Comic Neue', cursive;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.option-label {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 2px solid var(--border-main);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 14px;
+    position: relative;
+    overflow: hidden;
+}
+
+.option-label::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 3px;
+    background: var(--accent-cyan);
+    transform: scaleY(0);
+    transition: transform 0.3s ease;
+}
+
+.option-label:hover::before {
+    transform: scaleY(1);
+}
+
+.option-label:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-cyan);
+    transform: translateX(4px);
+    box-shadow: 0 4px 15px rgba(0, 184, 212, 0.15);
+}
+
+.option-label input[type="radio"]:checked + span {
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+.option-label:has(input[type="radio"]:checked) {
+    background: rgba(0, 184, 212, 0.1);
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 20px rgba(0, 184, 212, 0.2);
+}
+
+.option-label input[type="radio"] {
+    margin-right: 12px;
+    accent-color: var(--accent-cyan);
+    transform: scale(1.2);
+    cursor: pointer;
+}
+
+.option-label span {
+    color: var(--text-normal);
+    font-weight: 400;
+    transition: all 0.3s ease;
+}
+
+/* Comic Button with Smooth Effects */
+.comic-btn {
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)) !important;
+    color: #ffffff !important;
+    border: none !important;
+    padding: 14px 32px !important;
+    border-radius: 12px !important;
+    font-family: 'Comic Neue', cursive !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+    box-shadow: 
+        0 6px 20px rgba(0, 184, 212, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+    letter-spacing: 0.5px !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.comic-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    transform: translate(-50%, -50%);
+    transition: all 0.4s ease;
+}
+
+.comic-btn:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+.comic-btn:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 
+        0 8px 25px rgba(0, 184, 212, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+}
+
+.comic-btn:active {
+    transform: translateY(0) !important;
+    transition: all 0.1s ease !important;
+}
+
+.comic-btn:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+/* Form Styling with Focus Effects */
+.form-group {
+    margin-bottom: 20px;
+    animation: formGroupFadeIn 0.3s ease-out backwards;
+}
+
+.form-group:nth-child(1) { animation-delay: 0.05s; }
+.form-group:nth-child(2) { animation-delay: 0.1s; }
+
+@keyframes formGroupFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.form-group label {
+    display: block;
+    color: var(--text-bright);
+    font-weight: 500;
+    margin-bottom: 10px;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+}
+
+.form-input {
+    width: 100%;
+    padding: 13px 16px;
+    background: var(--bg-deep);
+    border: 2px solid var(--border-main);
+    border-radius: 10px;
+    color: var(--text-normal);
+    font-size: 14px;
+    font-family: 'Comic Neue', cursive;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-cyan);
+    box-shadow: 
+        0 0 0 3px rgba(0, 184, 212, 0.1),
+        0 2px 10px rgba(0, 184, 212, 0.15);
+    background: var(--bg-card);
+    transform: translateY(-1px);
+}
+
+/* Password Match Indicator with Smooth Transitions */
+.password-match-indicator {
+    margin-top: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    display: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: indicatorSlideIn 0.3s ease-out;
+}
+
+@keyframes indicatorSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.password-match-indicator.show {
+    display: block;
+}
+
+.password-match-indicator.match {
+    background: linear-gradient(135deg, rgba(46, 204, 113, 0.15), rgba(46, 204, 113, 0.05));
+    color: #2ecc71;
+    border: 2px solid rgba(46, 204, 113, 0.4);
+    box-shadow: 0 4px 15px rgba(46, 204, 113, 0.2);
+}
+
+.password-match-indicator.no-match {
+    background: linear-gradient(135deg, rgba(231, 76, 60, 0.15), rgba(231, 76, 60, 0.05));
+    color: #e74c3c;
+    border: 2px solid rgba(231, 76, 60, 0.4);
+    box-shadow: 0 4px 15px rgba(231, 76, 60, 0.2);
+}
+
+/* Modal Actions */
+.modal-actions {
+    margin-top: 28px;
+    text-align: center;
+    animation: actionsFadeIn 0.3s ease-out 0.2s backwards;
+    padding-bottom: 8px; /* Extra space for scrolling */
+}
+
+@keyframes actionsFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Dramatic Rejection Modal with Intense Effects */
+.rejection-modal {
+    background: linear-gradient(135deg, #1a0000, #4a0000, #1a0000) !important;
+    border: 3px solid #ff0000 !important;
+    box-shadow: 
+        0 0 60px rgba(255, 0, 0, 0.8),
+        inset 0 0 60px rgba(255, 0, 0, 0.2) !important;
+    animation: dramaticEntrance 0.6s ease-out !important;
+}
+
+@keyframes dramaticEntrance {
+    0% {
+        opacity: 0;
+        transform: scale(0.5) rotate(-10deg);
+    }
+    50% {
+        transform: scale(1.1) rotate(5deg);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0);
+    }
+}
+
+.dramatic-text {
+    text-align: center;
+    padding: 50px 30px;
+    animation: textShake 0.5s ease-in-out 0.3s;
+}
+
+@keyframes textShake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.dramatic-text h1 {
+    font-family: 'Comic Neue', cursive;
+    font-size: 36px;
+    font-weight: 700;
+    color: #ff3333;
+    text-shadow: 
+        0 0 20px rgba(255, 0, 0, 0.8),
+        2px 2px 10px rgba(0,0,0,0.8);
+    margin-bottom: 20px;
+    animation: intensePulse 1s infinite, glitchText 2s infinite;
+}
+
+@keyframes intensePulse {
+    0%, 100% { 
+        transform: scale(1); 
+        opacity: 1; 
+    }
+    50% { 
+        transform: scale(1.08); 
+        opacity: 0.9; 
+    }
+}
+
+@keyframes glitchText {
+    0%, 90%, 100% { transform: translate(0); }
+    92% { transform: translate(-2px, 2px); }
+    94% { transform: translate(2px, -2px); }
+    96% { transform: translate(-2px, -2px); }
+    98% { transform: translate(2px, 2px); }
+}
+
+.dramatic-text h2 {
+    font-family: 'Comic Neue', cursive;
+    font-size: 26px;
+    font-weight: 600;
+    color: #ffffff;
+    text-shadow: 
+        0 0 10px rgba(255, 255, 255, 0.5),
+        1px 1px 6px rgba(0,0,0,0.8);
+    margin-bottom: 24px;
+    animation: fadeInScale 0.5s ease-out 0.5s backwards;
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.dramatic-text p {
+    font-size: 17px;
+    color: #ffcccc;
+    margin: 10px 0;
+    font-weight: 400;
+    animation: fadeInUp 0.5s ease-out backwards;
+}
+
+.dramatic-text p:nth-child(3) { animation-delay: 0.6s; }
+.dramatic-text p:nth-child(4) { animation-delay: 0.7s; }
+
+#countdown {
+    font-family: 'Comic Neue', cursive;
+    font-size: 32px;
+    color: #ff0000;
+    font-weight: 700;
+    text-shadow: 
+        0 0 30px rgba(255, 0, 0, 1),
+        2px 2px 8px rgba(0,0,0,0.8);
+    display: inline-block;
+    animation: countdownPulse 1s infinite;
+}
+
+@keyframes countdownPulse {
+    0%, 100% { 
+        transform: scale(1); 
+        text-shadow: 
+            0 0 30px rgba(255, 0, 0, 1),
+            2px 2px 8px rgba(0,0,0,0.8);
+    }
+    50% { 
+        transform: scale(1.3); 
+        text-shadow: 
+            0 0 50px rgba(255, 0, 0, 1),
+            2px 2px 15px rgba(0,0,0,0.8);
+    }
+}
+
+/* Modal Exit Animation */
+@keyframes modalExit {
+    0% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
+}
+
+/* Password Reset Success Animations */
+.password-reset-success {
+    animation: loginSuccessGlow 3s ease-out;
+}
+
+@keyframes loginSuccessGlow {
+    0% {
+        box-shadow: 0 0 0 rgba(46, 204, 113, 0);
+    }
+    50% {
+        box-shadow: 0 0 30px rgba(46, 204, 113, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 0 rgba(46, 204, 113, 0);
+    }
+}
+
+.password-reset-banner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, 
+        rgba(46, 204, 113, 0.95), 
+        rgba(39, 174, 96, 0.95)
+    );
+    color: white;
+    padding: 24px 32px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 
+        0 10px 30px rgba(46, 204, 113, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    animation: successBannerEnter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 1000;
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(46, 204, 113, 0.3);
+}
+
+@keyframes successBannerEnter {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.8) rotate(-5deg);
+    }
+    60% {
+        transform: translate(-50%, -50%) scale(1.05) rotate(2deg);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    }
+}
+
+.success-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    animation: successIconBounce 0.6s ease-out 0.2s backwards;
+}
+
+@keyframes successIconBounce {
+    0% {
+        transform: scale(0);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.success-text {
+    font-family: 'Comic Neue', cursive;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    animation: successTextSlide 0.4s ease-out 0.4s backwards;
+}
+
+@keyframes successTextSlide {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.success-subtext {
+    font-size: 14px;
+    opacity: 0.9;
+    font-weight: 400;
+    animation: successTextSlide 0.4s ease-out 0.6s backwards;
+}
+
 ::selection {
     background: var(--accent-cyan);
     color: var(--bg-deep);

@@ -109,6 +109,10 @@
                 </div>
 
                 <button type="button" id="loginBtn" class="primary-btn">Connect</button>
+
+                <div class="forgot-password-container" id="forgotPasswordContainer" style="display: none;">
+                    <a href="#" id="forgotPasswordLink" class="forgot-password-link">🔐 Forgot Password?</a>
+                </div>
             </form>
         </div>
     </div>
@@ -465,100 +469,205 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal-overlay" style="display:none;">
-        <div class="modal-content settings-modal">
-            <div class="settings-header">
-                <h3 class="modal-title">Settings</h3>
-                <button class="close-modal-btn" id="closeSettingsBtn">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                        <path
-                            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                    </svg>
-                </button>
+    <!-- Forgot Password Modal -->
+    <div id="forgotPasswordModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content comic-modal">
+            <div class="modal-header">
+                <h2>🔐 Secret Member Verification</h2>
+                <button class="close-btn" id="closeForgotPasswordBtn">&times;</button>
             </div>
-
-            <div class="settings-content">
-                <!-- Theme Section -->
-                <div class="settings-section">
-                    <div class="settings-section-header">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                            <path
-                                d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
-                        </svg>
-                        <h4>Appearance</h4>
-                    </div>
-                    <div class="settings-item">
-                        <div class="settings-item-info">
-                            <label>Theme</label>
-                            <span class="settings-item-desc">Choose your interface theme</span>
+            <div class="modal-body">
+                <div class="question-container">
+                    <div class="question">
+                        <h3>1. What's the second rule of ***** club?</h3>
+                        <div class="options">
+                            <label class="option-label">
+                                <input type="radio" name="question1" value="a">
+                                <span>a) Membership card</span>
+                            </label>
+                            <label class="option-label">
+                                <input type="radio" name="question1" value="b">
+                                <span>b) Always win</span>
+                            </label>
+                            <label class="option-label">
+                                <input type="radio" name="question1" value="c">
+                                <span>c) Wear black gloves</span>
+                            </label>
+                            <label class="option-label">
+                                <input type="radio" name="question1" value="d">
+                                <span>d) Don't talk about ***** Club</span>
+                            </label>
                         </div>
-                        <div class="theme-selector">
-                            <button class="theme-option active" data-theme="default">
-                                <span class="theme-preview default-theme"></span>
-                                <span>Cyan</span>
-                            </button>
-                            <button class="theme-option" data-theme="alt">
-                                <span class="theme-preview alt-theme"></span>
-                                <span>Red</span>
-                            </button>
+                    </div>
+
+                    <div class="question">
+                        <h3>2. What's our society's quote:</h3>
+                        <div class="options">
+                            <label class="option-label">
+                                <input type="radio" name="question2" value="a">
+                                <span>a) "Vande Mataram"</span>
+                            </label>
+                            <label class="option-label">
+                                <input type="radio" name="question2" value="b">
+                                <span>b) "Oh captain my captain"</span>
+                            </label>
+                            <label class="option-label">
+                                <input type="radio" name="question2" value="c">
+                                <span>c) "To infinity… and beyond!"</span>
+                            </label>
+                            <label class="option-label">
+                                <input type="radio" name="question2" value="d">
+                                <span>d) "Be your own villain"</span>
+                            </label>
                         </div>
                     </div>
                 </div>
 
-                <!-- Notifications Section -->
-                <div class="settings-section">
-                    <div class="settings-section-header">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                            <path
-                                d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" />
-                        </svg>
-                        <h4>Notifications</h4>
-                    </div>
-                    <div class="settings-item">
-                        <div class="settings-item-info">
-                            <label>Message Notifications</label>
-                            <span class="settings-item-desc">Get notified for new messages</span>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="notificationsToggle" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="settings-item">
-                        <div class="settings-item-info">
-                            <label>Sound Effects</label>
-                            <span class="settings-item-desc">Play sounds for messages and calls</span>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="soundsToggle" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Privacy Section -->
-                <div class="settings-section">
-                    <div class="settings-section-header">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                            <path
-                                d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
-                        </svg>
-                        <h4>Privacy & Security</h4>
-                    </div>
-                    <div class="settings-item">
-                        <div class="settings-item-info">
-                            <label>Show Online Status</label>
-                            <span class="settings-item-desc">Let others see when you're online</span>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="onlineStatusToggle" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
+                <div class="modal-actions">
+                    <button id="submitAnswersBtn" class="btn-primary comic-btn">🎯 Submit Answers</button>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Password Reset Modal -->
+    <div id="passwordResetModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content comic-modal">
+            <div class="modal-header">
+                <h2>🔑 Reset Your Password</h2>
+            </div>
+            <div class="modal-body">
+                <div class="comic-text">
+
+                </div>
+
+                <div class="form-group">
+                    <label for="newPassword">New Password:</label>
+                    <input type="password" id="newPassword" class="form-input"
+                        placeholder="Enter new password (min 4 chars)">
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password:</label>
+                    <input type="password" id="confirmPassword" class="form-input" placeholder="Confirm new password">
+                    <div id="passwordMatchIndicator" class="password-match-indicator"></div>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="resetPasswordBtn" class="btn-primary comic-btn">🚀 Reset Password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dramatic Rejection Modal -->
+    <div id="rejectionModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content comic-modal rejection-modal">
+            <div class="modal-body">
+                <div class="dramatic-text">
+                    <h1>⚠️ ACCESS DENIED ⚠️</h1>
+
+                    <p>🚫 Unauthorized access detected</p>
+                    <p>💥 Application Shutting down <span id="countdown">3</span> seconds...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay" style="display:none;"></div>
+    <div class="modal-content settings-modal">
+        <div class="settings-header">
+            <h3 class="modal-title">Settings</h3>
+            <button class="close-modal-btn" id="closeSettingsBtn">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                    <path
+                        d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="settings-content">
+            <!-- Theme Section -->
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path
+                            d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                    </svg>
+                    <h4>Appearance</h4>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Theme</label>
+                        <span class="settings-item-desc">Choose your interface theme</span>
+                    </div>
+                    <div class="theme-selector">
+                        <button class="theme-option active" data-theme="default">
+                            <span class="theme-preview default-theme"></span>
+                            <span>Cyan</span>
+                        </button>
+                        <button class="theme-option" data-theme="alt">
+                            <span class="theme-preview alt-theme"></span>
+                            <span>Red</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notifications Section -->
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path
+                            d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" />
+                    </svg>
+                    <h4>Notifications</h4>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Message Notifications</label>
+                        <span class="settings-item-desc">Get notified for new messages</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="notificationsToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Sound Effects</label>
+                        <span class="settings-item-desc">Play sounds for messages and calls</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="soundsToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Privacy Section -->
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path
+                            d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
+                    </svg>
+                    <h4>Privacy & Security</h4>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Show Online Status</label>
+                        <span class="settings-item-desc">Let others see when you're online</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="onlineStatusToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
 
 

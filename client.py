@@ -611,6 +611,56 @@ def login_user(password: str):
     }
 
 @eel.expose
+def reset_password(new_password: str):
+    """Reset password for the current device"""
+    try:
+        import auth_module
+        mac = get_mac_address()
+        success = auth_module.update_password(mac, new_password)
+        print(f"[AUTH] Password reset: {success}")
+        return {
+            'success': success,
+            'message': 'Password reset successfully' if success else 'Failed to reset password'
+        }
+    except Exception as e:
+        print(f"[AUTH] Password reset error: {e}")
+        return {'success': False, 'message': str(e)}
+
+@eel.expose
+def close_application():
+    """Close the application forcefully"""
+    try:
+        print("[APP] 🚫 UNAUTHORIZED ACCESS - CLOSING APPLICATION...")
+        
+        # Try multiple methods to ensure closure
+        import sys
+        import os
+        import threading
+        
+        def force_exit():
+            try:
+                # Force exit after short delay
+                import time
+                time.sleep(0.5)
+                os._exit(1)  # Force exit
+            except:
+                pass
+        
+        # Start force exit in background
+        threading.Thread(target=force_exit, daemon=True).start()
+        
+        # Try graceful exit first
+        sys.exit(0)
+        
+    except Exception as e:
+        print(f"[APP] Error during closure: {e}")
+        try:
+            import os
+            os._exit(1)  # Force exit as last resort
+        except:
+            pass
+
+@eel.expose
 def refresh_user_list():
     """Refresh user list by requesting from server"""
     if state.connected and state.socket:

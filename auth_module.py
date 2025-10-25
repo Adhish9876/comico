@@ -108,3 +108,24 @@ def get_username_by_mac(mac_address: str) -> Optional[str]:
     if mac_address in auth_data:
         return auth_data[mac_address]['username']
     return None
+
+def update_password(mac_address: str, new_password: str) -> bool:
+    """
+    Update password for a registered MAC address
+    Returns: success status
+    """
+    auth_data = load_auth_data()
+    
+    if mac_address not in auth_data:
+        print(f"[AUTH] MAC address {mac_address} not found for password update")
+        return False
+    
+    # Update the password hash
+    auth_data[mac_address]['password_hash'] = hash_password(new_password)
+    
+    if save_auth_data(auth_data):
+        print(f"[AUTH] Password updated successfully for {auth_data[mac_address]['username']}")
+        return True
+    
+    print(f"[AUTH] Failed to save updated password")
+    return False
