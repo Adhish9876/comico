@@ -2414,6 +2414,14 @@ body {
     background: linear-gradient(135deg, #c62828 0%, #424242 100%);
 }
 
+.orange-theme {
+    background: linear-gradient(135deg, #f75900 0%, #323232 100%);
+}
+
+.green-theme {
+    background: linear-gradient(135deg, #93c226 0%, #000000 100%);
+}
+
 /* Toggle Switch */
 .switch {
     position: relative;
@@ -2891,6 +2899,88 @@ body.theme-alt .file-item {
 body.theme-alt .send-btn:hover {
     background: #8a8a8a;
     color: #ffffff;
+}
+
+/* ============ ORANGE-GREY THEME ============ */
+.theme-orange {
+    --bg-deep: #1a1a1a;
+    --bg-panel: #2a2a2a;
+    --bg-card: #333333;
+    --bg-hover: #404040;
+    --accent-cyan: #f75900;
+    --accent-pink: #323232;
+    --accent-purple: #f75900;
+    --text-bright: #ffffff;
+    --text-normal: #e0e0e0;
+    --text-muted: #b0b0b0;
+    --text-dim: #808080;
+    --border-main: #555555;
+    --border-bright: #666666;
+}
+
+body.theme-orange .chat-avatar,
+body.theme-orange .message-avatar,
+body.theme-orange .chat-header-avatar {
+    border: 2px solid #323232;
+}
+
+body.theme-orange .send-btn {
+    color: #ffffff;
+}
+
+body.theme-orange .theme-preview.orange-theme {
+    border-color: #ffffff;
+}
+
+body.theme-orange .message.own .message-bubble {
+    background: #f75900;
+    color: #ffffff;
+}
+
+body.theme-orange .message:not(.own) .message-bubble {
+    background: #323232;
+    color: #ffffff;
+}
+
+/* ============ GREEN-BLACK THEME ============ */
+.theme-green {
+    --bg-deep: #0a0a0a;
+    --bg-panel: #1a1a1a;
+    --bg-card: #2a2a2a;
+    --bg-hover: #333333;
+    --accent-cyan: #93c226;
+    --accent-pink: #000000;
+    --accent-purple: #93c226;
+    --text-bright: #ffffff;
+    --text-normal: #e0e0e0;
+    --text-muted: #b0b0b0;
+    --text-dim: #808080;
+    --border-main: #444444;
+    --border-bright: #555555;
+}
+
+body.theme-green .chat-avatar,
+body.theme-green .message-avatar,
+body.theme-green .chat-header-avatar {
+    border: 2px solid #000000;
+}
+
+body.theme-green .send-btn {
+    color: #ffffff;
+}
+
+body.theme-green .theme-preview.green-theme {
+    border-color: #ffffff;
+}
+
+body.theme-green .message.own .message-bubble {
+    background: #93c226;
+    color: #000000;
+}
+
+body.theme-green .message:not(.own) .message-bubble {
+    background: #000000;
+    color: #93c226;
 }
 
 /* ============ RESPONSIVE DESIGN ============ */
@@ -3465,19 +3555,15 @@ textarea {
 
 /* ===== EMOJI PICKER ===== */
 .emoji-picker {
-    position: fixed;
     background: var(--bg-card);
     border: 3px solid var(--border-main);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    z-index: 10000;
-    min-width: 280px;
-    max-height: 250px;
-    display: none;
+    min-width: 320px;
+    max-height: 400px;
+    display: flex;
     flex-direction: column;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    max-width: 90vw;
 }
 
 .emoji-picker.show {

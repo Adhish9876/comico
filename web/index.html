@@ -325,11 +325,12 @@
                 </div>
 
                 <!-- Emoji Picker Modal (inside chat-area for proper centering) -->
-                <div id="emojiPicker" class="emoji-picker">
-                    <div class="emoji-picker-header">
-                        <span>Choose an emoji</span>
-                        <button class="close-emoji-btn" id="closeEmojiBtn">×</button>
-                    </div>
+                <div id="emojiPickerModal" class="modal-overlay" style="display: none;">
+                    <div id="emojiPicker" class="emoji-picker modal-content">
+                        <div class="emoji-picker-header">
+                            <span>Choose an emoji</span>
+                            <button class="close-emoji-btn" id="closeEmojiBtn">×</button>
+                        </div>
                     <div class="emoji-grid">
                         <div class="emoji-category">
                             <h4>Smileys & People</h4>
@@ -439,6 +440,7 @@
                             </div>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
 
@@ -576,18 +578,18 @@
 
     <!-- Settings Modal -->
     <div id="settingsModal" class="modal-overlay" style="display:none;">
-        <div class="modal-content settings-modal"></div>
-        <div class="settings-header">
-            <h3 class="modal-title">Settings</h3>
-            <button class="close-modal-btn" id="closeSettingsBtn">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                    <path
-                        d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                </svg>
-            </button>
-        </div>
+        <div class="modal-content settings-modal">
+            <div class="settings-header">
+                <h3 class="modal-title">Settings</h3>
+                <button class="close-modal-btn" id="closeSettingsBtn">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path
+                            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                    </svg>
+                </button>
+            </div>
 
-        <div class="settings-content">
+            <div class="settings-content">
             <!-- Theme Section -->
             <div class="settings-section">
                 <div class="settings-section-header">
@@ -610,6 +612,14 @@
                         <button class="theme-option" data-theme="alt">
                             <span class="theme-preview alt-theme"></span>
                             <span>Red</span>
+                        </button>
+                        <button class="theme-option" data-theme="orange">
+                            <span class="theme-preview orange-theme"></span>
+                            <span>Orange</span>
+                        </button>
+                        <button class="theme-option" data-theme="green">
+                            <span class="theme-preview green-theme"></span>
+                            <span>Green</span>
                         </button>
                     </div>
                 </div>
@@ -665,9 +675,90 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Auto-save Chat History</label>
+                        <span class="settings-item-desc">Automatically save conversations locally</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="autoSaveToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Chat Settings Section -->
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+                    </svg>
+                    <h4>Chat Settings</h4>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Enter to Send</label>
+                        <span class="settings-item-desc">Send messages by pressing Enter key</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="enterToSendToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Show Timestamps</label>
+                        <span class="settings-item-desc">Display message timestamps</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="timestampsToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Emoji Reactions</label>
+                        <span class="settings-item-desc">Enable emoji reactions on messages</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="emojiReactionsToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Performance Section -->
+            <div class="settings-section">
+                <div class="settings-section-header">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M15.9 18.45C17.25 17.1 18 15.2 18 13c0-2.2-.75-4.1-2.1-5.45L17.5 6c1.95 1.95 3 4.57 3 7s-1.05 5.05-3 7l-1.6-1.55zM23 13c0 3.18-1.29 6.18-3.5 8.5l-1.42-1.42C19.32 18.68 20.5 15.93 20.5 13s-1.18-5.68-2.42-7.08L19.5 4.5C21.71 6.82 23 9.82 23 13zM8.1 5.55C6.75 6.9 6 8.8 6 11c0 2.2.75 4.1 2.1 5.45L6.5 18C4.55 16.05 3.5 13.43 3.5 11s1.05-5.05 3-7l1.6 1.55zM1 11c0-3.18 1.29-6.18 3.5-8.5L5.92 4.08C4.68 5.32 3.5 8.07 3.5 11s1.18 5.68 2.42 7.08L4.5 19.5C2.29 17.18 1 14.18 1 11zm11-2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                    </svg>
+                    <h4>Performance</h4>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Reduce Animations</label>
+                        <span class="settings-item-desc">Minimize animations for better performance</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="reduceAnimationsToggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <div class="settings-item-info">
+                        <label>Message Limit</label>
+                        <span class="settings-item-desc">Maximum messages to keep in memory</span>
+                    </div>
+                    <select class="settings-select" id="messageLimitSelect">
+                        <option value="100">100 messages</option>
+                        <option value="250">250 messages</option>
+                        <option value="500" selected>500 messages</option>
+                        <option value="1000">1000 messages</option>
+                    </select>
+                </div>
             </div>
         </div>
-    </div>
     </div>
 
     <!-- Message Context Menu -->

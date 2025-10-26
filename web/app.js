@@ -4100,6 +4100,128 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Online status:', this.checked);
         });
     }
+
+    // Enhanced Settings Implementation
+    const autoSaveToggle = document.getElementById('autoSaveToggle');
+    const enterToSendToggle = document.getElementById('enterToSendToggle');
+    const timestampsToggle = document.getElementById('timestampsToggle');
+    const emojiReactionsToggle = document.getElementById('emojiReactionsToggle');
+    const reduceAnimationsToggle = document.getElementById('reduceAnimationsToggle');
+    const messageLimitSelect = document.getElementById('messageLimitSelect');
+
+    // Auto-save toggle
+    if (autoSaveToggle) {
+        if (localStorage.getItem('autoSave') === 'false') {
+            autoSaveToggle.checked = false;
+        }
+        autoSaveToggle.addEventListener('change', function() {
+            localStorage.setItem('autoSave', this.checked);
+            console.log('Auto-save:', this.checked);
+        });
+    }
+
+    // Enter to send toggle
+    if (enterToSendToggle) {
+        if (localStorage.getItem('enterToSend') === 'false') {
+            enterToSendToggle.checked = false;
+        }
+        enterToSendToggle.addEventListener('change', function() {
+            localStorage.setItem('enterToSend', this.checked);
+            console.log('Enter to send:', this.checked);
+        });
+    }
+
+    // Timestamps toggle
+    if (timestampsToggle) {
+        if (localStorage.getItem('showTimestamps') === 'false') {
+            timestampsToggle.checked = false;
+        }
+        timestampsToggle.addEventListener('change', function() {
+            localStorage.setItem('showTimestamps', this.checked);
+            console.log('Show timestamps:', this.checked);
+            // Apply timestamp visibility immediately
+            document.body.classList.toggle('hide-timestamps', !this.checked);
+        });
+        // Apply initial state
+        if (localStorage.getItem('showTimestamps') === 'false') {
+            document.body.classList.add('hide-timestamps');
+        }
+    }
+
+    // Emoji reactions toggle
+    if (emojiReactionsToggle) {
+        if (localStorage.getItem('emojiReactions') === 'false') {
+            emojiReactionsToggle.checked = false;
+        }
+        emojiReactionsToggle.addEventListener('change', function() {
+            localStorage.setItem('emojiReactions', this.checked);
+            console.log('Emoji reactions:', this.checked);
+        });
+    }
+
+    // Reduce animations toggle
+    if (reduceAnimationsToggle) {
+        if (localStorage.getItem('reduceAnimations') === 'true') {
+            reduceAnimationsToggle.checked = true;
+            document.body.classList.add('reduce-animations');
+        }
+        reduceAnimationsToggle.addEventListener('change', function() {
+            localStorage.setItem('reduceAnimations', this.checked);
+            document.body.classList.toggle('reduce-animations', this.checked);
+            console.log('Reduce animations:', this.checked);
+        });
+    }
+
+    // Message limit select
+    if (messageLimitSelect) {
+        const savedLimit = localStorage.getItem('messageLimit') || '500';
+        messageLimitSelect.value = savedLimit;
+        messageLimitSelect.addEventListener('change', function() {
+            localStorage.setItem('messageLimit', this.value);
+            console.log('Message limit:', this.value);
+        });
+    }
+
+    // Enhanced theme handling with new themes
+    const themeOptions = document.querySelectorAll('.theme-option');
+    themeOptions.forEach(option => {
+        option.addEventListener('click', function() {
+            const theme = this.dataset.theme;
+            
+            // Remove active class from all options
+            themeOptions.forEach(opt => opt.classList.remove('active'));
+            
+            // Add active class to clicked option
+            this.classList.add('active');
+            
+            // Remove all theme classes
+            document.body.classList.remove('theme-alt', 'theme-orange', 'theme-green');
+            
+            // Apply new theme
+            if (theme === 'alt') {
+                document.body.classList.add('theme-alt');
+            } else if (theme === 'orange') {
+                document.body.classList.add('theme-orange');
+            } else if (theme === 'green') {
+                document.body.classList.add('theme-green');
+            }
+            
+            // Save theme preference
+            localStorage.setItem('selectedTheme', theme);
+            console.log('Theme changed to:', theme);
+        });
+    });
+
+    // Load saved theme on startup
+    const savedTheme = localStorage.getItem('selectedTheme') || 'default';
+    if (savedTheme !== 'default') {
+        document.body.classList.add(`theme-${savedTheme}`);
+        const savedOption = document.querySelector(`[data-theme="${savedTheme}"]`);
+        if (savedOption) {
+            themeOptions.forEach(opt => opt.classList.remove('active'));
+            savedOption.classList.add('active');
+        }
+    }
 });
 
 // ===== UTILITY FUNCTIONS =====
@@ -5395,18 +5517,20 @@ function shareMessage(messageElement) {
 // ===== EMOJI PICKER =====
 function showEmojiPicker() {
     console.log('🎨 showEmojiPicker called');
-    const picker = document.getElementById('emojiPicker');
-    if (picker) {
-        console.log('✅ Emoji picker found, adding show class');
-        picker.classList.add('show');
+    const pickerModal = document.getElementById('emojiPickerModal');
+    if (pickerModal) {
+        console.log('✅ Emoji picker modal found, showing');
+        pickerModal.style.display = 'flex';
     } else {
-        console.error('❌ Emoji picker element not found!');
+        console.error('❌ Emoji picker modal element not found!');
     }
 }
 
 function hideEmojiPicker() {
-    const picker = document.getElementById('emojiPicker');
-    picker.classList.remove('show');
+    const pickerModal = document.getElementById('emojiPickerModal');
+    if (pickerModal) {
+        pickerModal.style.display = 'none';
+    }
 }
 
 function insertEmoji(emoji) {
@@ -6019,6 +6143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Emoji picker
     const emojiBtn = document.getElementById('emojiBtn');
     const emojiPicker = document.getElementById('emojiPicker');
+    const emojiPickerModal = document.getElementById('emojiPickerModal');
     const closeEmojiBtn = document.getElementById('closeEmojiBtn');
     
     if (emojiBtn) {
@@ -6048,15 +6173,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Close emoji picker when clicking outside (only if mainApp is active)
-    document.addEventListener('click', (e) => {
-        const mainApp = document.getElementById('mainApp');
-        if (mainApp && mainApp.classList.contains('active')) {
-            if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
+    // Close emoji picker when clicking outside (modal overlay)
+    if (emojiPickerModal) {
+        emojiPickerModal.addEventListener('click', (e) => {
+            if (e.target === emojiPickerModal) {
                 hideEmojiPicker();
             }
-        }
-    });
+        });
+    }
     
     // Emoji selection (only if mainApp is active)
     document.addEventListener('click', (e) => {
