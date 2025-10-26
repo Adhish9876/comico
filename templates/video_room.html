@@ -1481,24 +1481,24 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         }
         
         if (remoteWrappers.length === 0) {
-            // Only local user - featured view
+            // Only local user - show in full screen (featured view)
             videosContainer.classList.add('layout-1');
             localVideoWrapper.className = 'video-wrapper featured';
-            console.log('[LAYOUT] Solo call - local featured');
+            console.log('[LAYOUT] Solo call - local video in full screen');
         } else {
-            // 2+ people - local user ALWAYS in PiP, remotes in container
-            console.log('[LAYOUT] Multi-participant call - local PiP, remotes in grid');
+            // 2+ people - local user switches to PiP, remotes take main area
+            console.log('[LAYOUT] Multi-participant call - local switches to PiP, remotes in grid');
             videosContainer.classList.add(`layout-${remoteWrappers.length + 1}`);
             
-            // FORCE local video to be PiP
+            // Switch local video to PiP when others join
             localVideoWrapper.className = 'video-wrapper local-pip';
             
             if (remoteWrappers.length === 1) {
-                // 2 people total - remote featured
+                // 2 people total - remote gets featured view
                 remoteWrappers[0].className = 'video-wrapper featured';
                 console.log('[LAYOUT] 1v1 call - remote featured, local PiP');
             } else {
-                // 3+ people - all remotes in grid
+                // 3+ people - all remotes in grid layout
                 remoteWrappers.forEach((wrapper, index) => {
                     wrapper.className = 'video-wrapper grid-item';
                     console.log(`[LAYOUT] Remote ${index + 1} set to grid-item:`, wrapper.id);
@@ -1839,6 +1839,10 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     document.addEventListener('DOMContentLoaded', function() {
         console.log('[LAYOUT] DOM loaded, initializing video room');
         initializeLocalVideo();
+        
+        // Set initial layout (local video in full screen when alone)
+        updateLayout();
+        
         connectToSignalingServer();
         
         // Periodic layout consistency check
@@ -1849,6 +1853,12 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                 if (!localVideoWrapper.classList.contains('local-pip')) {
                     console.log('[LAYOUT] Fixing local video position - forcing PiP');
                     localVideoWrapper.className = 'video-wrapper local-pip';
+                }
+            } else {
+                // Ensure local video is featured when alone
+                if (!localVideoWrapper.classList.contains('featured')) {
+                    console.log('[LAYOUT] Fixing local video position - forcing featured');
+                    localVideoWrapper.className = 'video-wrapper featured';
                 }
             }
         }, 2000);
