@@ -47,6 +47,22 @@ The executable bundles everything needed:
 - **Server must be running** before connecting
 - **Microphone access** (for audio features)
 
+### 🌐 Port Configuration
+
+**Automatic Port Detection** ✅
+- The client automatically finds an available port (starting from 8081)
+- If port 8081 is in use, it tries 8082, 8083, etc.
+- **Multiple users on the same machine**: No conflicts! Each instance gets its own port
+- **Multiple users on different machines**: All use port 8081 (no conflicts)
+
+**Server Ports** (Fixed)
+- Chat: 5555
+- Files: 5556
+- Audio: 5557
+- Video: 5000
+
+See `PORT_CONFIGURATION.md` for detailed information.
+
 ### 🔧 Troubleshooting
 
 **If Windows Defender blocks it:**

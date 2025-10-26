@@ -42,17 +42,9 @@ class Storage:
 
     def get_global_chat(self, limit: int = 100) -> List[Dict]:
         """Get global chat history"""
-        # Process audio messages to avoid storing large base64 data in memory
-        processed_history = []
-        for msg in self.global_chat[-limit:]:
-            if msg.get('type') == 'audio_message' and 'audio_data' in msg:
-                # Keep audio_data only for last 10 messages, older ones need re-download
-                if len(processed_history) < (limit - 10):
-                    msg = msg.copy()
-                    msg['audio_data'] = None
-                    msg['has_audio'] = True
-            processed_history.append(msg)
-        return processed_history
+        # Return all messages with audio_data intact
+        # The audio data is needed for playback when reopening the app
+        return self.global_chat[-limit:]
 
     def delete_global_message(self, message_id: str) -> bool:
         """Delete a message from global chat by ID"""

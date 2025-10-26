@@ -751,16 +751,50 @@ def delete_private_chat(chat_key: str):
         return {'success': False, 'message': str(e)}
 
 # Fast startup - minimal initialization
+def find_available_port(start_port=8081, max_attempts=10):
+    """Find an available port starting from start_port"""
+    import socket
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            # Try to bind to the port
+            test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            test_socket.bind(('localhost', port))
+            test_socket.close()
+            return port
+        except OSError:
+            # Port is in use, try next one
+            continue
+    return start_port  # Fallback to original port
+
 def start_application():
     """Start the application with minimal initial loading"""
     import sys
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8081
+    
+    # Check if port is provided as argument, otherwise find available port
+    if len(sys.argv) > 1:
+        port = int(sys.argv[1])
+    else:
+        port = find_available_port(8081)
+        print(f"[CLIENT] Using port: {port}")
     
     print("[CLIENT] Starting ShadowNexus Client...")
     
     try:
         # Start Eel immediately without heavy imports
         eel.start('index.html', size=(1600, 1000), port=port, block=True)
+    except OSError as e:
+        if "address already in use" in str(e).lower():
+            print(f"[CLIENT] Port {port} is already in use. Trying to find another port...")
+            port = find_available_port(port + 1)
+            print(f"[CLIENT] Retrying with port: {port}")
+            try:
+                eel.start('index.html', size=(1600, 1000), port=port, block=True)
+            except Exception as retry_error:
+                print(f"Error starting Eel: {retry_error}")
+                input("Press Enter to exit...")
+        else:
+            print(f"Error starting Eel: {e}")
+            input("Press Enter to exit...")
     except Exception as e:
         print(f"Error starting Eel: {e}")
         input("Press Enter to exit...")

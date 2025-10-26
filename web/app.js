@@ -702,7 +702,6 @@ const videoCallBtn = document.getElementById('videoCallBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsModal = document.getElementById('settingsModal');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-const themeOptions = document.querySelectorAll('.theme-option');
 const notificationsToggle = document.getElementById('notificationsToggle');
 const soundsToggle = document.getElementById('soundsToggle');
 const onlineStatusToggle = document.getElementById('onlineStatusToggle');
@@ -1011,6 +1010,12 @@ loginBtn.addEventListener('click', async () => {
                 
                 showNotification('Connected!', 'success');
                 
+                // CRITICAL FIX: Add message menu buttons immediately after login
+                setTimeout(() => {
+                    console.log('🔧 Adding message menu buttons after login');
+                    addMessageMenuButtons();
+                }, 500);
+                
                 // Ensure badges are created
                 ensureBadges();
                 
@@ -1058,8 +1063,13 @@ loginBtn.addEventListener('click', async () => {
                     
                     // Always render to ensure messages are displayed (including from localStorage)
                     console.log('Initial render with localStorage messages:', chatHistories.global.length);
+                    console.log('🔍 DEBUG: Messages before render:', chatHistories.global.map(m => `${m.sender}: ${m.content?.substring(0, 20)}...`));
+                    
                     if (chatHistories.global.length > 0) {
                         console.log('📱 Displaying messages from localStorage - no refresh delay!');
+                        // Clear any existing messages first to prevent duplicates
+                        messagesContainer.innerHTML = '';
+                        
                         // Set scroll to bottom BEFORE rendering to prevent glitch
                         messagesContainer.scrollTop = messagesContainer.scrollHeight;
                         
@@ -1067,20 +1077,41 @@ loginBtn.addEventListener('click', async () => {
                         
                         // Ensure we stay at bottom after render
                         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        
+                        console.log('🔍 DEBUG: Messages in DOM after render:', messagesContainer.children.length);
                     } else {
                         // No messages in localStorage, just render empty chat
+                        console.log('📱 No messages in localStorage, rendering empty chat');
+                        messagesContainer.innerHTML = '';
                         renderCurrentChat(false);
                     }
                     
-                    // Add a backup render after a short delay to handle race conditions
+                    // Add multiple backup renders to handle race conditions
                     setTimeout(() => {
                         if (currentChatType === 'global' && messagesContainer.children.length === 0 && chatHistories.global.length > 0) {
-                            console.log('BACKUP: Messages not displayed, forcing render...');
+                            console.log('BACKUP 1: Messages not displayed, forcing render...');
+                            messagesContainer.innerHTML = '';
+                            renderCurrentChat(false);
+                        }
+                    }, 500);
+                    
+                    setTimeout(() => {
+                        if (currentChatType === 'global' && messagesContainer.children.length === 0 && chatHistories.global.length > 0) {
+                            console.log('BACKUP 2: Messages still not displayed, forcing render...');
+                            messagesContainer.innerHTML = '';
                             renderCurrentChat(false);
                         }
                         // Mark page refresh as complete
                         isPageRefresh = false;
-                    }, 1000);
+                    }, 1500);
+                    
+                    setTimeout(() => {
+                        if (currentChatType === 'global' && messagesContainer.children.length === 0 && chatHistories.global.length > 0) {
+                            console.log('BACKUP 3: Final attempt to render messages...');
+                            messagesContainer.innerHTML = '';
+                            renderCurrentChat(false);
+                        }
+                    }, 3000);
                     
                     // Backup request for chat history if we still don't have any after 2 seconds
                     setTimeout(() => {
@@ -1592,8 +1623,39 @@ function handleMessage(message) {
         
         const newMessages = message.messages || [];
         
-        // SIMPLE APPROACH: Just use server messages, save to localStorage
-        chatHistories.global = newMessages;
+        // MERGE APPROACH: Merge server messages with existing localStorage messages
+        console.log('🔄 Before merge - localStorage messages:', chatHistories.global.length);
+        console.log('🔄 Server messages received:', newMessages.length);
+        
+        // Create a map of existing messages by timestamp to avoid duplicates
+        const existingMessages = new Map();
+        chatHistories.global.forEach(msg => {
+            const key = `${msg.sender}_${msg.timestamp}_${msg.content}`;
+            existingMessages.set(key, msg);
+        });
+        
+        // Add server messages that don't already exist, but preserve audio_data from localStorage
+        newMessages.forEach(msg => {
+            const key = `${msg.sender}_${msg.timestamp}_${msg.content}`;
+            if (!existingMessages.has(key)) {
+                existingMessages.set(key, msg);
+            } else {
+                // Message exists in localStorage, preserve audio_data if it exists
+                const existingMsg = existingMessages.get(key);
+                if (existingMsg.audio_data && !msg.audio_data) {
+                    console.log('🎤 Preserving audio_data for message:', key);
+                    msg.audio_data = existingMsg.audio_data;
+                }
+                existingMessages.set(key, msg);
+            }
+        });
+        
+        // Convert back to array and sort by timestamp
+        chatHistories.global = Array.from(existingMessages.values()).sort((a, b) => {
+            return new Date(a.timestamp) - new Date(b.timestamp);
+        });
+        
+        console.log('🔄 After merge - Total messages:', chatHistories.global.length);
         saveChatHistoriesToStorage();
         
         console.log('Stored messages count:', chatHistories.global.length);
@@ -1818,7 +1880,9 @@ function renderCurrentChat(preserveScroll = true) {
     const scrollPosition = messagesContainer.scrollTop;
     const scrollHeight = messagesContainer.scrollHeight;
     
+    console.log('🧹 CLEARING MESSAGES CONTAINER - Before clear:', messagesContainer.children.length);
     messagesContainer.innerHTML = '';
+    console.log('🧹 CLEARED MESSAGES CONTAINER - After clear:', messagesContainer.children.length);
     
     // Determine if we should show "new messages" divider based on last seen index
     let showNewMessagesDivider = false;
@@ -1862,6 +1926,7 @@ function renderCurrentChat(preserveScroll = true) {
     
     // Render messages with divider
     if (currentChatType === 'global') {
+        console.log('🔄 RENDERING GLOBAL MESSAGES - Count:', chatHistories.global.length);
         chatHistories.global.forEach((msg, index) => {
             // Insert new messages divider ONLY if not our own message
             if (showNewMessagesDivider && index === newMessageStartIndex && msg.sender !== username) {
@@ -1874,6 +1939,7 @@ function renderCurrentChat(preserveScroll = true) {
                 addMessage(msg, false); // Don't auto-scroll for each message
             }
         });
+        console.log('🔄 FINISHED RENDERING - DOM children:', messagesContainer.children.length);
     } else if (currentChatType === 'private' && currentChatTarget) {
         const history = chatHistories.private[currentChatTarget] || [];
         history.forEach((msg, index) => {
@@ -1945,6 +2011,9 @@ function renderCurrentChat(preserveScroll = true) {
     
     // Update pinned messages bar after rendering
     updatePinnedMessagesBar();
+    
+    console.log('✅ RENDER COMPLETE - Final DOM children count:', messagesContainer.children.length);
+    console.log('✅ RENDER COMPLETE - Chat type:', currentChatType, 'Target:', currentChatTarget);
 }
 
 // Helper function to check if scroll is at bottom
@@ -2127,15 +2196,26 @@ function addMessage(message, autoScroll = true) {
             </svg> Play
         `;
         
+        // Debug logging
+        if (!message.audio_data && message.has_audio) {
+            console.warn('⚠️ Audio message missing audio_data:', {
+                sender: message.sender,
+                timestamp: message.timestamp,
+                has_audio: message.has_audio,
+                audio_data_length: message.audio_data ? message.audio_data.length : 0
+            });
+        }
+        
         if (message.audio_data) {
             playBtn.onclick = () => {
                 showAudioPlayback(message.audio_data, message.duration, message.sender);
             };
         } else if (message.has_audio) {
-            // Audio exists on server but not locally, can be fetched if needed
-            playBtn.textContent = 'Audio ready';
-            playBtn.disabled = false;
-            playBtn.style.opacity = '0.7';
+            // Audio data is missing - this shouldn't happen after the fix
+            playBtn.textContent = '⚠️ Audio data missing';
+            playBtn.disabled = true;
+            playBtn.style.opacity = '0.5';
+            playBtn.title = 'Audio data not available. Please restart the server.';
         } else {
             playBtn.textContent = 'Audio not available';
             playBtn.disabled = true;
@@ -3990,6 +4070,11 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 settingsModal.style.display = 'flex';
                 console.log('Settings modal opened');
+                
+                // THIS IS THE FIX - Call addMessageMenuButtons when settings opens
+                // This suggests the buttons weren't being created properly before
+                console.log('🔧 Calling addMessageMenuButtons from settings modal');
+                addMessageMenuButtons();
             }, 0);
         });
     }
@@ -4014,55 +4099,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Theme switching
-    themeOptions.forEach(option => {
-        option.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const theme = this.dataset.theme;
-            
-            console.log('Theme option clicked:', theme);
-            
-            // Remove active class from all options
-            themeOptions.forEach(opt => opt.classList.remove('active'));
-            
-            // Add active class to clicked option
-            this.classList.add('active');
-            
-            // Apply theme
-            if (theme === 'alt') {
-                document.body.classList.add('theme-alt');
-                localStorage.setItem('theme', 'alt');
-                console.log('Applied alt theme');
-            } else {
-                document.body.classList.remove('theme-alt');
-                localStorage.setItem('theme', 'default');
-                console.log('Applied default theme');
-            }
-        });
-    });
+    // Theme switching is handled by the enhanced theme system below
     
-    // Load saved theme on page load (default to cyan/pink theme)
-    const savedTheme = localStorage.getItem('theme') || 'default';
-    console.log('Saved theme:', savedTheme);
-    
-    if (savedTheme === 'alt') {
-        document.body.classList.add('theme-alt');
-        const altOption = document.querySelector('[data-theme="alt"]');
-        const defaultOption = document.querySelector('[data-theme="default"]');
-        if (altOption) altOption.classList.add('active');
-        if (defaultOption) defaultOption.classList.remove('active');
-        console.log('Loaded alt theme from storage');
-    } else {
-        // Ensure default theme (cyan/pink) is active
-        document.body.classList.remove('theme-alt');
-        localStorage.setItem('theme', 'default');
-        const defaultOption = document.querySelector('[data-theme="default"]');
-        const altOption = document.querySelector('[data-theme="alt"]');
-        if (defaultOption) defaultOption.classList.add('active');
-        if (altOption) altOption.classList.remove('active');
-        console.log('Using default cyan/pink theme');
-    }
+    // Theme loading is handled by the enhanced theme system below
     
     // Settings toggles
     // Remove duplicate variable declarations in DOMContentLoaded
@@ -4257,48 +4296,7 @@ function showError(message) {
     showNotification(message, 'error');
 }
 
-function showNotification(message, type = 'info') {
-    const colors = {
-        success: '#2d7a3e',
-        error: '#8b0000',
-        warning: '#8b6c00',
-        info: '#b30000'
-    };
-    
-    const notification = document.createElement('div');
-    const chatHeader = document.querySelector('.chat-header');
-    
-    if (!chatHeader) {
-        console.error('Chat header not found for notification positioning');
-        return;
-    }
-    
-    notification.style.cssText = `
-        position: absolute;
-        top: 50%;
-        right: 20px;
-        transform: translateY(-50%);
-        background: var(--bg-secondary);
-        border: 1px solid ${colors[type]};
-        border-radius: 6px;
-        padding: 12px 20px;
-        color: ${colors[type]};
-        font-size: 13px;
-        font-weight: 600;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-        z-index: 10000;
-        animation: slideInRight 0.3s ease;
-        font-family: 'Rajdhani', sans-serif;
-        max-width: 350px;
-    `;
-    notification.textContent = message;
-    chatHeader.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideOutRight 0.3s ease';
-        setTimeout(() => notification.remove(), 300);
-    }, 4000);
-}
+// Duplicate showNotification function removed - using original one
 
 function showConnectionAlert(message, type = 'connected') {
     const colors = {
@@ -4503,6 +4501,9 @@ function showChatContextMenu(event, user) {
         posX = windowWidth - menuWidth - 20;
     }
     
+    // CRITICAL FIX: Move menu to end of body to escape any clipping
+    document.body.appendChild(menu);
+    
     menu.style.left = posX + 'px';
     menu.style.top = posY + 'px';
     menu.classList.add('show');
@@ -4520,6 +4521,10 @@ function showChatContextMenu(event, user) {
 }
 
 function showMessageContextMenu(event, messageElement) {
+    console.log('🎯 showMessageContextMenu called!');
+    console.log('📋 Event:', event);
+    console.log('📋 Message element:', messageElement);
+    
     event.preventDefault();
     event.stopPropagation();
     
@@ -4529,7 +4534,11 @@ function showMessageContextMenu(event, messageElement) {
     });
     
     const menu = document.getElementById('messageContextMenu');
-    if (!menu) return;
+    console.log('📋 Menu element found:', menu);
+    if (!menu) {
+        console.error('❌ messageContextMenu not found!');
+        return;
+    }
     
     // Calculate menu position
     const menuHeight = 300; // Approximate height of context menu
@@ -4550,38 +4559,57 @@ function showMessageContextMenu(event, messageElement) {
         posX = windowWidth - menuWidth - 20;
     }
     
+    // CRITICAL FIX: Move menu to end of body to escape any clipping
+    document.body.appendChild(menu);
+    
     menu.style.left = posX + 'px';
     menu.style.top = posY + 'px';
     menu.classList.add('show');
     menu.dataset.messageId = messageElement.dataset.messageId;
     
-    // Close menu when clicking outside - with proper delay
+    console.log('✅ Menu should now be visible with class "show"');
+    console.log('📋 Menu display:', window.getComputedStyle(menu).display);
+    console.log('📋 Menu position:', menu.style.left, menu.style.top);
+    console.log('📋 Menu z-index:', window.getComputedStyle(menu).zIndex);
+    console.log('📋 Menu parent:', menu.parentElement);
+    
+    // Close menu when clicking outside - with proper delay to avoid immediate closure
     setTimeout(() => {
         const closeMenu = (e) => {
-            if (!menu.contains(e.target)) {
+            // Don't close if clicking on the menu itself or a message menu button
+            if (!menu.contains(e.target) && !e.target.closest('.message-menu-btn')) {
+                console.log('🚪 Closing menu due to outside click');
                 menu.classList.remove('show');
                 document.removeEventListener('click', closeMenu);
             }
         };
         document.addEventListener('click', closeMenu);
-    }, 100);
+    }, 200); // Increased delay to prevent immediate closure
 }
 
-// Handle context menu actions
+// Handle context menu actions - Enhanced with better event handling
 document.addEventListener('click', (e) => {
     console.log(`🖱️ Document click detected on:`, e.target);
     
-    if (e.target.closest('.context-menu-item')) {
+    const contextMenuItem = e.target.closest('.context-menu-item');
+    if (contextMenuItem) {
+        e.preventDefault();
+        e.stopPropagation();
+        
         console.log(`🖱️ CONTEXT MENU ITEM CLICKED`);
         console.log(`🖱️ Target element:`, e.target);
-        console.log(`🖱️ Closest context-menu-item:`, e.target.closest('.context-menu-item'));
+        console.log(`🖱️ Closest context-menu-item:`, contextMenuItem);
         
-        const contextMenuItem = e.target.closest('.context-menu-item');
-        const action = contextMenuItem.dataset.action;
-        const menu = e.target.closest('.context-menu');
+        const action = contextMenuItem.getAttribute('data-action');
+        const menu = contextMenuItem.closest('.context-menu');
         
         console.log(`📋 Action: ${action}, Menu ID: ${menu ? menu.id : 'NO MENU FOUND'}`);
         console.log(`📋 Menu dataset:`, menu ? menu.dataset : 'NO DATASET');
+        
+        if (!action || !menu) {
+            console.error('❌ Missing action or menu!');
+            return;
+        }
         
         if (menu.id === 'chatContextMenu') {
             console.log(`✅ Handling chat context action: ${action} for user ${menu.dataset.user}`);
@@ -4601,7 +4629,7 @@ document.addEventListener('click', (e) => {
         
         menu.classList.remove('show');
     }
-});
+}, true); // Use capture phase to ensure we catch the event first
 
 function handleChatContextAction(action, user) {
     console.log(`🚀 EXECUTING ACTION: ${action} for user ${user}`);
@@ -4710,6 +4738,9 @@ function showGroupContextMenu(event, groupId, groupName, members, admin) {
     if (posX + menuWidth > windowWidth - 20) {
         posX = windowWidth - menuWidth - 20;
     }
+    
+    // CRITICAL FIX: Move menu to end of body to escape any clipping
+    document.body.appendChild(menu);
     
     menu.style.left = posX + 'px';
     menu.style.top = posY + 'px';
@@ -6166,10 +6197,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Prevent clicks inside emoji picker from bubbling
+    // Handle emoji clicks inside the picker
     if (emojiPicker) {
         emojiPicker.addEventListener('click', (e) => {
-            e.stopPropagation();
+            if (e.target.classList.contains('emoji')) {
+                const emoji = e.target.getAttribute('data-emoji');
+                if (emoji) {
+                    console.log('✅ Emoji clicked from picker:', emoji);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    insertEmoji(emoji);
+                    hideEmojiPicker();
+                }
+            }
         });
     }
     
@@ -6262,22 +6302,315 @@ document.addEventListener('DOMContentLoaded', () => {
 function addMessageMenuButtons() {
     const messages = document.querySelectorAll('.message');
     messages.forEach((message, index) => {
-        if (!message.querySelector('.message-menu-btn')) {
-            const menuBtn = document.createElement('button');
+        // Check if button already exists and has handler
+        let menuBtn = message.querySelector('.message-menu-btn');
+        
+        if (!menuBtn) {
+            // Create new button
+            menuBtn = document.createElement('button');
             menuBtn.className = 'message-menu-btn';
             menuBtn.innerHTML = `
                 <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
                 </svg>
             `;
-            menuBtn.onclick = (e) => {
-                e.stopPropagation();
-                message.dataset.messageId = `msg_${Date.now()}_${index}`;
-                showMessageContextMenu(e, message);
-            };
             message.appendChild(menuBtn);
+        }
+        
+        // Always ensure the handler is properly attached (remove old ones first)
+        if (!menuBtn.dataset.handlerAttached) {
+            menuBtn.addEventListener('click', function(e) {
+                console.log('🖱️ Message menu button clicked!');
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Ensure message has a unique ID
+                if (!message.dataset.messageId) {
+                    message.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                }
+                
+                console.log('📋 Showing context menu for message:', message.dataset.messageId);
+                showMessageContextMenu(e, message);
+            });
+            
+            // Mark as having handler to prevent duplicates
+            menuBtn.dataset.handlerAttached = 'true';
         }
     });
 }
 
 console.log('Shadow Nexus initialized');
+
+// ===== SOUND SYSTEM =====
+class SoundManager {
+    constructor() {
+        this.sounds = {
+            message: this.createSound(800, 0.1, 'sine'),
+            notification: this.createSound(600, 0.15, 'triangle'),
+            call: this.createSound(400, 0.2, 'square'),
+            error: this.createSound(200, 0.3, 'sawtooth')
+        };
+    }
+
+    createSound(frequency, duration, type = 'sine') {
+        return () => {
+            if (localStorage.getItem('sounds') === 'false') return;
+            
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                oscillator.type = type;
+                
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + duration);
+            } catch (error) {
+                console.log('Sound playback failed:', error);
+            }
+        };
+    }
+
+    playSound(soundName) {
+        if (this.sounds[soundName]) {
+            this.sounds[soundName]();
+        }
+    }
+}
+
+const soundManager = new SoundManager();
+
+// Enhanced notification function with sound
+const originalShowNotification = showNotification;
+showNotification = function(message, type = 'info') {
+    // Play appropriate sound
+    if (localStorage.getItem('notifications') !== 'false') {
+        switch (type) {
+            case 'error':
+                soundManager.playSound('error');
+                break;
+            case 'success':
+                soundManager.playSound('notification');
+                break;
+            case 'warning':
+                soundManager.playSound('notification');
+                break;
+            default:
+                soundManager.playSound('notification');
+        }
+    }
+    
+    // Call original notification function
+    originalShowNotification(message, type);
+};
+
+// Play message sound when receiving messages
+function playMessageSound() {
+    if (localStorage.getItem('sounds') !== 'false') {
+        soundManager.playSound('message');
+    }
+}
+
+// Enhanced message handling with sound
+const originalAddMessage = addMessage;
+addMessage = function(message, skipSound = false) {
+    const result = originalAddMessage(message);
+    
+    // Play sound for new messages (not our own)
+    if (!skipSound && message.sender !== username) {
+        playMessageSound();
+    }
+    
+    return result;
+};
+
+// ===== BROWSER NOTIFICATIONS =====
+class BrowserNotificationManager {
+    constructor() {
+        this.permission = 'default';
+        this.requestPermission();
+    }
+
+    async requestPermission() {
+        if ('Notification' in window) {
+            this.permission = await Notification.requestPermission();
+            console.log('Notification permission:', this.permission);
+        }
+    }
+
+    showBrowserNotification(title, body, icon = null) {
+        if (localStorage.getItem('notifications') === 'false') return;
+        if (this.permission !== 'granted') return;
+        if (document.hasFocus()) return; // Don't show if window is focused
+
+        try {
+            const notification = new Notification(title, {
+                body: body,
+                icon: icon || 'data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iNDUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwYjhkNCIgc3Ryb2tlLXdpZHRoPSI1Ii8+CjxjaXJjbGUgY3g9IjUwIiBjeT0iNTAiIHI9IjMwIiBmaWxsPSJub25lIiBzdHJva2U9IiM5YzI3YjAiIHN0cm9rZS13aWR0aD0iMyIvPgo8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSIxMCIgZmlsbD0iIzAwYjhkNCIvPgo8cGF0aCBkPSJNIDMwIDUwIEwgNzAgNTAgTSA1MCAzMCBMIDUwIDcwIiBzdHJva2U9IiMwMGI4ZDQiIHN0cm9rZS13aWR0aD0iNCIvPgo8L3N2Zz4=',
+                badge: 'data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iNDUiIGZpbGw9IiMwMGI4ZDQiLz4KPC9zdmc+',
+                tag: 'shadow-nexus',
+                requireInteraction: false,
+                silent: false
+            });
+
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+            };
+
+            // Auto close after 5 seconds
+            setTimeout(() => {
+                notification.close();
+            }, 5000);
+
+        } catch (error) {
+            console.log('Browser notification failed:', error);
+        }
+    }
+}
+
+const browserNotificationManager = new BrowserNotificationManager();
+
+// Enhanced message handling with browser notifications
+const originalHandleMessage = handleMessage;
+handleMessage = function(data) {
+    const result = originalHandleMessage(data);
+    
+    // Show browser notification for new messages
+    if (data.type === 'message' && data.sender !== username) {
+        const chatName = data.chat_type === 'global' ? 'Global Network' : 
+                        data.chat_type === 'group' ? `Group: ${data.receiver}` : 
+                        data.sender;
+        
+        browserNotificationManager.showBrowserNotification(
+            `New message from ${data.sender}`,
+            `${chatName}: ${data.content.substring(0, 100)}${data.content.length > 100 ? '...' : ''}`
+        );
+    }
+    
+    return result;
+};
+//
+
+// Ensure emoji picker works properly
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔧 Setting up emoji picker and message menu fixes...');
+    
+    // Fix emoji picker clicks
+    const emojiPickerModal = document.getElementById('emojiPickerModal');
+    if (emojiPickerModal) {
+        emojiPickerModal.addEventListener('click', function(e) {
+            console.log('🎯 Emoji picker modal clicked, target:', e.target);
+            console.log('🎯 Target classes:', e.target.classList);
+            console.log('🎯 Target data-emoji:', e.target.getAttribute('data-emoji'));
+            
+            if (e.target.classList.contains('emoji')) {
+                const emoji = e.target.getAttribute('data-emoji');
+                if (emoji) {
+                    console.log('✅ Emoji clicked:', emoji);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    insertEmoji(emoji);
+                    hideEmojiPicker();
+                } else {
+                    console.log('❌ No emoji data found');
+                }
+            } else {
+                console.log('❌ Target does not have emoji class');
+            }
+        });
+        console.log('✅ Emoji picker click handler attached');
+    }
+    
+    // Fix message context menu
+    const messageContextMenu = document.getElementById('messageContextMenu');
+    if (messageContextMenu) {
+        messageContextMenu.addEventListener('click', function(e) {
+            const menuItem = e.target.closest('.context-menu-item');
+            if (menuItem) {
+                const action = menuItem.getAttribute('data-action');
+                const messageId = messageContextMenu.dataset.messageId;
+                console.log('✅ Context menu action:', action, 'for message:', messageId);
+                
+                if (action && messageId) {
+                    handleMessageContextAction(action, messageId);
+                    messageContextMenu.classList.remove('show');
+                }
+            }
+        });
+        console.log('✅ Message context menu handler attached');
+    }
+    
+    // Ensure message menu buttons work
+    function attachMessageMenuHandlers() {
+        const messages = document.querySelectorAll('.message');
+        messages.forEach(message => {
+            const menuBtn = message.querySelector('.message-menu-btn');
+            if (menuBtn && !menuBtn.dataset.handlerAttached) {
+                menuBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Ensure message has an ID
+                    if (!message.dataset.messageId) {
+                        message.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                    }
+                    
+                    console.log('✅ Message menu button clicked for:', message.dataset.messageId);
+                    showMessageContextMenu(e, message);
+                });
+                menuBtn.dataset.handlerAttached = 'true';
+            }
+        });
+    }
+    
+    // Attach handlers initially and on new messages
+    attachMessageMenuHandlers();
+    
+    // Re-attach handlers when new messages are added
+    const messagesContainer = document.getElementById('messagesContainer');
+    if (messagesContainer) {
+        const observer = new MutationObserver(function() {
+            attachMessageMenuHandlers();
+        });
+        observer.observe(messagesContainer, { childList: true, subtree: true });
+        console.log('✅ Message observer attached');
+    }
+    
+    console.log('✅ All fixes applied successfully');
+});
+// ===== ADDITIONAL MESSAGE MENU FIX =====
+// Add event delegation for message menu buttons to ensure they always work
+document.addEventListener('click', function(e) {
+    // Check if clicked element is a message menu button or its child
+    const menuBtn = e.target.closest('.message-menu-btn');
+    if (menuBtn) {
+        console.log('🎯 Message menu button clicked via delegation!');
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Find the parent message element
+        const messageElement = menuBtn.closest('.message');
+        if (messageElement) {
+            // Ensure message has an ID
+            if (!messageElement.dataset.messageId) {
+                messageElement.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            }
+            
+            console.log('📋 Calling showMessageContextMenu via delegation');
+            showMessageContextMenu(e, messageElement);
+        } else {
+            console.error('❌ Could not find parent message element');
+        }
+    }
+});
+
+console.log('✅ Message menu delegation handler added');
