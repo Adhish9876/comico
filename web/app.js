@@ -223,62 +223,30 @@ if (submitAnswersBtn) {
         
         // Correct answers: 1)d and 2)b
         if (answer1 === 'd' && answer2 === 'b') {
-            // Correct answers - reset password automatically and go to login
+            // Correct answers - show password reset modal
             forgotPasswordModal.style.animation = 'modalExit 0.3s ease-in forwards';
             
-            setTimeout(async () => {
+            setTimeout(() => {
                 forgotPasswordModal.style.display = 'none';
                 forgotPasswordModal.style.animation = '';
                 
-                try {
-                    // Generate a default password or use a predefined one
-                    const defaultPassword = 'member123'; // You can change this to any default
-                    
-                    // Call backend to reset password
-                    const result = await eel.reset_password(defaultPassword)();
-                    
-                    if (result.success) {
-                        // Hide forgot password container
-                        document.getElementById('forgotPasswordContainer').style.display = 'none';
-                        failedLoginAttempts = 0;
-                        
-                        // Add success animation to login screen
-                        loginScreen.classList.add('password-reset-success');
-                        
-                        // Show success message on login screen
-                        const successBanner = document.createElement('div');
-                        successBanner.className = 'password-reset-banner';
-                        successBanner.innerHTML = `
-                            <div class="success-icon">✅</div>
-                            <div class="success-text">Welcome Back, Member!</div>
-                            <div class="success-subtext">Your password has been reset to: <strong>${defaultPassword}</strong></div>
-                        `;
-                        loginScreen.appendChild(successBanner);
-                        
-                        // Pre-fill the password field
-                        loginPasswordInput.value = defaultPassword;
-                        
-                        // Remove success elements after animation
-                        setTimeout(() => {
-                            loginScreen.classList.remove('password-reset-success');
-                            if (successBanner.parentNode) {
-                                successBanner.remove();
-                            }
-                        }, 5000); // Show for 5 seconds so user can see the password
-                        
-                        // Focus on password input
-                        setTimeout(() => {
-                            loginPasswordInput.focus();
-                        }, 500);
-                        
-                        showNotification('✅ Password reset to: ' + defaultPassword, 'success');
-                    } else {
-                        showNotification('❌ Failed to reset password: ' + result.message, 'error');
-                    }
-                } catch (error) {
-                    showNotification('❌ Error resetting password', 'error');
-                    console.error('Reset password error:', error);
-                }
+                // Clear the password reset form
+                newPasswordInput.value = '';
+                confirmPasswordInput.value = '';
+                passwordMatchIndicator.textContent = '';
+                passwordMatchIndicator.classList.remove('match', 'no-match');
+                resetPasswordBtn.disabled = true;
+                
+                // Show password reset modal
+                passwordResetModal.style.display = 'flex';
+                passwordResetModal.style.animation = 'modalEnter 0.3s ease-out forwards';
+                
+                // Focus on new password input
+                setTimeout(() => {
+                    newPasswordInput.focus();
+                }, 100);
+                
+                showNotification('✅ Security questions verified! Set your new password.', 'success');
             }, 300);
         } else {
             // Wrong answers - show dramatic rejection
@@ -373,31 +341,10 @@ if (resetPasswordBtn) {
                     confirmPasswordInput.value = '';
                     passwordMatchIndicator.classList.remove('show');
                     
-                    // Add success animation to login screen
-                    loginScreen.classList.add('password-reset-success');
-                    
-                    // Show success message on login screen
-                    const successBanner = document.createElement('div');
-                    successBanner.className = 'password-reset-banner';
-                    successBanner.innerHTML = `
-                        <div class="success-icon">✅</div>
-                        <div class="success-text">Password Reset Complete!</div>
-                        <div class="success-subtext">You can now login with your new password</div>
-                    `;
-                    loginScreen.appendChild(successBanner);
-                    
-                    // Remove success elements after animation
-                    setTimeout(() => {
-                        loginScreen.classList.remove('password-reset-success');
-                        if (successBanner.parentNode) {
-                            successBanner.remove();
-                        }
-                    }, 3000);
-                    
-                    // Focus on password input with slight delay
+                    // Focus on password input
                     setTimeout(() => {
                         loginPasswordInput.focus();
-                    }, 500);
+                    }, 100);
                 }, 300);
             } else {
                 showNotification('❌ Failed to reset password: ' + result.message, 'error');
@@ -740,17 +687,37 @@ function spinLogo(screen) {
 // Helper function to show notification
 function showNotification(message, type = 'info') {
     const banner = document.createElement('div');
+    
+    // Determine colors based on type
+    let borderColor, textColor;
+    if (type === 'error') {
+        borderColor = '#ef5350';  // Red
+        textColor = '#ef5350';
+    } else if (type === 'success') {
+        borderColor = '#66bb6a';  // Green
+        textColor = '#66bb6a';
+    } else if (type === 'warning' || type === 'offline') {
+        borderColor = '#ffa726';  // Orange/Brown
+        textColor = '#ffa726';
+    } else {
+        borderColor = '#00b8d4';  // Cyan (info)
+        textColor = '#00b8d4';
+    }
+    
     banner.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background: ${type === 'error' ? '#c62828' : type === 'success' ? '#2ecc71' : '#00b8d4'};
-        color: white;
+        background: transparent;
+        color: ${textColor};
         padding: 15px 20px;
+        border: 2px solid ${borderColor};
         border-radius: 10px;
-        font-weight: 700;
+        font-weight: 600;
         z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
     `;
     banner.textContent = message;
     document.body.appendChild(banner);

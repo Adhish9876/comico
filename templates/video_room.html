@@ -317,6 +317,26 @@
             }
         }
 
+        .camera-off-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #00b8d4 0%, #9c27b0 100%);
+            color: white;
+            font-size: 64px;
+            font-weight: 900;
+            font-family: 'Bangers', cursive;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            z-index: 5;
+            border-radius: 8px;
+        }
+
         .hand-raised-indicator {
             position: absolute;
             top: 8px;
@@ -1221,20 +1241,20 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         }
     }
     
-    // Color palette for placeholders (10+ distinct colors)
+    // Color palette for placeholders - 12 distinct vibrant themes
     const placeholderColors = [
-        { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', name: 'Purple' },
-        { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', name: 'Pink-Red' },
-        { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', name: 'Cyan' },
-        { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', name: 'Green' },
-        { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', name: 'Orange-Yellow' },
-        { bg: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', name: 'Teal-Purple' },
-        { bg: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', name: 'Mint-Pink' },
-        { bg: 'linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%)', name: 'Coral' },
-        { bg: 'linear-gradient(135deg, #2e2e78 0%, #662d91 100%)', name: 'Deep Purple' },
-        { bg: 'linear-gradient(135deg, #eb3349 0%, #f45c43 100%)', name: 'Red-Orange' },
-        { bg: 'linear-gradient(135deg, #1fa2ff 0%, #12d8fa 100%)', name: 'Blue' },
-        { bg: 'linear-gradient(135deg, #ffa400 0%, #ff6b6b 100%)', name: 'Gold-Red' }
+        { bg: 'linear-gradient(135deg, #00b8d4 0%, #9c27b0 100%)', name: 'Cyan-Purple' },      // Theme 1: App default
+        { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', name: 'Pink-Red' },         // Theme 2: Hot pink
+        { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', name: 'Blue-Cyan' },        // Theme 3: Ocean blue
+        { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', name: 'Green-Teal' },       // Theme 4: Fresh green
+        { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', name: 'Coral-Yellow' },     // Theme 5: Sunset
+        { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', name: 'Indigo-Purple' },    // Theme 6: Deep purple
+        { bg: 'linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%)', name: 'Orange-Pink' },      // Theme 7: Warm coral
+        { bg: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', name: 'Mint-Rose' },        // Theme 8: Pastel
+        { bg: 'linear-gradient(135deg, #ffa400 0%, #ff6b6b 100%)', name: 'Gold-Red' },         // Theme 9: Fire
+        { bg: 'linear-gradient(135deg, #1fa2ff 0%, #12d8fa 100%)', name: 'Sky-Blue' },         // Theme 10: Sky
+        { bg: 'linear-gradient(135deg, #eb3349 0%, #f45c43 100%)', name: 'Red-Orange' },       // Theme 11: Lava
+        { bg: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', name: 'Teal-Navy' }         // Theme 12: Deep ocean
     ];
     
     function getPlaceholderColor(peer_id) {

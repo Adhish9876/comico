@@ -6,7 +6,8 @@ Handles WebRTC signaling and notifies when sessions become empty
 
 # Suppress all warnings for cleaner output
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings('ignore', message='.*SSL.*')
+
 
 from flask import Flask, render_template, request, jsonify
 import json

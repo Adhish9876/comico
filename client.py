@@ -116,27 +116,21 @@ def receive_messages():
                 if message_data.strip():
                     try:
                         message = json.loads(message_data.decode('utf-8'))
-                        print(f"[CLIENT] Received message type: {message.get('type')}")
-                        print(f"[CLIENT] Message content: {message}")
                         
                         # Store data locally for frontend to retrieve
                         msg_type = message.get('type')
                         if msg_type == 'chat_history':
                             state.last_chat_history = message.get('messages', [])
-                            print(f"[CLIENT] Stored {len(state.last_chat_history)} chat messages")
                         elif msg_type == 'user_list':
                             state.last_user_list = message.get('users', [])
-                            print(f"[CLIENT] Stored {len(state.last_user_list)} users")
                         
                         # Try to send to frontend (this might fail)
                         try:
                             eel.handleMessage(message)
-                            print(f"[CLIENT] Successfully sent to frontend: {message.get('type')}")
                         except Exception as eel_error:
-                            print(f"[CLIENT] Eel error (expected): {eel_error}")
+                            pass  # Silently ignore Eel errors
                     except json.JSONDecodeError as e:
                         print(f"[CLIENT] Invalid JSON: {e}")
-                        print(f"[CLIENT] Raw data: {message_data}")
         
         except (ConnectionResetError, BrokenPipeError) as e:
             print(f"[CLIENT] Connection lost: {e}")
@@ -271,7 +265,6 @@ def send_message(message_type: str, content: str, extra_params: dict = None):
         if extra_params:
             message.update(extra_params)
         
-        print(f"[CLIENT] Sending {message_type}: {content[:30] if content else 'empty'}")
         state.socket.send((json.dumps(message) + '\n').encode('utf-8'))
         return {'success': True}
     except Exception as e:
@@ -305,8 +298,6 @@ def send_audio_message(audio_data, duration):
         return {'success': False, 'message': 'Not connected'}
     
     try:
-        print(f"[CLIENT] Sending audio message ({len(audio_data) // 1024} KB)")
-        
         # Create message based on current chat context
         if state.current_chat_type == 'private' and state.current_chat_target:
             message_type = 'private_audio'
@@ -559,8 +550,6 @@ def start_video_call(chat_type, chat_id):
             
             # Send the video invite message to server
             if state.connected and state.socket:
-                print(f"[CLIENT] Sending video invite message: {message_type}")
-                print(f"[CLIENT] Message data: {message_data}")
                 state.socket.send((json.dumps(message_data) + '\n').encode('utf-8'))
                 print(f"[CLIENT] Video invite message sent successfully")
             else:
@@ -769,35 +758,49 @@ def find_available_port(start_port=8081, max_attempts=10):
 def start_application():
     """Start the application with minimal initial loading"""
     import sys
+    import time
     
     # Check if port is provided as argument, otherwise find available port
     if len(sys.argv) > 1:
-        port = int(sys.argv[1])
+        try:
+            port = int(sys.argv[1])
+        except ValueError:
+            port = find_available_port(8081)
     else:
         port = find_available_port(8081)
-        print(f"[CLIENT] Using port: {port}")
     
-    print("[CLIENT] Starting ShadowNexus Client...")
+    print(f"[CLIENT] Starting ShadowNexus Client on port {port}...")
     
-    try:
-        # Start Eel immediately without heavy imports
-        eel.start('index.html', size=(1600, 1000), port=port, block=True)
-    except OSError as e:
-        if "address already in use" in str(e).lower():
-            print(f"[CLIENT] Port {port} is already in use. Trying to find another port...")
-            port = find_available_port(port + 1)
-            print(f"[CLIENT] Retrying with port: {port}")
-            try:
-                eel.start('index.html', size=(1600, 1000), port=port, block=True)
-            except Exception as retry_error:
-                print(f"Error starting Eel: {retry_error}")
-                input("Press Enter to exit...")
-        else:
-            print(f"Error starting Eel: {e}")
-            input("Press Enter to exit...")
-    except Exception as e:
-        print(f"Error starting Eel: {e}")
-        input("Press Enter to exit...")
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Start Eel immediately without heavy imports
+            eel.start('index.html', size=(1600, 1000), port=port, block=True)
+            break  # Success, exit loop
+        except OSError as e:
+            if "address already in use" in str(e).lower() or "10048" in str(e):
+                print(f"[CLIENT] Port {port} is already in use.")
+                if attempt < max_retries - 1:
+                    # Try next port
+                    port = find_available_port(port + 1)
+                    print(f"[CLIENT] Retrying with port: {port}")
+                    time.sleep(0.5)  # Brief delay before retry
+                else:
+                    print(f"[CLIENT] ERROR: Could not find available port after {max_retries} attempts")
+                    print(f"[CLIENT] Please close other instances of the application")
+                    # Don't use input() in exe - just exit after delay
+                    time.sleep(5)
+                    sys.exit(1)
+            else:
+                print(f"[CLIENT] Error starting application: {e}")
+                time.sleep(5)
+                sys.exit(1)
+        except Exception as e:
+            print(f"[CLIENT] Unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+            time.sleep(5)
+            sys.exit(1)
 
 if __name__ == '__main__':
     start_application()

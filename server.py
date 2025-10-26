@@ -214,9 +214,6 @@ class CollaborationServer:
             # DON'T add to user list
             return
         
-        print(f"[SERVER] Sending welcome messages to {username}")
-        print(f"[SERVER] Client socket: {client_socket}")
-        
         # Send welcome data to the new user
         self.send_chat_history(client_socket)
         self.send_file_metadata(client_socket)
@@ -303,11 +300,6 @@ class CollaborationServer:
         if 'timestamp' not in message:
             message['timestamp'] = self._timestamp()
         msg_type = message.get('type', 'chat')
-        
-        # Debug logging for video invites
-        if 'video_invite' in msg_type:
-            print(f"[SERVER] Routing video message: {msg_type}")
-            print(f"[SERVER] Message details: {message}")
         
         handlers = {
             'chat': self._handle_chat_message,
@@ -1355,7 +1347,6 @@ class CollaborationServer:
                 'content': f"{username} left the chat",
                 'timestamp': self._timestamp()
             }
-            print(f"[SERVER] Broadcasting disconnect message for {username}")
             self.broadcast(json.dumps(disconnect_msg))
             
             # Update user list for all remaining clients
