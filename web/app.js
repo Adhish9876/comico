@@ -143,6 +143,58 @@ function debugChatState() {
 // Make debug function available globally for testing
 window.debugChatState = debugChatState;
 
+// Debug function to test date functionality
+window.testDateFunction = function() {
+    console.log('=== TESTING DATE FUNCTION ===');
+    
+    // Test current timestamp
+    const now = new Date();
+    const currentTimestamp = now.getFullYear() + '-' + 
+        String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(now.getDate()).padStart(2, '0') + ' ' +
+        now.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+    
+    console.log('Current timestamp:', currentTimestamp);
+    console.log('Parsed date:', getDateFromTimestamp(currentTimestamp));
+    
+    // Test different timestamp formats
+    const testTimestamps = [
+        '2025-10-28 03:56 PM',
+        '03:56 PM',
+        '2025-10-28T15:56:00',
+        new Date().toISOString()
+    ];
+    
+    testTimestamps.forEach(ts => {
+        console.log(`Timestamp: ${ts} -> Date: ${getDateFromTimestamp(ts)}`);
+    });
+    
+    console.log('lastMessageDate variable:', lastMessageDate);
+    console.log('========================');
+};
+
+// Debug function to manually add a date divider for testing
+window.testDateDivider = function() {
+    console.log('=== TESTING DATE DIVIDER ===');
+    
+    const currentDate = getDateFromTimestamp();
+    console.log('Current date string:', currentDate);
+    
+    const dateDivider = document.createElement('div');
+    dateDivider.className = 'date-divider';
+    dateDivider.textContent = currentDate;
+    dateDivider.dataset.date = currentDate;
+    dateDivider.style.cssText = 'background: var(--bg-card); border: 2px solid var(--accent-cyan); border-radius: 16px; padding: 10px 20px; font-size: 13px; color: var(--accent-cyan); font-weight: 700; text-align: center; margin: 20px 0; text-transform: uppercase; letter-spacing: 1px; font-family: "Comic Neue", cursive; align-self: center;';
+    
+    messagesContainer.appendChild(dateDivider);
+    console.log('Added test date divider:', dateDivider);
+    console.log('========================');
+};
+
 // Test function to manually save/load messages
 window.testLocalStorage = function () {
     console.log('=== TESTING LOCALSTORAGE ===');
@@ -849,13 +901,15 @@ signupBtn.addEventListener('click', async () => {
             username = result.username;
             showNotification('Signup successful!', 'success');
 
-            // Transition to login screen
+            // Spin logo and transition to tutorial
             spinLogo(signupScreen);
+            
             setTimeout(() => {
                 signupScreen.classList.remove('active');
-                loginScreen.classList.add('active');
-                loginUsername.textContent = username;
-                spinLogo(loginScreen);
+                document.getElementById('tutorialScreen').classList.add('active');
+                
+                // Initialize tutorial
+                initTutorial();
             }, 1000);
         } else {
             showNotification(result.message, 'error');
@@ -1197,12 +1251,16 @@ async function sendMessage() {
         };
     }
 
-    // Create the message object immediately
-    const timestamp = new Date().toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-    });
+    // Create the message object immediately with full date timestamp
+    const now = new Date();
+    const timestamp = now.getFullYear() + '-' + 
+        String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(now.getDate()).padStart(2, '0') + ' ' +
+        now.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
 
     const messageObj = {
         type: currentChatType === 'global' ? 'chat' : (currentChatType === 'private' ? 'private' : 'group_message'),
@@ -1589,56 +1647,38 @@ function handleMessage(message) {
         console.log('===== PROCESSING CHAT HISTORY =====');
         console.log('Received messages:', message.messages?.length || 0);
 
-        const newMessages = message.messages || [];
+        const serverMessages = message.messages || [];
 
-        // MERGE APPROACH: Merge server messages with existing localStorage messages
-        console.log('🔄 Before merge - localStorage messages:', chatHistories.global.length);
-        console.log('🔄 Server messages received:', newMessages.length);
+        // SERVER IS SOURCE OF TRUTH - Use server messages directly
+        // Only preserve audio_data from localStorage if it exists
+        console.log('📥 Server messages:', serverMessages.length);
+        console.log('💾 Local messages before:', chatHistories.global.length);
 
-        // Create a map of existing messages by timestamp to avoid duplicates
-        const existingMessages = new Map();
+        // Create a map of localStorage messages to preserve audio_data
+        const localAudioData = new Map();
         chatHistories.global.forEach(msg => {
-            const key = `${msg.sender}_${msg.timestamp}_${msg.content}`;
-            existingMessages.set(key, msg);
-        });
-
-        // Add server messages that don't already exist, but preserve audio_data from localStorage
-        newMessages.forEach(msg => {
-            const key = `${msg.sender}_${msg.timestamp}_${msg.content}`;
-            if (!existingMessages.has(key)) {
-                existingMessages.set(key, msg);
-            } else {
-                // Message exists in localStorage, preserve audio_data if it exists
-                const existingMsg = existingMessages.get(key);
-                if (existingMsg.audio_data && !msg.audio_data) {
-                    console.log('🎤 Preserving audio_data for message:', key);
-                    msg.audio_data = existingMsg.audio_data;
-                }
-                existingMessages.set(key, msg);
+            if (msg.audio_data) {
+                const key = `${msg.sender}|${msg.timestamp}|${msg.content}`;
+                localAudioData.set(key, msg.audio_data);
             }
         });
 
-        // Convert back to array and sort by timestamp
-        chatHistories.global = Array.from(existingMessages.values()).sort((a, b) => {
-            return new Date(a.timestamp) - new Date(b.timestamp);
+        // Use server messages and restore audio_data if available
+        chatHistories.global = serverMessages.map(msg => {
+            const key = `${msg.sender}|${msg.timestamp}|${msg.content}`;
+            if (localAudioData.has(key) && !msg.audio_data) {
+                console.log('🎤 Restoring audio_data for:', msg.sender);
+                msg.audio_data = localAudioData.get(key);
+            }
+            return msg;
         });
 
-        console.log('🔄 After merge - Total messages:', chatHistories.global.length);
+        console.log('✅ Final message count:', chatHistories.global.length);
         saveChatHistoriesToStorage();
 
-        console.log('Stored messages count:', chatHistories.global.length);
-        console.log('Current chat type:', currentChatType);
-
         if (isViewingGlobal) {
-            console.log('Rendering global chat...');
-
-            // Set scroll to bottom BEFORE rendering to prevent glitch
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
+            console.log('🎨 Rendering global chat...');
             renderCurrentChat(false);
-
-            // Ensure we stay at bottom after render
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     }
     else if (msgType === 'private_history') {
@@ -1910,6 +1950,8 @@ function renderCurrentChat(preserveScroll = true) {
     // Reset date tracker when rendering a new chat
     resetDateTracker();
 
+    // Date dividers will be handled per message during rendering
+
     // Store current scroll position and check if we're at bottom
     const wasAtBottom = isAtBottom();
     const scrollPosition = messagesContainer.scrollTop;
@@ -2166,12 +2208,43 @@ function addMessage(message, autoScroll = true) {
 
     // Check if we need to add a date divider
     const currentDate = getDateFromTimestamp(message.timestamp);
-    if (currentDate && currentDate !== lastMessageDate) {
-        lastMessageDate = currentDate;
-        const dateDivider = document.createElement('div');
-        dateDivider.className = 'date-divider';
-        dateDivider.textContent = currentDate;
-        messagesContainer.appendChild(dateDivider);
+    console.log('🗓️ Date divider check:', {
+        timestamp: message.timestamp,
+        currentDate: currentDate,
+        sender: message.sender
+    });
+    
+    if (currentDate) {
+        // Check if the last message in the container has a different date
+        const lastMessage = messagesContainer.lastElementChild;
+        let shouldAddDivider = false;
+        
+        if (!lastMessage) {
+            // First message - always add date divider
+            shouldAddDivider = true;
+            console.log('🗓️ First message - adding date divider');
+        } else if (lastMessage.classList.contains('date-divider')) {
+            // Last element is already a date divider - check if it's different
+            shouldAddDivider = lastMessage.textContent !== currentDate;
+            console.log('🗓️ Last element is date divider:', lastMessage.textContent, 'vs', currentDate, '-> shouldAdd:', shouldAddDivider);
+        } else {
+            // Last element is a message - check its date
+            const lastMessageDate = lastMessage.dataset.messageDate;
+            shouldAddDivider = !lastMessageDate || lastMessageDate !== currentDate;
+            console.log('🗓️ Last element is message with date:', lastMessageDate, 'vs', currentDate, '-> shouldAdd:', shouldAddDivider);
+        }
+        
+        if (shouldAddDivider) {
+            const dateDivider = document.createElement('div');
+            dateDivider.className = 'date-divider';
+            dateDivider.textContent = currentDate;
+            dateDivider.dataset.date = currentDate;
+            messagesContainer.appendChild(dateDivider);
+            console.log('🗓️ Added date divider:', currentDate);
+        }
+        
+        // Store the date on the message element for future reference
+        messageDiv.dataset.messageDate = currentDate;
     }
 
     // Handle different message types
@@ -3482,6 +3555,9 @@ function displayRecentChats() {
 async function switchToPrivateChat(user) {
     console.log(`🔄 SWITCHING TO PRIVATE CHAT: ${user}`);
 
+    // Reset date tracker when switching chats
+    resetDateTracker();
+
     // Clean up viewed state for chats with no unread messages when leaving
     cleanupViewedChats();
 
@@ -3592,6 +3668,9 @@ async function switchToPrivateChat(user) {
 }
 
 async function switchToGroupChat(groupId, groupName) {
+    // Reset date tracker when switching chats
+    resetDateTracker();
+
     // Clean up viewed state for chats with no unread messages when leaving
     cleanupViewedChats();
 
@@ -3629,6 +3708,9 @@ async function switchToGroupChat(groupId, groupName) {
 }
 
 globalNetworkItem.addEventListener('click', async function () {
+    // Reset date tracker when switching chats
+    resetDateTracker();
+
     // Clean up viewed state for chats with no unread messages when leaving
     cleanupViewedChats();
 
@@ -4662,27 +4744,52 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // Load saved theme on startup
-    const savedTheme = localStorage.getItem('selectedTheme') || 'default';
+    const savedTheme = localStorage.getItem('selectedTheme') || 'alt';
+    
+    // Remove all theme classes first
+    document.body.classList.remove('theme-default', 'theme-alt', 'theme-orange', 'theme-green');
+    
+    // Apply the saved theme
     if (savedTheme !== 'default') {
         document.body.classList.add(`theme-${savedTheme}`);
-        const savedOption = document.querySelector(`[data-theme="${savedTheme}"]`);
-        if (savedOption) {
-            themeOptions.forEach(opt => opt.classList.remove('active'));
-            savedOption.classList.add('active');
-        }
+    }
+    
+    // Update active button
+    const savedOption = document.querySelector(`[data-theme="${savedTheme}"]`);
+    if (savedOption) {
+        themeOptions.forEach(opt => opt.classList.remove('active'));
+        savedOption.classList.add('active');
     }
 });
 
 // ===== UTILITY FUNCTIONS =====
 eel.expose(onDisconnected);
 function onDisconnected() {
-    showNotification('Disconnected from server', 'error');
+    console.log('[DISCONNECT] Server connection lost');
+    showNotification('⚠️ Server connection lost', 'error');
+    
+    // Show full screen spinner with server down message
+    const spinner = document.getElementById('fullScreenSpinner');
+    const spinnerSubtitle = spinner.querySelector('.spinner-subtitle');
+    
+    if (spinnerSubtitle) {
+        spinnerSubtitle.textContent = '⚠️ Server is down. Reconnecting...';
+    }
+    
+    spinner.classList.add('active');
+    
+    // After 3 seconds, go back to login screen
     setTimeout(() => {
+        spinner.classList.remove('active');
         mainApp.classList.remove('active');
         loginScreen.classList.add('active');
         loginBtn.disabled = false;
         loginBtn.textContent = 'CONNECT';
-    }, 2000);
+        
+        if (spinnerSubtitle) {
+            spinnerSubtitle.textContent = 'Connecting to Shadow Network...';
+        }
+    }, 3000);
 }
 
 // Handle user connection alerts
@@ -4838,27 +4945,67 @@ function formatTimeWithoutSeconds(timestamp) {
 
 // Get date string from timestamp (e.g., "Wednesday 17-10-25")
 function getDateFromTimestamp(timestamp) {
-    if (!timestamp) {
-        const now = new Date();
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const dayName = days[now.getDay()];
-        const date = now.getDate().toString().padStart(2, '0');
-        const month = (now.getMonth() + 1).toString().padStart(2, '0');
-        const year = now.getFullYear().toString().slice(-2);
-        return `${dayName} ${date}-${month}-${year}`;
-    }
     try {
-        // For now, use current date since we don't have full date info in timestamp
-        // In a real app, you'd parse the full timestamp
-        const now = new Date();
+        let dateObj;
+        
+        if (!timestamp) {
+            dateObj = new Date();
+        } else {
+            // Try to parse different timestamp formats
+            if (timestamp.includes('T')) {
+                // ISO format
+                dateObj = new Date(timestamp);
+            } else if (timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
+                // New format: "2025-10-28 03:56 PM"
+                dateObj = new Date(timestamp);
+            } else if (timestamp.includes('-') && timestamp.includes(':')) {
+                // Date with time format
+                dateObj = new Date(timestamp);
+            } else if (timestamp.includes(':')) {
+                // Time only format like "03:56 AM" - assume today's date
+                const today = new Date();
+                const parts = timestamp.split(/\s+/);
+                const timePart = parts[0];
+                const period = parts[1];
+                
+                const [hours, minutes] = timePart.split(':').map(Number);
+                
+                let hour24 = hours;
+                if (period && period.toUpperCase() === 'PM' && hours !== 12) {
+                    hour24 += 12;
+                } else if (period && period.toUpperCase() === 'AM' && hours === 12) {
+                    hour24 = 0;
+                }
+                
+                dateObj = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hour24, minutes);
+            } else {
+                // Fallback to current date
+                dateObj = new Date();
+            }
+        }
+        
+        // Validate the date
+        if (isNaN(dateObj.getTime())) {
+            dateObj = new Date();
+        }
+        
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const dayName = days[now.getDay()];
-        const date = now.getDate().toString().padStart(2, '0');
-        const month = (now.getMonth() + 1).toString().padStart(2, '0');
-        const year = now.getFullYear().toString().slice(-2);
+        const dayName = days[dateObj.getDay()];
+        const date = dateObj.getDate().toString().padStart(2, '0');
+        const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+        const year = dateObj.getFullYear().toString().slice(-2);
+        
         return `${dayName} ${date}-${month}-${year}`;
     } catch (e) {
-        return null;
+        console.log('Error parsing timestamp:', timestamp, e);
+        // Fallback to current date
+        const now = new Date();
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayName = days[now.getDay()];
+        const date = now.getDate().toString().padStart(2, '0');
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+        const year = now.getFullYear().toString().slice(-2);
+        return `${dayName} ${date}-${month}-${year}`;
     }
 }
 
@@ -7132,3 +7279,142 @@ document.addEventListener('click', function (e) {
 });
 
 console.log('✅ Message menu delegation handler added');
+
+// 
+
+function initTutorial() {
+    let curPage = 1;
+    const numOfPages = document.querySelectorAll('.skw-page').length;
+    const animTime = 1000;
+    let scrolling = false;
+    const pgPrefix = '.skw-page-';
+    const scrollInstruction = document.getElementById('tutorialScrollInstruction');
+    let scrollAccumulator = 0;
+    const scrollThreshold = 50;
+
+    function hideScrollInstruction() {
+        if (scrollInstruction) {
+            scrollInstruction.classList.add('hidden');
+        }
+    }
+
+    function navigateUp() {
+        if (curPage === 1 || scrolling) return;
+        scrolling = true;
+        hideScrollInstruction();
+
+        document.querySelector(pgPrefix + curPage).classList.remove('active');
+        document.querySelector(pgPrefix + curPage).classList.add('inactive');
+        curPage--;
+        document.querySelector(pgPrefix + curPage).classList.add('active');
+        document.querySelector(pgPrefix + curPage).classList.remove('inactive');
+
+        setTimeout(() => {
+            scrolling = false;
+            scrollAccumulator = 0;
+        }, animTime);
+    }
+
+    function navigateDown() {
+        if (curPage === numOfPages || scrolling) return;
+        scrolling = true;
+        hideScrollInstruction();
+
+        document.querySelector(pgPrefix + curPage).classList.remove('active');
+        document.querySelector(pgPrefix + curPage).classList.add('inactive');
+        curPage++;
+        document.querySelector(pgPrefix + curPage).classList.add('active');
+        document.querySelector(pgPrefix + curPage).classList.remove('inactive');
+
+        setTimeout(() => {
+            scrolling = false;
+            scrollAccumulator = 0;
+        }, animTime);
+    }
+
+    function handleMouseWheel(e) {
+        e.preventDefault();
+        if (scrolling) return;
+
+        scrollAccumulator += e.deltaY;
+
+        if (Math.abs(scrollAccumulator) >= scrollThreshold) {
+            if (scrollAccumulator > 0) {
+                navigateDown();
+            } else {
+                navigateUp();
+            }
+            scrollAccumulator = 0;
+        }
+
+        clearTimeout(window.scrollResetTimer);
+        window.scrollResetTimer = setTimeout(() => {
+            scrollAccumulator = 0;
+        }, 200);
+    }
+
+    function handleKeyDown(e) {
+        if (scrolling) return;
+        if (e.keyCode === 40 || e.keyCode === 34) {
+            e.preventDefault();
+            navigateDown();
+        } else if (e.keyCode === 38 || e.keyCode === 33) {
+            e.preventDefault();
+            navigateUp();
+        }
+    }
+
+    let touchStartY = 0;
+    function handleTouchStart(e) {
+        touchStartY = e.touches[0].clientY;
+    }
+
+    function handleTouchEnd(e) {
+        if (scrolling) return;
+        const touchEndY = e.changedTouches[0].clientY;
+        const diff = touchStartY - touchEndY;
+
+        if (Math.abs(diff) > 50) {
+            if (diff > 0) {
+                navigateDown();
+            } else {
+                navigateUp();
+            }
+        }
+    }
+
+    // Add event listeners
+    window.addEventListener('wheel', handleMouseWheel, { passive: false });
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    // Continue button
+    const continueBtn = document.getElementById('tutorialContinueBtn');
+    if (continueBtn) {
+        continueBtn.addEventListener('click', () => {
+            console.log('Tutorial complete, going to login...');
+            
+            // Remove event listeners
+            window.removeEventListener('wheel', handleMouseWheel);
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('touchstart', handleTouchStart);
+            window.removeEventListener('touchend', handleTouchEnd);
+            
+            // Transition to login screen
+            setTimeout(() => {
+                document.getElementById('tutorialScreen').classList.remove('active');
+                loginScreen.classList.add('active');
+                loginUsername.textContent = username;
+                spinLogo(loginScreen);
+            }, 500);
+        });
+    }
+
+    // Auto-hide scroll instruction after 5 seconds
+    setTimeout(() => {
+        if (curPage === 1) {
+            hideScrollInstruction();
+        }
+    }, 5000);
+}

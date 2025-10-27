@@ -292,13 +292,24 @@ class CollaborationServer:
         }
         self.broadcast(json.dumps(welcome_msg), exclude=client_socket)
         
+        # Check if this is the user's first time
+        is_first_time = username not in storage.users or not storage.users.get(username)
+        
         # Send welcome message to the new user themselves
-        welcome_msg_self = {
-            'type': 'system',
-            'sender': 'Server',
-            'content': f"Welcome {username}! You joined the chat",
-            'timestamp': self._timestamp()
-        }
+        if is_first_time:
+            welcome_msg_self = {
+                'type': 'system',
+                'sender': 'Server',
+                'content': f" Welcome to Nexus, {username}",
+                'timestamp': self._timestamp()
+            }
+        else:
+            welcome_msg_self = {
+                'type': 'system',
+                'sender': 'Server',
+                'content': f"Welcome back, {username}!",
+                'timestamp': self._timestamp()
+            }
         self._send_to_client(client_socket, welcome_msg_self)
         
         # Broadcast updated user list to EVERYONE (including new user)
@@ -1604,8 +1615,8 @@ class CollaborationServer:
         return True
 
     def _timestamp(self) -> str:
-        """Get current timestamp"""
-        return datetime.now().strftime("%I:%M %p")
+        """Get current timestamp with full date information"""
+        return datetime.now().strftime("%Y-%m-%d %I:%M %p")
 
     def _format_bytes(self, size: int) -> str:
         """Format bytes to human-readable string"""

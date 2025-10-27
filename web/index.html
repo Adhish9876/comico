@@ -9,17 +9,17 @@
     <link rel="stylesheet" href="style.css">
 </head>
 
-<body>
+<body class="theme-alt">
     <!-- SPLASH SCREEN -->
     <div id="splashScreen" class="screen active">
         <div class="splash-container">
             <div class="splash-logo-container">
                 <div class="splash-logo-icon spinning">
                     <svg class="logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="50" cy="50" r="45" fill="none" stroke="#00b8d4" stroke-width="5" />
-                        <circle cx="50" cy="50" r="30" fill="none" stroke="#9c27b0" stroke-width="3" />
-                        <circle cx="50" cy="50" r="10" fill="#00b8d4" />
-                        <path d="M 30 50 L 70 50 M 50 30 L 50 70" stroke="#00b8d4" stroke-width="4" />
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="#c62828" stroke-width="5" />
+                        <circle cx="50" cy="50" r="30" fill="none" stroke="#424242" stroke-width="3" />
+                        <circle cx="50" cy="50" r="10" fill="#c62828" />
+                        <path d="M 30 50 L 70 50 M 50 30 L 50 70" stroke="#c62828" stroke-width="4" />
                     </svg>
                 </div>
             </div>
@@ -44,12 +44,12 @@
 
             <form class="connection-form" onsubmit="event.preventDefault();">
                 <div class="form-group">
-                    <label>Codename</label>
-                    <input type="text" id="signupUsernameInput" placeholder="Enter username" autocomplete="off">
+                    <label style="font-size: 18px;">Codename <span style="font-size: 12px; opacity: 1;">(you cannot change again!)</span></label>
+                    <input type="text" id="signupUsernameInput" placeholder="Choose your codename carefully" autocomplete="off" style="font-size: 20px; padding: 16px 18px;">
                 </div>
 
                 <div class="form-group">
-                    <label>Password</label>
+                    <label style="font-size: 18px;">Password</label>
                     <div class="password-input-wrapper">
                         <input type="password" id="signupPasswordInput" placeholder="Enter password" autocomplete="off">
                         <button type="button" class="password-toggle" id="signupPasswordToggle" title="Show password">
@@ -66,16 +66,118 @@
         </div>
     </div>
 
+    <!-- TUTORIAL SCREEN -->
+    <div id="tutorialScreen" class="screen tutorial-screen">
+        <div class="skw-pages">
+            <div class="skw-page skw-page-1 active">
+                <div class="skw-page__half skw-page__half--left">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content"
+                            style="background-image: url('./assets/global.png'); background-size: cover;"></div>
+                    </div>
+                </div>
+                <div class="skw-page__half skw-page__half--right">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content" style="background: #262626;">
+                            <h2 class="skw-page__heading">🌍 Global Network</h2>
+                            <p class="skw-page__description">Connect with everyone on the network! The Global Network is
+                                your public broadcast channel where all users can see and participate in conversations.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="skw-page skw-page-2">
+                <div class="skw-page__half skw-page__half--left">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content" style="background: #262626;">
+                            <h2 class="skw-page__heading">💬 Private Chats</h2>
+                            <p class="skw-page__description">Have one-on-one conversations! Click on any user in the
+                                sidebar to start a private chat. Your messages are secure and only visible to you and
+                                the person you're chatting with.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="skw-page__half skw-page__half--right">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content"
+                            style="background-image: url('./assets/private.png'); background-size: cover;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="skw-page skw-page-3">
+                <div class="skw-page__half skw-page__half--left">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content"
+                            style="background-image: url('./assets/file.png'); background-size: cover;"></div>
+                    </div>
+                </div>
+                <div class="skw-page__half skw-page__half--right">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content" style="background: #262626;">
+                            <h2 class="skw-page__heading">📁 File Transfer</h2>
+                            <p class="skw-page__description">Share files instantly! Click the attachment icon to send
+                                files, images, or documents. All shared files appear in the Files panel on the right.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="skw-page skw-page-4">
+                <div class="skw-page__half skw-page__half--left">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content" style="background: #262626;">
+                            <h2 class="skw-page__heading">📹 Video & Audio Calls</h2>
+                            <p class="skw-page__description">Connect face-to-face! Start video or audio calls with
+                                anyone on the network. Click the video or phone icon in the top bar to initiate a call.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="skw-page__half skw-page__half--right">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content"
+                            style="background-image: url('./assets/video.png'); background-size: cover;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="skw-page skw-page-5">
+                <div class="skw-page__half skw-page__half--left">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content"
+                            style="background-image: url('./assets/settings.png'); background-size: cover;"></div>
+                    </div>
+                </div>
+                <div class="skw-page__half skw-page__half--right">
+                    <div class="skw-page__skewed">
+                        <div class="skw-page__content" style="background: #262626;">
+                            <h2 class="skw-page__heading">⚙️ Settings & More</h2>
+                            <p class="skw-page__description">Customize your experience! Access settings to change
+                                themes, manage notifications, adjust privacy settings, and more.</p>
+                            <button class="continue-btn" id="tutorialContinueBtn">Continue </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="scroll-instruction" id="tutorialScrollInstruction">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M19 12l-7 7-7-7" />
+            </svg>
+            <div>Scroll Down</div>
+        </div>
+    </div>
+
     <!-- LOGIN SCREEN -->
     <div id="loginScreen" class="screen">
         <div class="connection-container">
             <div class="logo-container">
                 <div class="logo-icon">
                     <svg class="logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="50" cy="50" r="45" fill="none" stroke="#00b8d4" stroke-width="5" />
-                        <circle cx="50" cy="50" r="30" fill="none" stroke="#9c27b0" stroke-width="3" />
-                        <circle cx="50" cy="50" r="10" fill="#00b8d4" />
-                        <path d="M 30 50 L 70 50 M 50 30 L 50 70" stroke="#00b8d4" stroke-width="4" />
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="#c62828" stroke-width="5" />
+                        <circle cx="50" cy="50" r="30" fill="none" stroke="#424242" stroke-width="3" />
+                        <circle cx="50" cy="50" r="10" fill="#c62828" />
+                        <path d="M 30 50 L 70 50 M 50 30 L 50 70" stroke="#c62828" stroke-width="4" />
                     </svg>
                 </div>
                 <div class="logo-text">NEXUS</div>
@@ -127,10 +229,10 @@
         <div class="login-loader__tile"></div>
         <div class="login-loader__icon">
             <svg class="logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" width="80" height="80">
-                <circle cx="50" cy="50" r="45" fill="none" stroke="#00b8d4" stroke-width="5" />
-                <circle cx="50" cy="50" r="30" fill="none" stroke="#9c27b0" stroke-width="3" />
-                <circle cx="50" cy="50" r="10" fill="#00b8d4" />
-                <path d="M 30 50 L 70 50 M 50 30 L 50 70" stroke="#00b8d4" stroke-width="4" />
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#c62828" stroke-width="5" />
+                <circle cx="50" cy="50" r="30" fill="none" stroke="#424242" stroke-width="3" />
+                <circle cx="50" cy="50" r="10" fill="#c62828" />
+                <path d="M 30 50 L 70 50 M 50 30 L 50 70" stroke="#c62828" stroke-width="4" />
             </svg>
         </div>
     </div>
@@ -140,10 +242,10 @@
         <div class="spinner-content">
             <div class="spinner-logo-icon">
                 <svg class="spinner-logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="50" cy="50" r="45" fill="none" stroke="#00b8d4" stroke-width="5" />
-                    <circle cx="50" cy="50" r="30" fill="none" stroke="#9c27b0" stroke-width="3" />
-                    <circle cx="50" cy="50" r="10" fill="#00b8d4" />
-                    <path d="M 30 50 L 70 50 M 50 30 L 50 70" stroke="#00b8d4" stroke-width="4" />
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="#c62828" stroke-width="5" />
+                    <circle cx="50" cy="50" r="30" fill="none" stroke="#424242" stroke-width="3" />
+                    <circle cx="50" cy="50" r="10" fill="#c62828" />
+                    <path d="M 30 50 L 70 50 M 50 30 L 50 70" stroke="#c62828" stroke-width="4" />
                 </svg>
             </div>
             <div class="spinner-text">NEXUS</div>
@@ -181,7 +283,8 @@
                 </button>
                 <button class="icon-btn" id="audioCallBtn" title="Start Audio Call">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                        <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+                        <path
+                            d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
                     </svg>
                 </button>
                 <button class="icon-btn" id="videoCallBtn" title="Start Video Call">
@@ -611,11 +714,11 @@
                             <span class="settings-item-desc">Choose your interface theme</span>
                         </div>
                         <div class="theme-selector">
-                            <button class="theme-option active" data-theme="default">
+                            <button class="theme-option" data-theme="default">
                                 <span class="theme-preview default-theme"></span>
                                 <span>Cyan</span>
                             </button>
-                            <button class="theme-option" data-theme="alt">
+                            <button class="theme-option active" data-theme="alt">
                                 <span class="theme-preview alt-theme"></span>
                                 <span>Red</span>
                             </button>
@@ -818,13 +921,6 @@
 
         <!-- Chat Context Menu (for three dots) -->
         <div id="chatContextMenu" class="context-menu">
-            <div class="context-menu-item" data-action="archive">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path
-                        d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 9.5l3.5 3.5H14v2h-4v-2H8.5L12 9.5zM5 12.65V6.5l1.5-1.5h11L19 6.5v6.15l-2.5-2.5L14 12h-4l-2.5-1.85L5 12.65z" />
-                </svg>
-                <span>Archive</span>
-            </div>
             <div class="context-menu-item" data-action="delete-chat">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                     <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
