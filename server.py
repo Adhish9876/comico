@@ -130,6 +130,7 @@ class CollaborationServer:
         """Handle communication with a connected client"""
         username = None
         recv_buffer = ""
+        is_system_connection = False
         
         try:
             client_socket.settimeout(10.0)
@@ -137,6 +138,40 @@ class CollaborationServer:
             if not username:
                 return
             
+            # Check if this is a system connection (like VideoServer)
+            is_system_connection = username.startswith('_') and username.endswith('_System_')
+            
+            if is_system_connection:
+                print(f"[SERVER] System connection from {username} - handling separately")
+                # Handle system connection without adding to clients list
+                recv_buffer = leftover or ""
+                client_socket.settimeout(None)
+                
+                # Process any messages from system connection
+                while self.running:
+                    try:
+                        data = client_socket.recv(4096)
+                        if not data:
+                            break
+                        
+                        recv_buffer += data.decode('utf-8')
+                        recv_buffer = self._process_messages(client_socket, recv_buffer)
+                        
+                    except ConnectionResetError:
+                        break
+                    except Exception as e:
+                        print(f"❌ Error handling system message from {username}: {e}")
+                        break
+                
+                # Close system connection without broadcasting
+                print(f"[SERVER] System connection {username} closed")
+                try:
+                    client_socket.close()
+                except:
+                    pass
+                return
+            
+            # Regular user connection handling
             with self.lock:
                 self.clients[client_socket] = {
                     'username': username,
@@ -185,7 +220,8 @@ class CollaborationServer:
         except Exception as e:
             print(f"❌ Error handling client {username or address}: {e}")
         finally:
-            self.handle_disconnect(client_socket, username)
+            if not is_system_connection:
+                self.handle_disconnect(client_socket, username)
 
     def _receive_username_with_buffer(self, client_socket: socket.socket) -> Tuple[Optional[str], str]:
         """Receive username line and return (username, leftover_buffer)."""
@@ -205,15 +241,6 @@ class CollaborationServer:
             return None, remainder
 
     def _send_welcome_messages(self, client_socket: socket.socket, username: str):
-        # SKIP welcome messages for system users like VideoServer
-        if username.startswith('_') and username.endswith('_System_'):
-            print(f"[SERVER] System connection from {username} - skipping broadcasts")
-            # Just send them minimal data
-            self.send_chat_history(client_socket)
-            # DON'T broadcast to other users
-            # DON'T add to user list
-            return
-        
         # Send welcome data to the new user
         self.send_chat_history(client_socket)
         self.send_file_metadata(client_socket)
