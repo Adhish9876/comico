@@ -41,7 +41,7 @@ function saveChatHistoriesToStorage() {
         if (chatHistories.global.length > 500) {
             chatHistories.global = chatHistories.global.slice(-500);
         }
-        
+
         localStorage.setItem('chatHistories_global', JSON.stringify(chatHistories.global));
         localStorage.setItem('chatHistories_private', JSON.stringify(chatHistories.private));
         localStorage.setItem('chatHistories_group', JSON.stringify(chatHistories.group));
@@ -144,9 +144,9 @@ function debugChatState() {
 window.debugChatState = debugChatState;
 
 // Test function to manually save/load messages
-window.testLocalStorage = function() {
+window.testLocalStorage = function () {
     console.log('=== TESTING LOCALSTORAGE ===');
-    
+
     // Save a test message
     const testMessage = {
         type: 'chat',
@@ -154,16 +154,16 @@ window.testLocalStorage = function() {
         content: 'Test message ' + Date.now(),
         timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
     };
-    
+
     chatHistories.global.push(testMessage);
     saveChatHistoriesToStorage();
-    
+
     console.log('Saved test message, total messages:', chatHistories.global.length);
-    
+
     // Try to reload from localStorage
     const reloaded = JSON.parse(localStorage.getItem('chatHistories_global') || '[]');
     console.log('Reloaded from localStorage:', reloaded.length);
-    
+
     // Render
     if (currentChatType === 'global') {
         renderCurrentChat(false);
@@ -175,7 +175,7 @@ document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         e.preventDefault();
         debugChatState();
-        
+
         // Also try to force request chat history
         console.log('🔧 Manual chat history request triggered');
         eel.send_message('request_chat_history', '', {})();
@@ -196,7 +196,7 @@ if (forgotPasswordLink) {
     forgotPasswordLink.addEventListener('click', (e) => {
         e.preventDefault();
         forgotPasswordModal.style.display = 'flex';
-        
+
         // Reset form
         document.querySelectorAll('input[name="question1"]').forEach(input => input.checked = false);
         document.querySelectorAll('input[name="question2"]').forEach(input => input.checked = false);
@@ -215,37 +215,37 @@ if (submitAnswersBtn) {
     submitAnswersBtn.addEventListener('click', () => {
         const answer1 = document.querySelector('input[name="question1"]:checked')?.value;
         const answer2 = document.querySelector('input[name="question2"]:checked')?.value;
-        
+
         if (!answer1 || !answer2) {
             showNotification('Please answer both questions!', 'error');
             return;
         }
-        
+
         // Correct answers: 1)d and 2)b
         if (answer1 === 'd' && answer2 === 'b') {
             // Correct answers - show password reset modal
             forgotPasswordModal.style.animation = 'modalExit 0.3s ease-in forwards';
-            
+
             setTimeout(() => {
                 forgotPasswordModal.style.display = 'none';
                 forgotPasswordModal.style.animation = '';
-                
+
                 // Clear the password reset form
                 newPasswordInput.value = '';
                 confirmPasswordInput.value = '';
                 passwordMatchIndicator.textContent = '';
                 passwordMatchIndicator.classList.remove('match', 'no-match');
                 resetPasswordBtn.disabled = true;
-                
+
                 // Show password reset modal
                 passwordResetModal.style.display = 'flex';
                 passwordResetModal.style.animation = 'modalEnter 0.3s ease-out forwards';
-                
+
                 // Focus on new password input
                 setTimeout(() => {
                     newPasswordInput.focus();
                 }, 100);
-                
+
                 showNotification('✅ Security questions verified! Set your new password.', 'success');
             }, 300);
         } else {
@@ -264,14 +264,14 @@ const passwordMatchIndicator = document.getElementById('passwordMatchIndicator')
 function checkPasswordMatch() {
     const newPass = newPasswordInput.value;
     const confirmPass = confirmPasswordInput.value;
-    
+
     if (!confirmPass) {
         passwordMatchIndicator.classList.remove('show');
         return;
     }
-    
+
     passwordMatchIndicator.classList.add('show');
-    
+
     if (newPass === confirmPass && newPass.length >= 4) {
         passwordMatchIndicator.classList.remove('no-match');
         passwordMatchIndicator.classList.add('match');
@@ -300,47 +300,47 @@ if (resetPasswordBtn) {
     resetPasswordBtn.addEventListener('click', async () => {
         const newPassword = newPasswordInput.value.trim();
         const confirmPassword = confirmPasswordInput.value.trim();
-        
+
         if (!newPassword || !confirmPassword) {
             showNotification('Please fill in both password fields!', 'error');
             return;
         }
-        
+
         if (newPassword.length < 4) {
             showNotification('Password must be at least 4 characters!', 'error');
             return;
         }
-        
+
         if (newPassword !== confirmPassword) {
             showNotification('Passwords do not match!', 'error');
             return;
         }
-        
+
         try {
             resetPasswordBtn.disabled = true;
             resetPasswordBtn.textContent = '🔄 Resetting...';
-            
+
             // Call backend to reset password
             const result = await eel.reset_password(newPassword)();
-            
+
             if (result.success) {
                 showNotification('✅ Password reset successfully!', 'success');
-                
+
                 // Smooth transition animation
                 passwordResetModal.style.animation = 'modalExit 0.3s ease-in forwards';
-                
+
                 setTimeout(() => {
                     // Close modal and return to login
                     passwordResetModal.style.display = 'none';
                     passwordResetModal.style.animation = '';
                     document.getElementById('forgotPasswordContainer').style.display = 'none';
                     failedLoginAttempts = 0;
-                    
+
                     // Clear password fields
                     newPasswordInput.value = '';
                     confirmPasswordInput.value = '';
                     passwordMatchIndicator.classList.remove('show');
-                    
+
                     // Focus on password input
                     setTimeout(() => {
                         loginPasswordInput.focus();
@@ -362,27 +362,27 @@ if (resetPasswordBtn) {
 // Dramatic rejection function
 function showDramaticRejection() {
     rejectionModal.style.display = 'flex';
-    
+
     let countdown = 3;
     const countdownElement = document.getElementById('countdown');
-    
+
     const countdownInterval = setInterval(() => {
         countdown--;
         countdownElement.textContent = countdown;
-        
+
         if (countdown <= 0) {
             clearInterval(countdownInterval);
-            
+
             // Close the application with multiple fallback methods
             console.log('🚫 Closing application - unauthorized access detected');
-            
+
             try {
                 // Method 1: Try Eel close_application
                 if (typeof eel !== 'undefined') {
                     eel.close_application()();
                     console.log('✅ Called eel.close_application()');
                 }
-                
+
                 // Method 2: Try to close the window
                 setTimeout(() => {
                     try {
@@ -392,7 +392,7 @@ function showDramaticRejection() {
                         console.log('❌ window.close() failed:', e);
                     }
                 }, 100);
-                
+
                 // Method 3: Try to navigate away
                 setTimeout(() => {
                     try {
@@ -402,7 +402,7 @@ function showDramaticRejection() {
                         console.log('❌ Navigation failed:', e);
                     }
                 }, 200);
-                
+
                 // Method 4: Hide the entire app
                 setTimeout(() => {
                     try {
@@ -413,10 +413,10 @@ function showDramaticRejection() {
                         console.log('❌ Hide failed:', e);
                     }
                 }, 300);
-                
+
             } catch (error) {
                 console.error('❌ Error during application closure:', error);
-                
+
                 // Final fallback - just hide everything
                 document.body.innerHTML = `
                     <div style="
@@ -462,13 +462,13 @@ function cleanupViewedChats() {
     if (unreadCounts.global === 0) {
         viewedChats.delete('global');
     }
-    
+
     for (const user in unreadCounts.private) {
         if (unreadCounts.private[user] === 0) {
             viewedChats.delete(`private_${user}`);
         }
     }
-    
+
     for (const groupId in unreadCounts.group) {
         if (unreadCounts.group[groupId] === 0) {
             viewedChats.delete(`group_${groupId}`);
@@ -508,7 +508,7 @@ function clearUnreadForCurrentChat() {
     // Mark this chat as viewed so we don't scroll to divider again
     const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
     viewedChats.add(chatKey);
-    
+
     if (currentChatType === 'global') {
         unreadCounts.global = 0;
         // Update last seen index to the last message in global chat
@@ -526,14 +526,14 @@ function clearUnreadForCurrentChat() {
     }
     updateTotalUnreadCount();
     updateUnreadCountsUI();
-    
+
     // Save to localStorage
     try {
         localStorage.setItem('lastSeenMessageIndex', JSON.stringify(lastSeenMessageIndex));
     } catch (e) {
         console.log('Could not save last seen indices:', e);
     }
-    
+
     // Clear any persistent banner when switching to the relevant chat
     const banner = document.getElementById('inAppBanner');
     if (banner) banner.remove();
@@ -688,7 +688,7 @@ function spinLogo(screen) {
 // Helper function to show notification
 function showNotification(message, type = 'info') {
     const banner = document.createElement('div');
-    
+
     // Determine colors based on type
     let borderColor, textColor;
     if (type === 'error') {
@@ -704,7 +704,7 @@ function showNotification(message, type = 'info') {
         borderColor = '#00b8d4';  // Cyan (info)
         textColor = '#00b8d4';
     }
-    
+
     banner.style.cssText = `
         position: fixed;
         top: 20px;
@@ -728,15 +728,15 @@ function showNotification(message, type = 'info') {
 // Password visibility toggle functionality
 function setupPasswordToggle(toggleBtn, passwordInput) {
     if (!toggleBtn || !passwordInput) return;
-    
+
     toggleBtn.addEventListener('click', () => {
         const isPassword = passwordInput.type === 'password';
         passwordInput.type = isPassword ? 'text' : 'password';
         toggleBtn.title = isPassword ? 'Hide password' : 'Show password';
-        
+
         // Toggle active class for rotation animation
         toggleBtn.classList.toggle('active');
-        
+
         // Update icon (eye vs eye-slash)
         const svg = toggleBtn.querySelector('.eye-icon');
         if (isPassword) {
@@ -752,39 +752,39 @@ function setupPasswordToggle(toggleBtn, passwordInput) {
 // Check device registration on page load
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('[AUTH] Starting app with splash screen...');
-    
+
     // Force default cyan/pink theme on app launch
     document.body.classList.remove('theme-alt');
     localStorage.setItem('theme', 'default');
     console.log('[AUTH] Forced default cyan/pink theme on launch');
-    
+
     // Setup password toggle buttons
     const signupPasswordToggle = document.getElementById('signupPasswordToggle');
     const loginPasswordToggle = document.getElementById('loginPasswordToggle');
     setupPasswordToggle(signupPasswordToggle, signupPasswordInput);
     setupPasswordToggle(loginPasswordToggle, loginPasswordInput);
-    
+
     const splashScreen = document.getElementById('splashScreen');
     const signupScreen = document.getElementById('signupScreen');
     const loginScreen = document.getElementById('loginScreen');
-    
+
     // Show splash screen briefly, then check registration
     setTimeout(() => {
         console.log('[AUTH] Logo spinning...');
         // Logo spins fast for visual effect
     }, 200);
-    
+
     // After 1.2s total, check registration and transition (faster)
     setTimeout(async () => {
         console.log('[AUTH] Checking device registration...');
-        
+
         let targetScreen = signupScreen; // Default to signup
-        
+
         if (typeof eel !== 'undefined') {
             try {
                 const result = await eel.check_device_registration()();
                 console.log('[AUTH] Registration check result:', result);
-                
+
                 if (result.is_registered && result.username) {
                     // Device is registered, show login screen
                     console.log('[AUTH] Device registered, will show login screen');
@@ -805,17 +805,17 @@ window.addEventListener('DOMContentLoaded', async () => {
             console.log('[AUTH] Eel not available, showing signup screen');
             targetScreen = signupScreen;
         }
-        
+
         // Fade out splash screen
         splashScreen.classList.add('fade-out');
-        
+
         // After fade out completes, show target screen
         setTimeout(() => {
             splashScreen.classList.remove('active', 'fade-out');
             targetScreen.classList.add('active');
             console.log('[AUTH] Transitioned to target screen');
         }, 300); // Match faster fade-out animation
-        
+
     }, 1200); // Total time: faster at 1.2s
 });
 
@@ -823,32 +823,32 @@ window.addEventListener('DOMContentLoaded', async () => {
 signupBtn.addEventListener('click', async () => {
     const user = signupUsernameInput.value.trim();
     const password = signupPasswordInput.value.trim();
-    
+
     if (!user) {
         showNotification('Please enter a username', 'error');
         return;
     }
-    
+
     if (!password) {
         showNotification('Please enter a password', 'error');
         return;
     }
-    
+
     if (password.length < 4) {
         showNotification('Password must be at least 4 characters', 'error');
         return;
     }
-    
+
     signupBtn.disabled = true;
     signupBtn.textContent = 'SIGNING UP...';
-    
+
     try {
         const result = await eel.signup_user(user, password)();
-        
+
         if (result.success) {
             username = result.username;
             showNotification('Signup successful!', 'success');
-            
+
             // Transition to login screen
             spinLogo(signupScreen);
             setTimeout(() => {
@@ -877,79 +877,79 @@ loginBtn.addEventListener('click', async () => {
     const password = loginPasswordInput.value.trim();
     const host = hostInput.value.trim() || 'localhost';
     const port = parseInt(portInput.value.trim() || '5555');
-    
+
     if (!password) {
         showNotification('Please enter your password', 'error');
         return;
     }
-    
+
     loginBtn.disabled = true;
     loginBtn.textContent = 'VERIFYING...';
-    
+
     try {
         // First verify password
         const authResult = await eel.login_user(password)();
-        
+
         if (!authResult.success) {
             failedLoginAttempts++;
-            
+
             // Show specific error message for wrong password
-            const errorMsg = authResult.message === 'Incorrect password' 
-                ? '❌ Wrong Password! Please try again.' 
+            const errorMsg = authResult.message === 'Incorrect password'
+                ? '❌ Wrong Password! Please try again.'
                 : authResult.message;
             showNotification(errorMsg, 'error');
-            
+
             // Shake animation on password input
             loginPasswordInput.style.animation = 'shake 0.6s, errorPulse 1s';
             setTimeout(() => {
                 loginPasswordInput.style.animation = '';
             }, 1000);
-            
+
             // Add error class for visual feedback
             loginPasswordInput.classList.add('error-state');
             setTimeout(() => {
                 loginPasswordInput.classList.remove('error-state');
             }, 1000);
-            
+
             // Show forgot password option after 2 failed attempts
             if (failedLoginAttempts >= 2) {
                 document.getElementById('forgotPasswordContainer').style.display = 'block';
                 showNotification('🔐 Forgot your password? Click the link below!', 'info');
             }
-            
+
             // Clear password field
             loginPasswordInput.value = '';
             loginPasswordInput.focus();
-            
+
             loginBtn.disabled = false;
             loginBtn.textContent = 'CONNECT';
             return;
         }
-        
+
         // Reset failed attempts on successful login
         failedLoginAttempts = 0;
-        
+
         username = authResult.username;
         loginBtn.textContent = 'CONNECTING...';
-        
+
         // Now connect to server
         const result = await eel.connect_to_server(username, host, port)();
         if (result.success) {
             // Step 1: Start spinning the logo on login screen (immediately)
             const logoContainer = loginScreen.querySelector('.logo-container');
             logoContainer.classList.add('spinning');
-            
+
             // Step 2: After 0.3s, start tile animation in background
             const loginLoader = document.getElementById('loginLoader');
             setTimeout(() => {
                 loginLoader.classList.add('login-loader--active');
             }, 300);
-            
+
             // Step 3: Fade out login form/text while logo continues
             setTimeout(() => {
                 loginScreen.classList.add('login-fade-out');
             }, 600);
-            
+
             // Step 4: After ~1.6s total, transition directly to main app (no old spinner)
             setTimeout(() => {
                 // Prepare user info
@@ -960,39 +960,39 @@ loginBtn.addEventListener('click', async () => {
                 statusIcon.style.fontSize = '12px';
                 statusIcon.style.verticalAlign = 'middle';
                 userName.appendChild(statusIcon);
-                
+
                 // Switch screens smoothly
                 loginScreen.classList.remove('active');
                 logoContainer.classList.remove('spinning');
                 loginLoader.classList.remove('login-loader--active');
                 mainApp.classList.add('active', 'main-app-fade-in');
-                
-                
+
+
                 // Initialize global chat state
                 currentChatType = 'global';
                 currentChatTarget = null;
-                
+
                 // Highlight the global network item
                 document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
                 globalNetworkItem.classList.add('active');
-                
+
                 showNotification('Connected!', 'success');
-                
+
                 // CRITICAL FIX: Add message menu buttons immediately after login
                 setTimeout(() => {
                     console.log('🔧 Adding message menu buttons after login');
                     addMessageMenuButtons();
                 }, 500);
-                
+
                 // Ensure badges are created
                 ensureBadges();
-                
+
                 // Polling disabled - messages come via WebSocket in real-time
                 // setTimeout(() => {
                 //     console.log('===== STARTING DATA POLLING =====');
                 //     pollForData();
                 // }, 500);
-                
+
                 // Test Eel bridge first
                 setTimeout(() => {
                     console.log('===== TESTING EEL BRIDGE =====');
@@ -1006,46 +1006,46 @@ loginBtn.addEventListener('click', async () => {
                         console.log('Eel bridge not available:', e);
                     }
                 }, 300);
-                
+
                 // Force render after a short delay to ensure data is received
                 setTimeout(() => {
                     console.log('===== FORCE RENDERING AFTER CONNECT =====');
                     console.log('Global history length:', chatHistories.global.length);
-                    
+
                     // Always request chat history explicitly to ensure we get it
                     console.log('Requesting chat history explicitly...');
                     eel.send_message('request_chat_history', '', {})();
                     eel.refresh_user_list()();
-                    
+
                     // If we still don't have data after localStorage, show what we have
                     if (chatHistories.global.length === 0) {
                         console.log('No messages in localStorage or from server yet');
                     } else {
                         console.log('Have messages from localStorage:', chatHistories.global.length);
                     }
-                    
+
                     // Load persistent groups
                     console.log('===== LOADING PERSISTENT GROUPS =====');
                     console.log(`Found ${Object.keys(persistentGroups).length} groups in localStorage`);
                     updateGroupsList();
-                    
+
                     // Always render to ensure messages are displayed (including from localStorage)
                     console.log('Initial render with localStorage messages:', chatHistories.global.length);
                     console.log('🔍 DEBUG: Messages before render:', chatHistories.global.map(m => `${m.sender}: ${m.content?.substring(0, 20)}...`));
-                    
+
                     if (chatHistories.global.length > 0) {
                         console.log('📱 Displaying messages from localStorage - no refresh delay!');
                         // Clear any existing messages first to prevent duplicates
                         messagesContainer.innerHTML = '';
-                        
+
                         // Set scroll to bottom BEFORE rendering to prevent glitch
                         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                        
+
                         renderCurrentChat(false);
-                        
+
                         // Ensure we stay at bottom after render
                         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                        
+
                         console.log('🔍 DEBUG: Messages in DOM after render:', messagesContainer.children.length);
                     } else {
                         // No messages in localStorage, just render empty chat
@@ -1053,7 +1053,7 @@ loginBtn.addEventListener('click', async () => {
                         messagesContainer.innerHTML = '';
                         renderCurrentChat(false);
                     }
-                    
+
                     // Add multiple backup renders to handle race conditions
                     setTimeout(() => {
                         if (currentChatType === 'global' && messagesContainer.children.length === 0 && chatHistories.global.length > 0) {
@@ -1062,7 +1062,7 @@ loginBtn.addEventListener('click', async () => {
                             renderCurrentChat(false);
                         }
                     }, 500);
-                    
+
                     setTimeout(() => {
                         if (currentChatType === 'global' && messagesContainer.children.length === 0 && chatHistories.global.length > 0) {
                             console.log('BACKUP 2: Messages still not displayed, forcing render...');
@@ -1072,7 +1072,7 @@ loginBtn.addEventListener('click', async () => {
                         // Mark page refresh as complete
                         isPageRefresh = false;
                     }, 1500);
-                    
+
                     setTimeout(() => {
                         if (currentChatType === 'global' && messagesContainer.children.length === 0 && chatHistories.global.length > 0) {
                             console.log('BACKUP 3: Final attempt to render messages...');
@@ -1080,7 +1080,7 @@ loginBtn.addEventListener('click', async () => {
                             renderCurrentChat(false);
                         }
                     }, 3000);
-                    
+
                     // Backup request for chat history if we still don't have any after 2 seconds
                     setTimeout(() => {
                         if (chatHistories.global.length === 0) {
@@ -1089,11 +1089,11 @@ loginBtn.addEventListener('click', async () => {
                         }
                     }, 2000);
                 }, 800);
-                
+
                 // Clean up animation class
                 setTimeout(() => mainApp.classList.remove('main-app-fade-in'), 500);
             }, 1600);
-            
+
             return;
         } else {
             showNotification(result.message, 'error');
@@ -1130,7 +1130,7 @@ loginPasswordInput.addEventListener('keypress', (e) => {
 function saveDraftMessage() {
     const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
     const draftText = messageInput.value;
-    
+
     const drafts = JSON.parse(localStorage.getItem('messageDrafts') || '{}');
     if (draftText.trim()) {
         drafts[chatKey] = draftText;
@@ -1144,7 +1144,7 @@ function saveDraftMessage() {
 function restoreDraftMessage() {
     const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
     const drafts = JSON.parse(localStorage.getItem('messageDrafts') || '{}');
-    
+
     if (drafts[chatKey]) {
         messageInput.value = drafts[chatKey];
     } else {
@@ -1175,7 +1175,7 @@ messageInput.addEventListener('keypress', (e) => {
 async function sendMessage() {
     const content = messageInput.value.trim();
     if (!content) return;
-    
+
     // Prevent crashes from extremely large content
     const MAX_MESSAGE_LENGTH = 10000; // 10k characters
     if (content.length > MAX_MESSAGE_LENGTH) {
@@ -1186,7 +1186,7 @@ async function sendMessage() {
     // Check if this is a reply
     const replyContainer = document.querySelector('.reply-container');
     let metadata = {};
-    
+
     if (replyContainer && replyContainer.style.display !== 'none' && replyContainer.dataset.replyTo) {
         metadata = {
             replyTo: {
@@ -1198,12 +1198,12 @@ async function sendMessage() {
     }
 
     // Create the message object immediately
-    const timestamp = new Date().toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit', 
-        hour12: true 
+    const timestamp = new Date().toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
     });
-    
+
     const messageObj = {
         type: currentChatType === 'global' ? 'chat' : (currentChatType === 'private' ? 'private' : 'group_message'),
         sender: username,
@@ -1211,7 +1211,7 @@ async function sendMessage() {
         timestamp: timestamp,
         metadata: metadata.replyTo ? metadata : null
     };
-    
+
     // Add additional fields for non-global messages
     if (currentChatType === 'private') {
         messageObj.receiver = currentChatTarget;
@@ -1224,20 +1224,20 @@ async function sendMessage() {
 
     messageInput.value = '';
     messageInput.focus();
-    
+
     // Clear reply container if it was a reply
     if (replyContainer && replyContainer.dataset.replyTo) {
         replyContainer.style.display = 'none';
         replyContainer.dataset.replyTo = '';
     }
-    
+
     // Clear draft message when sent
     clearDraftMessage();
-    
+
     // Mark chat as viewed and update last seen index when sending
     const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
     viewedChats.add(chatKey);
-    
+
     // Update last seen index to current message count (will include the sent message once received)
     if (currentChatType === 'global') {
         lastSeenMessageIndex.global = chatHistories.global.length;
@@ -1252,14 +1252,14 @@ async function sendMessage() {
         }
         lastSeenMessageIndex.group[currentChatTarget] = (chatHistories.group[currentChatTarget] || []).length;
     }
-    
+
     // Save last seen index to localStorage
     try {
         localStorage.setItem('lastSeenMessageIndex', JSON.stringify(lastSeenMessageIndex));
     } catch (e) {
         console.log('Could not save last seen index:', e);
     }
-    
+
     try {
         if (currentChatType === 'private' && currentChatTarget) {
             // Check if user is offline and show notification only once
@@ -1267,14 +1267,14 @@ async function sendMessage() {
                 showNotification(`${currentChatTarget} is offline. They will receive your message when they come online.`, 'warning');
                 offlineNotificationsShown.add(currentChatTarget);
             }
-            
+
             // Check if this user was in active list and move them to private chats immediately
             const activeUserItem = document.querySelector(`.active-user-item[data-user="${currentChatTarget}"]`);
             if (activeUserItem) {
                 console.log(`Moving ${currentChatTarget} from active to private chats immediately`);
                 moveUserToChattedList(currentChatTarget);
             }
-            
+
             addToRecentChats(currentChatTarget);
             await eel.send_message('private', content, {
                 receiver: currentChatTarget,
@@ -1308,10 +1308,10 @@ function updateUnreadCount(type, target = null) {
     } else if (type === 'group' && target) {
         unreadCounts.group[target] = (unreadCounts.group[target] || 0) + 1;
     }
-    
+
     // Update total count
     unreadCounts.total++;
-    
+
     // Update UI
     updateUnreadCountsUI();
 }
@@ -1323,7 +1323,7 @@ function updateUnreadCountsUI() {
     } else {
         document.title = 'Shadow Nexus';
     }
-    
+
     // Helper function to ensure badge exists on element
     const ensureBadge = (element) => {
         let badge = element.querySelector('.unread-count');
@@ -1335,7 +1335,7 @@ function updateUnreadCountsUI() {
         }
         return badge;
     };
-    
+
     // Update chat list items (private)
     Object.entries(unreadCounts.private).forEach(([user, count]) => {
         const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
@@ -1352,7 +1352,7 @@ function updateUnreadCountsUI() {
             }
         }
     });
-    
+
     // Also remove badges from users not in unreadCounts.private
     document.querySelectorAll(`.chat-item[data-user] .unread-count`).forEach(badge => {
         const chatItem = badge.closest('.chat-item');
@@ -1378,7 +1378,7 @@ function updateUnreadCountsUI() {
             }
         }
     });
-    
+
     // Also remove badges from groups not in unreadCounts.group
     document.querySelectorAll(`.chat-item[data-group-id] .unread-count`).forEach(badge => {
         const chatItem = badge.closest('.chat-item');
@@ -1387,11 +1387,11 @@ function updateUnreadCountsUI() {
             badge.style.display = 'none';
         }
     });
-    
+
     // Do not display unread badge for Global Network
     const globalBadge = document.querySelector('#globalNetworkItem .unread-count');
     if (globalBadge) globalBadge.style.display = 'none';
-    
+
     // Update total badges
     document.querySelectorAll('.tab-btn').forEach(btn => {
         const type = btn.dataset.tab;
@@ -1417,28 +1417,28 @@ function handleMessage(message) {
     console.log('===== MESSAGE RECEIVED =====');
     console.log('Type:', message.type);
     console.log('Current chat:', currentChatType, currentChatTarget);
-    
+
     // Special logging for chat_history messages
     if (message.type === 'chat_history') {
         console.log('🎯 CHAT HISTORY RECEIVED!');
         console.log('Messages count:', message.messages?.length || 0);
     }
-    
+
     console.log('Message data:', message);
     console.log('Message keys:', Object.keys(message));
-    
+
     // Determine active-view status per chat context
     const isViewingGlobal = currentChatType === 'global';
     const isViewingPrivateWith = (u) => currentChatType === 'private' && currentChatTarget === u;
     const isViewingGroup = (g) => currentChatType === 'group' && currentChatTarget === g;
-    
+
     const msgType = message.type;
 
     // Store messages in appropriate history and display if in correct chat
     if (msgType === 'chat') {
         chatHistories.global.push(message);
         saveChatHistoriesToStorage(); // Save to localStorage
-        
+
         if (isViewingGlobal) {
             addMessage(message);
         } else {
@@ -1457,18 +1457,18 @@ function handleMessage(message) {
         if (!chatHistories.private[otherUser]) {
             chatHistories.private[otherUser] = [];
         }
-        
+
         // Check for duplicates
-        const isDuplicate = message.sender === username && 
-            chatHistories.private[otherUser].some(m => 
-                m.sender === message.sender && 
-                m.content === message.content && 
+        const isDuplicate = message.sender === username &&
+            chatHistories.private[otherUser].some(m =>
+                m.sender === message.sender &&
+                m.content === message.content &&
                 Math.abs(new Date(m.timestamp) - new Date(message.timestamp)) < 2000
             );
-        
+
         if (!isDuplicate) {
             chatHistories.private[otherUser].push(message);
-            
+
             if (isViewingPrivateWith(otherUser)) {
                 addMessage(message);
             } else if (message.sender !== username) {
@@ -1483,7 +1483,7 @@ function handleMessage(message) {
                 }
             }
         }
-        
+
         if (message.receiver === username) {
             addToRecentChats(message.sender);
         }
@@ -1494,12 +1494,12 @@ function handleMessage(message) {
             chatHistories.private[otherUser] = [];
         }
         chatHistories.private[otherUser].push(message);
-        
+
         if (currentChatType === 'private' && currentChatTarget === otherUser) {
             addMessage(message);
             addFileToList(message);
         }
-        
+
         if (message.receiver === username) {
             addToRecentChats(message.sender);
             showNotification(`${message.sender} shared a file`, 'info');
@@ -1509,18 +1509,18 @@ function handleMessage(message) {
         if (!chatHistories.group[message.group_id]) {
             chatHistories.group[message.group_id] = [];
         }
-        
+
         // Check for duplicates
-        const isDuplicate = message.sender === username && 
-            chatHistories.group[message.group_id].some(m => 
-                m.sender === message.sender && 
-                m.content === message.content && 
+        const isDuplicate = message.sender === username &&
+            chatHistories.group[message.group_id].some(m =>
+                m.sender === message.sender &&
+                m.content === message.content &&
                 Math.abs(new Date(m.timestamp) - new Date(message.timestamp)) < 2000
             );
-        
+
         if (!isDuplicate) {
             chatHistories.group[message.group_id].push(message);
-            
+
             // Cache to localStorage
             try {
                 const allGroups = JSON.parse(localStorage.getItem('chatHistories_group') || '{}');
@@ -1529,7 +1529,7 @@ function handleMessage(message) {
             } catch (e) {
                 console.log('Could not cache group message:', e);
             }
-            
+
             if (isViewingGroup(message.group_id)) {
                 addMessage(message);
             } else if (message.sender !== username) {
@@ -1550,7 +1550,7 @@ function handleMessage(message) {
             chatHistories.group[message.group_id] = [];
         }
         chatHistories.group[message.group_id].push(message);
-        
+
         if (isViewingGroup(message.group_id)) {
             addMessage(message);
             addFileToList(message);
@@ -1565,9 +1565,9 @@ function handleMessage(message) {
         const messageId = message.message_id;
         const chatType = message.chat_type;
         const chatTarget = message.chat_target;
-        
+
         console.log('Message deleted notification:', messageId, chatType, chatTarget);
-        
+
         // Update the message in the UI if it's visible
         const messageElements = document.querySelectorAll('.message');
         messageElements.forEach(msgEl => {
@@ -1576,32 +1576,32 @@ function handleMessage(message) {
                 bubble.innerHTML = '<span class="message-deleted">🚫 This message was deleted</span>';
                 bubble.style.fontStyle = 'italic';
                 bubble.style.opacity = '0.6';
-                
+
                 // Remove menu button
                 const menuBtn = msgEl.querySelector('.message-menu-btn');
                 if (menuBtn) menuBtn.remove();
             }
         });
-        
+
         showNotification('Message deleted', 'info');
     }
     else if (msgType === 'chat_history') {
         console.log('===== PROCESSING CHAT HISTORY =====');
         console.log('Received messages:', message.messages?.length || 0);
-        
+
         const newMessages = message.messages || [];
-        
+
         // MERGE APPROACH: Merge server messages with existing localStorage messages
         console.log('🔄 Before merge - localStorage messages:', chatHistories.global.length);
         console.log('🔄 Server messages received:', newMessages.length);
-        
+
         // Create a map of existing messages by timestamp to avoid duplicates
         const existingMessages = new Map();
         chatHistories.global.forEach(msg => {
             const key = `${msg.sender}_${msg.timestamp}_${msg.content}`;
             existingMessages.set(key, msg);
         });
-        
+
         // Add server messages that don't already exist, but preserve audio_data from localStorage
         newMessages.forEach(msg => {
             const key = `${msg.sender}_${msg.timestamp}_${msg.content}`;
@@ -1617,26 +1617,26 @@ function handleMessage(message) {
                 existingMessages.set(key, msg);
             }
         });
-        
+
         // Convert back to array and sort by timestamp
         chatHistories.global = Array.from(existingMessages.values()).sort((a, b) => {
             return new Date(a.timestamp) - new Date(b.timestamp);
         });
-        
+
         console.log('🔄 After merge - Total messages:', chatHistories.global.length);
         saveChatHistoriesToStorage();
-        
+
         console.log('Stored messages count:', chatHistories.global.length);
         console.log('Current chat type:', currentChatType);
-        
+
         if (isViewingGlobal) {
             console.log('Rendering global chat...');
-            
+
             // Set scroll to bottom BEFORE rendering to prevent glitch
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            
+
             renderCurrentChat(false);
-            
+
             // Ensure we stay at bottom after render
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
@@ -1648,16 +1648,16 @@ function handleMessage(message) {
             const oldMessageCount = (chatHistories.private[targetUser] || []).length;
             const newMessages = message.messages || [];
             chatHistories.private[targetUser] = newMessages;
-            
+
             if (currentChatType === 'private' && currentChatTarget === targetUser) {
                 // Check if we just switched to this chat (within 2 seconds)
                 const timeSinceSwitch = Date.now() - lastChatSwitchTime;
                 const isRecentSwitch = lastChatSwitchTarget === targetUser && timeSinceSwitch < 2000;
-                
+
                 // Only skip re-render if it's a recent switch AND message count is the same
                 // If message count changed, we need to re-render to show new messages
                 const shouldSkipRender = isRecentSwitch && (oldMessageCount === newMessages.length);
-                
+
                 if (!shouldSkipRender) {
                     // Re-render (will use last seen index for divider)
                     renderCurrentChat(true);
@@ -1672,15 +1672,15 @@ function handleMessage(message) {
         const oldMessageCount = (chatHistories.group[groupId] || []).length;
         const newMessages = message.messages || [];
         chatHistories.group[groupId] = newMessages;
-        
+
         if (currentChatType === 'group' && currentChatTarget === groupId) {
             // Check if we just switched to this chat (within 2 seconds)
             const timeSinceSwitch = Date.now() - lastChatSwitchTime;
             const isRecentSwitch = lastChatSwitchTarget === groupId && timeSinceSwitch < 2000;
-            
+
             // Only skip re-render if it's a recent switch AND message count is the same
             const shouldSkipRender = isRecentSwitch && (oldMessageCount === newMessages.length);
-            
+
             if (!shouldSkipRender) {
                 // Re-render (will use last seen index for divider)
                 renderCurrentChat(true);
@@ -1698,11 +1698,11 @@ function handleMessage(message) {
     else if (msgType === 'file_notification') {
         chatHistories.global.push(message);
         addFileToList(message);
-        
+
         if (currentChatType === 'global') {
             addMessage(message);
         }
-        
+
         if (message.sender !== username) {
             showNotification(`${message.sender} shared a file`, 'info');
         }
@@ -1713,12 +1713,12 @@ function handleMessage(message) {
     else if (msgType === 'audio_share' || msgType === 'audio_message' || msgType === 'private_audio' || msgType === 'group_audio') {
         console.log('🎤 Audio message received:', msgType, 'from:', message.sender);
         console.log('🎤 Current chat:', currentChatType, currentChatTarget);
-        
+
         if (msgType === 'audio_share' || msgType === 'audio_message') {
             console.log('🎤 Adding to global history');
             chatHistories.global.push(message);
             saveChatHistoriesToStorage(); // Save to localStorage
-            
+
             if (currentChatType === 'global') {
                 console.log('🎤 Displaying in global chat');
                 addMessage(message);
@@ -1729,19 +1729,19 @@ function handleMessage(message) {
         else if (msgType === 'private_audio') {
             const otherUser = message.sender === username ? message.receiver : message.sender;
             console.log('🎤 Private audio, other user:', otherUser);
-            
+
             if (!chatHistories.private[otherUser]) {
                 chatHistories.private[otherUser] = [];
             }
-            
+
             chatHistories.private[otherUser].push(message);
             console.log('🎤 Added to private history for:', otherUser);
-            
+
             if (currentChatType === 'private' && currentChatTarget === otherUser) {
                 console.log('🎤 Displaying in private chat');
                 addMessage(message);
             }
-            
+
             if (message.receiver === username) {
                 addToRecentChats(message.sender);
                 showNotification(`${message.sender} sent an audio message`, 'info');
@@ -1749,14 +1749,14 @@ function handleMessage(message) {
         }
         else if (msgType === 'group_audio') {
             console.log('🎤 Group audio, group ID:', message.group_id);
-            
+
             if (!chatHistories.group[message.group_id]) {
                 chatHistories.group[message.group_id] = [];
             }
-            
+
             chatHistories.group[message.group_id].push(message);
             console.log('🎤 Added to group history');
-            
+
             if (currentChatType === 'group' && currentChatTarget === message.group_id) {
                 console.log('🎤 Displaying in group chat');
                 addMessage(message);
@@ -1767,7 +1767,7 @@ function handleMessage(message) {
     else if (msgType === 'audio_invite') {
         console.log('[AUDIO] Global audio invite received');
         chatHistories.global.push(message);
-        
+
         // Display the invite if we're viewing global chat
         if (currentChatType === 'global') {
             if (message.is_acknowledgment) {
@@ -1834,7 +1834,7 @@ function handleMessage(message) {
     else if (msgType === 'video_invite') {
         console.log('[VIDEO] Global video invite received');
         chatHistories.global.push(message);
-        
+
         // Display the invite if we're viewing global chat
         if (currentChatType === 'global') {
             if (message.is_acknowledgment) {
@@ -1906,27 +1906,27 @@ function renderCurrentChat(preserveScroll = true) {
     console.log('First few messages:', chatHistories.global.slice(0, 3));
     console.log('Messages container exists:', !!messagesContainer);
     console.log('Current container children:', messagesContainer ? messagesContainer.children.length : 'N/A');
-    
+
     // Reset date tracker when rendering a new chat
     resetDateTracker();
-    
+
     // Store current scroll position and check if we're at bottom
     const wasAtBottom = isAtBottom();
     const scrollPosition = messagesContainer.scrollTop;
     const scrollHeight = messagesContainer.scrollHeight;
-    
+
     console.log('🧹 CLEARING MESSAGES CONTAINER - Before clear:', messagesContainer.children.length);
     messagesContainer.innerHTML = '';
     console.log('🧹 CLEARED MESSAGES CONTAINER - After clear:', messagesContainer.children.length);
-    
+
     // Determine if we should show "new messages" divider based on last seen index
     let showNewMessagesDivider = false;
     let newMessageStartIndex = -1;
-    
+
     if (currentChatType === 'global') {
         const lastSeenIdx = lastSeenMessageIndex.global;
         const totalMessages = chatHistories.global.length;
-        
+
         // Show divider if there are messages after last seen index
         if (lastSeenIdx >= 0 && lastSeenIdx < totalMessages - 1) {
             showNewMessagesDivider = true;
@@ -1939,7 +1939,7 @@ function renderCurrentChat(preserveScroll = true) {
         const history = chatHistories.private[currentChatTarget] || [];
         const lastSeenIdx = lastSeenMessageIndex.private[currentChatTarget] ?? -1;
         const totalMessages = history.length;
-        
+
         if (lastSeenIdx >= 0 && lastSeenIdx < totalMessages - 1) {
             showNewMessagesDivider = true;
             newMessageStartIndex = lastSeenIdx + 1;
@@ -1950,7 +1950,7 @@ function renderCurrentChat(preserveScroll = true) {
         const history = chatHistories.group[currentChatTarget] || [];
         const lastSeenIdx = lastSeenMessageIndex.group[currentChatTarget] ?? -1;
         const totalMessages = history.length;
-        
+
         if (lastSeenIdx >= 0 && lastSeenIdx < totalMessages - 1) {
             showNewMessagesDivider = true;
             newMessageStartIndex = lastSeenIdx + 1;
@@ -1958,7 +1958,7 @@ function renderCurrentChat(preserveScroll = true) {
             showNewMessagesDivider = false;
         }
     }
-    
+
     // Render messages with divider
     if (currentChatType === 'global') {
         console.log('🔄 RENDERING GLOBAL MESSAGES - Count:', chatHistories.global.length);
@@ -1967,7 +1967,7 @@ function renderCurrentChat(preserveScroll = true) {
             if (showNewMessagesDivider && index === newMessageStartIndex && msg.sender !== username) {
                 insertNewMessagesDivider();
             }
-            
+
             if (msg.type === 'audio_invite') {
                 handleAudioInvite(msg, true); // true = from history
             } else if (msg.type === 'video_invite') {
@@ -1984,7 +1984,7 @@ function renderCurrentChat(preserveScroll = true) {
             if (showNewMessagesDivider && index === newMessageStartIndex) {
                 insertNewMessagesDivider();
             }
-            
+
             if (msg.type === 'audio_invite_private') {
                 handleAudioInvite(msg, true); // true = from history
             } else if (msg.type === 'video_invite_private') {
@@ -2003,7 +2003,7 @@ function renderCurrentChat(preserveScroll = true) {
             if (showNewMessagesDivider && index === newMessageStartIndex) {
                 insertNewMessagesDivider();
             }
-            
+
             if (msg.type === 'audio_invite_group') {
                 handleAudioInvite(msg, true); // true = from history
             } else if (msg.type === 'video_invite_group') {
@@ -2016,11 +2016,11 @@ function renderCurrentChat(preserveScroll = true) {
             }
         });
     }
-    
+
     // Check if this chat has been viewed already
     const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
     const hasBeenViewed = viewedChats.has(chatKey);
-    
+
     // Handle scroll position restoration
     if (preserveScroll) {
         if (wasAtBottom) {
@@ -2049,10 +2049,10 @@ function renderCurrentChat(preserveScroll = true) {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     }
-    
+
     // Update pinned messages bar after rendering
     updatePinnedMessagesBar();
-    
+
     console.log('✅ RENDER COMPLETE - Final DOM children count:', messagesContainer.children.length);
     console.log('✅ RENDER COMPLETE - Chat type:', currentChatType, 'Target:', currentChatTarget);
 }
@@ -2064,24 +2064,25 @@ function isAtBottom() {
 }
 
 function addMessage(message, autoScroll = true) {
-    // Skip VideoServer system messages completely
-    if (message.sender === 'VideoServer' || message.sender === 'VIDEOSERVER') {
+    // Skip VideoServer and AudioServer system messages completely
+    if (message.sender === 'VideoServer' || message.sender === 'VIDEOSERVER' ||
+        message.sender === 'AudioServer' || message.sender === 'AUDIOSERVER') {
         return null;
     }
-    
+
     // Check if we were at bottom before adding message
     const wasAtBottom = isAtBottom();
-    
+
     // Check if this message was deleted by the user
     const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
     if (deletedMessages[message.id || message.timestamp]) {
         return null; // Skip this message if it was deleted
     }
-    
+
     // Check if this is a reply to another message
     const isReply = message.replyTo || (message.metadata && message.metadata.replyTo);
     const replyInfo = message.replyTo || (message.metadata && message.metadata.replyTo);
-    
+
     // Debug log for replies
     if (isReply && replyInfo) {
         console.log('🔄 Found reply message:', {
@@ -2090,17 +2091,17 @@ function addMessage(message, autoScroll = true) {
             fullMessage: message
         });
     }
-    
+
     const isOwn = message.sender === username;
     const messageDiv = document.createElement('div');
     messageDiv.className = isOwn ? 'message own' : 'message';
-    
+
     // Ensure every message has a unique ID
     const messageId = message.id || message.timestamp || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     messageDiv.dataset.messageId = messageId;
     messageDiv.dataset.sender = message.sender;
     messageDiv.dataset.timestamp = message.timestamp;
-    
+
     // Add different-user class if this message is from a different user than the previous one
     const messages = messagesContainer.children;
     if (messages.length > 0) {
@@ -2110,18 +2111,18 @@ function addMessage(message, autoScroll = true) {
             messageDiv.classList.add('different-user');
         }
     }
-    
+
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
     avatar.textContent = message.sender.charAt(0).toUpperCase();
-    
+
     const content = document.createElement('div');
     content.className = 'message-content';
-    
+
     // Create message header (sender and time)
     const header = document.createElement('div');
     header.className = 'message-header';
-    
+
     // Add reply indicator if this is a reply (WhatsApp style)
     if (isReply && replyInfo) {
         const replyQuote = document.createElement('div');
@@ -2135,34 +2136,34 @@ function addMessage(message, autoScroll = true) {
             font-size: 13px;
             cursor: pointer;
         `;
-            
+
         const replySender = document.createElement('div');
         replySender.style.cssText = 'font-weight: 600; color: #c62828; margin-bottom: 3px; font-size: 13px;';
         replySender.textContent = replyInfo.sender === username ? 'You' : replyInfo.sender;
-            
+
         const replyText = document.createElement('div');
         replyText.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;';
         const replyContent = replyInfo.text || replyInfo.content || '';
         replyText.textContent = replyContent.substring(0, 100);
-            
+
         replyQuote.appendChild(replySender);
         replyQuote.appendChild(replyText);
         content.appendChild(replyQuote);
     }
-        
-    
+
+
     const sender = document.createElement('span');
     sender.className = 'message-sender';
     sender.textContent = isOwn ? 'You' : message.sender;
-    
+
     const time = document.createElement('span');
     time.className = 'message-time';
     time.textContent = formatTimeWithoutSeconds(message.timestamp || getCurrentTime());
-    
+
     header.appendChild(sender);
     header.appendChild(time);
     content.appendChild(header);
-    
+
     // Check if we need to add a date divider
     const currentDate = getDateFromTimestamp(message.timestamp);
     if (currentDate && currentDate !== lastMessageDate) {
@@ -2172,47 +2173,47 @@ function addMessage(message, autoScroll = true) {
         dateDivider.textContent = currentDate;
         messagesContainer.appendChild(dateDivider);
     }
-    
+
     // Handle different message types
     if ((message.type === 'file_share' || message.type === 'file_notification' || message.type === 'private_file' || message.type === 'group_file') && message.file_id) {
         const fileName = message.file_name || message.name || '';
         const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName);
-        
+
         if (isImage && message.file_data) {
             // Display image inline
             const imageContainer = document.createElement('div');
             imageContainer.className = 'message-bubble image-message';
             imageContainer.style.cssText = 'padding: 0; max-width: 300px; border-radius: 12px; overflow: hidden; cursor: pointer;';
-            
+
             const img = document.createElement('img');
             img.src = `data:image/jpeg;base64,${message.file_data}`;
             img.style.cssText = 'width: 100%; height: auto; display: block;';
             img.alt = fileName;
-            
+
             // Click to open full size
             img.onclick = () => {
                 window.open(img.src, '_blank');
             };
-            
+
             imageContainer.appendChild(img);
             content.appendChild(imageContainer);
         } else {
             // Regular file display
             const fileItem = document.createElement('div');
             fileItem.className = 'message-bubble file-item';
-            
+
             const infoSection = document.createElement('div');
             infoSection.className = 'file-info-section';
             infoSection.innerHTML = `
                 <div class="file-name">${fileName}</div>
                 <div class="file-detail">${formatFileSize(message.size || message.file_size)} • ${message.sender}</div>
             `;
-            
+
             const downloadBtn = document.createElement('button');
             downloadBtn.className = 'file-download-btn';
             downloadBtn.textContent = isImage ? 'View Image' : 'Download';
             downloadBtn.onclick = () => downloadFile(message);
-            
+
             fileItem.appendChild(infoSection);
             fileItem.appendChild(downloadBtn);
             content.appendChild(fileItem);
@@ -2221,14 +2222,14 @@ function addMessage(message, autoScroll = true) {
     else if (message.type === 'audio_message' || message.type === 'private_audio' || message.type === 'group_audio') {
         const audioItem = document.createElement('div');
         audioItem.className = 'message-bubble audio-item';
-        
+
         const infoSection = document.createElement('div');
         infoSection.className = 'audio-info-section';
         infoSection.innerHTML = `
             <div class="audio-title">🎵 Audio Message</div>
             <div class="audio-detail">${message.duration || '0'}s • ${message.sender}</div>
         `;
-        
+
         const playBtn = document.createElement('button');
         playBtn.className = 'audio-play-btn';
         playBtn.innerHTML = `
@@ -2236,7 +2237,7 @@ function addMessage(message, autoScroll = true) {
                 <path d="M8 5v14l11-7z"/>
             </svg> Play
         `;
-        
+
         // Debug logging
         if (!message.audio_data && message.has_audio) {
             console.warn('⚠️ Audio message missing audio_data:', {
@@ -2246,7 +2247,7 @@ function addMessage(message, autoScroll = true) {
                 audio_data_length: message.audio_data ? message.audio_data.length : 0
             });
         }
-        
+
         if (message.audio_data) {
             playBtn.onclick = () => {
                 showAudioPlayback(message.audio_data, message.duration, message.sender);
@@ -2261,7 +2262,7 @@ function addMessage(message, autoScroll = true) {
             playBtn.textContent = 'Audio not available';
             playBtn.disabled = true;
         }
-        
+
         audioItem.appendChild(infoSection);
         audioItem.appendChild(playBtn);
         content.appendChild(audioItem);
@@ -2272,7 +2273,7 @@ function addMessage(message, autoScroll = true) {
         bubble.className = 'message-bubble';
         bubble.textContent = message.content;
         content.appendChild(bubble);
-        
+
         // Add message menu button to the bubble
         const menuBtn = document.createElement('button');
         menuBtn.className = 'message-menu-btn';
@@ -2289,29 +2290,29 @@ function addMessage(message, autoScroll = true) {
             }
             showMessageContextMenu(e, messageDiv);
         };
-        
+
         // Append menu button to the message bubble instead of message div
         bubble.appendChild(menuBtn);
     }
-    
+
     messageDiv.appendChild(avatar);
     messageDiv.appendChild(content);
-    
+
     messagesContainer.appendChild(messageDiv);
-    
+
     // Auto-scroll to bottom if we were at bottom or if this is our own message
     if (autoScroll && (wasAtBottom || message.sender === username)) {
         setTimeout(() => {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }, 10);
     }
-    
+
     // Restore emoji reactions if any
     const allReactions = JSON.parse(localStorage.getItem('messageReactions') || '{}');
     if (allReactions[messageId]) {
         renderMessageReactions(messageDiv, messageId, allReactions[messageId]);
     }
-    
+
     // Restore starred state
     const starredMessages = JSON.parse(localStorage.getItem('starredMessages') || '{}');
     if (starredMessages[messageId]) {
@@ -2325,7 +2326,7 @@ function addMessage(message, autoScroll = true) {
         starIcon.style.fontSize = '12px';
         messageDiv.appendChild(starIcon);
     }
-    
+
     // Restore pinned state
     const pinnedMessages = JSON.parse(localStorage.getItem('pinnedMessages') || '{}');
     if (pinnedMessages[messageId]) {
@@ -2339,14 +2340,14 @@ function addMessage(message, autoScroll = true) {
         pinIcon.style.fontSize = '14px';
         messageDiv.appendChild(pinIcon);
     }
-    
+
     // Auto-scroll logic: always scroll for new messages, or if we're at bottom
     if (autoScroll) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     } else if (isAtBottom()) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
-    
+
     return messageDiv;
 }
 
@@ -2378,7 +2379,7 @@ function createMenuButton(messageElement, isOwn) {
             <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
         </svg>
     `;
-    
+
     const parentBubble = menuBtn.closest('.message-bubble') || menuBtn.closest('.message-content');
     if (parentBubble) {
         parentBubble.addEventListener('mouseenter', () => {
@@ -2388,13 +2389,13 @@ function createMenuButton(messageElement, isOwn) {
             menuBtn.style.opacity = '0';
         });
     }
-    
+
     menuBtn.onclick = (e) => {
         e.stopPropagation();
         messageElement.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         showMessageContextMenu(e, messageElement);
     };
-    
+
     return menuBtn;
 }
 
@@ -2403,36 +2404,36 @@ function createMenuButton(messageElement, isOwn) {
 function handleVideoInvite(message, isFromHistory = false) {
     const { sender, link, session_id } = message;
     console.log('[VIDEO] Handling video invite from', sender, 'isFromHistory:', isFromHistory);
-    
+
     // Check if this call was marked as missed in localStorage
     const missedCalls = JSON.parse(localStorage.getItem('missedVideoCalls') || '{}');
     const wasMissed = missedCalls[session_id];
-    
+
     const isMissed = message.is_missed || wasMissed || false;
     const missedTime = message.missed_at || (wasMissed ? wasMissed.timestamp : '');
-    
+
     // Determine if this is the user's own video call
     const isOwn = sender === username;
-    
+
     // Create wrapper message div
     const messageWrapper = document.createElement('div');
     messageWrapper.className = isOwn ? 'message own' : 'message';
     if (session_id) messageWrapper.dataset.sessionId = session_id;
-    
+
     // Create avatar
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
     avatar.textContent = sender.charAt(0).toUpperCase();
-    
+
     // Create content wrapper
     const content = document.createElement('div');
     content.className = 'message-content';
-    
+
     // Create the video message div (this will be the inner content)
     const videoMessage = document.createElement('div');
     videoMessage.style.display = 'contents';
     if (session_id) videoMessage.dataset.sessionId = session_id;
-    
+
     // Show modal ONLY for real-time incoming calls (not historical ones, not your own calls)
     if (!isMissed && sender !== username && !isFromHistory) {
         showIncomingCallModal(sender, link, session_id);
@@ -2567,14 +2568,14 @@ function handleVideoInvite(message, isFromHistory = false) {
 
         `;
     }
-    
+
     // Append video message to content wrapper
     content.appendChild(videoMessage);
-    
+
     // Build the message structure: avatar + content
     messageWrapper.appendChild(avatar);
     messageWrapper.appendChild(content);
-    
+
     // Append to messages container
     messagesContainer.appendChild(messageWrapper);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -2583,36 +2584,36 @@ function handleVideoInvite(message, isFromHistory = false) {
 function handleAudioInvite(message, isFromHistory = false) {
     const { sender, link, session_id } = message;
     console.log('[AUDIO] Handling audio invite from', sender, 'isFromHistory:', isFromHistory);
-    
+
     // Check if this call was marked as missed in localStorage
     const missedCalls = JSON.parse(localStorage.getItem('missedAudioCalls') || '{}');
     const wasMissed = missedCalls[session_id];
-    
+
     const isMissed = message.is_missed || wasMissed || false;
     const missedTime = message.missed_at || (wasMissed ? wasMissed.timestamp : '');
-    
+
     // Determine if this is the user's own audio call
     const isOwn = sender === username;
-    
+
     // Create wrapper message div
     const messageWrapper = document.createElement('div');
     messageWrapper.className = isOwn ? 'message own' : 'message';
     if (session_id) messageWrapper.dataset.sessionId = session_id;
-    
+
     // Create avatar
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
     avatar.textContent = sender.charAt(0).toUpperCase();
-    
+
     // Create content wrapper
     const content = document.createElement('div');
     content.className = 'message-content';
-    
+
     // Create the audio message div (this will be the inner content)
     const audioMessage = document.createElement('div');
     audioMessage.style.display = 'contents';
     if (session_id) audioMessage.dataset.sessionId = session_id;
-    
+
     // Show modal ONLY for real-time incoming calls (not historical ones, not your own calls)
     if (!isMissed && sender !== username && !isFromHistory) {
         showIncomingAudioCallModal(sender, link, session_id);
@@ -2718,7 +2719,7 @@ function handleAudioInvite(message, isFromHistory = false) {
         </div>
     </div>
     <button class="join-call-btn" 
-            onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'audio_call', 'width=800,height=600')"
+            onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'audio_call', 'width=600,height=500')"
             style="width: 100%; 
                    background: linear-gradient(135deg, #00b8d4, #00b8d4); 
                    border: 1px solid #00acc1; 
@@ -2747,14 +2748,14 @@ function handleAudioInvite(message, isFromHistory = false) {
 
         `;
     }
-    
+
     // Append audio message to content wrapper
     content.appendChild(audioMessage);
-    
+
     // Build the message structure: avatar + content
     messageWrapper.appendChild(avatar);
     messageWrapper.appendChild(content);
-    
+
     // Append to messages container
     messagesContainer.appendChild(messageWrapper);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -2767,11 +2768,11 @@ function showIncomingCallModal(sender, link, sessionId) {
         console.log('[VIDEO] Call already ignored, not showing modal');
         return;
     }
-    
+
     // Remove any existing modal
     const existing = document.getElementById('incomingCallModal');
     if (existing) existing.remove();
-    
+
     const modal = document.createElement('div');
     modal.id = 'incomingCallModal';
     modal.innerHTML = `
@@ -2794,11 +2795,11 @@ function showIncomingCallModal(sender, link, sessionId) {
         </div>
     `;
     document.body.appendChild(modal);
-    
+
     // Add hover effects and click handlers
     const answerBtn = document.getElementById('answerCallBtn');
     const ignoreBtn = document.getElementById('ignoreCallBtn');
-    
+
     answerBtn.onmouseover = () => answerBtn.style.transform = 'scale(1.05)';
     answerBtn.onmouseout = () => answerBtn.style.transform = 'scale(1)';
     answerBtn.onclick = () => {
@@ -2811,7 +2812,7 @@ function showIncomingCallModal(sender, link, sessionId) {
         window.open(`${link}?username=${encodeURIComponent(username)}`, 'video_call', 'width=1200,height=800');
         modal.remove();
     };
-    
+
     ignoreBtn.onmouseover = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.15)'; ignoreBtn.style.color = '#fff'; };
     ignoreBtn.onmouseout = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.1)'; ignoreBtn.style.color = '#bbb'; };
     ignoreBtn.onclick = () => {
@@ -2822,7 +2823,7 @@ function showIncomingCallModal(sender, link, sessionId) {
         console.log('[VIDEO] Call ignored and saved:', sessionId);
         modal.remove();
     };
-    
+
     // Auto-remove modal after 30 seconds
     setTimeout(() => {
         if (document.getElementById('incomingCallModal')) {
@@ -2837,11 +2838,11 @@ function handleVideoMissed(message) {
     if (!sessionId) return;
 
     console.log('[VIDEO] Handling missed call for session:', sessionId);
-    
+
     // Close incoming call modal if it's open
     const modal = document.getElementById('incomingCallModal');
     if (modal) modal.remove();
-    
+
     // Remove from ignored calls (since it's now officially missed)
     const ignoredCalls = JSON.parse(localStorage.getItem('ignoredVideoCalls') || '{}');
     if (ignoredCalls[sessionId]) {
@@ -2861,7 +2862,7 @@ function handleVideoMissed(message) {
     // Find all video invite messages with this session ID
     const selectors = document.querySelectorAll(`[data-session-id="${sessionId}"]`);
     console.log('[VIDEO] Found', selectors.length, 'invite messages to update');
-    
+
     selectors.forEach(el => {
         const btn = el.querySelector('.join-call-btn');
         if (btn && !btn.disabled) {  // Only update if not already disabled
@@ -2874,7 +2875,7 @@ function handleVideoMissed(message) {
             btn.onmouseout = null;
         }
     });
-    
+
     // Also update in stored history
     if (message.session_type === 'global') {
         updateVideoInviteInHistory(chatHistories.global, sessionId, timestamp);
@@ -2897,11 +2898,11 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
         console.log('[AUDIO] Call already ignored, not showing modal');
         return;
     }
-    
+
     // Remove any existing modal
     const existing = document.getElementById('incomingAudioCallModal');
     if (existing) existing.remove();
-    
+
     const modal = document.createElement('div');
     modal.id = 'incomingAudioCallModal';
     modal.innerHTML = `
@@ -2924,11 +2925,11 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
         </div>
     `;
     document.body.appendChild(modal);
-    
+
     // Add hover effects and click handlers
     const answerBtn = document.getElementById('answerAudioCallBtn');
     const ignoreBtn = document.getElementById('ignoreAudioCallBtn');
-    
+
     answerBtn.onmouseover = () => answerBtn.style.transform = 'scale(1.05)';
     answerBtn.onmouseout = () => answerBtn.style.transform = 'scale(1)';
     answerBtn.onclick = () => {
@@ -2938,10 +2939,10 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
             delete ignoredCalls[sessionId];
             localStorage.setItem('ignoredAudioCalls', JSON.stringify(ignoredCalls));
         }
-        window.open(`${link}?username=${encodeURIComponent(username)}`, 'audio_call', 'width=800,height=600');
+        window.open(`${link}?username=${encodeURIComponent(username)}`, 'audio_call', 'width=600,height=500');
         modal.remove();
     };
-    
+
     ignoreBtn.onmouseover = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.15)'; ignoreBtn.style.color = '#fff'; };
     ignoreBtn.onmouseout = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.1)'; ignoreBtn.style.color = '#bbb'; };
     ignoreBtn.onclick = () => {
@@ -2952,7 +2953,7 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
         console.log('[AUDIO] Call ignored and saved:', sessionId);
         modal.remove();
     };
-    
+
     // Auto-remove modal after 30 seconds
     setTimeout(() => {
         if (document.getElementById('incomingAudioCallModal')) {
@@ -2967,11 +2968,11 @@ function handleAudioMissed(message) {
     if (!sessionId) return;
 
     console.log('[AUDIO] Handling missed call for session:', sessionId);
-    
+
     // Close incoming call modal if it's open
     const modal = document.getElementById('incomingAudioCallModal');
     if (modal) modal.remove();
-    
+
     // Remove from ignored calls (since it's now officially missed)
     const ignoredCalls = JSON.parse(localStorage.getItem('ignoredAudioCalls') || '{}');
     if (ignoredCalls[sessionId]) {
@@ -2991,7 +2992,7 @@ function handleAudioMissed(message) {
     // Find all audio invite messages with this session ID
     const selectors = document.querySelectorAll(`[data-session-id="${sessionId}"]`);
     console.log('[AUDIO] Found', selectors.length, 'invite messages to update');
-    
+
     selectors.forEach(el => {
         const btn = el.querySelector('.join-call-btn');
         if (btn && !btn.disabled) {  // Only update if not already disabled
@@ -3004,7 +3005,7 @@ function handleAudioMissed(message) {
             btn.onmouseout = null;
         }
     });
-    
+
     // Also update in stored history
     if (message.session_type === 'global') {
         updateVideoInviteInHistory(chatHistories.global, sessionId, timestamp);
@@ -3023,9 +3024,9 @@ function handleAudioMissed(message) {
 function updateVideoInviteInHistory(history, sessionId, timestamp) {
     // Find and mark the video invite as missed in history
     for (let msg of history) {
-        if (msg.session_id === sessionId && 
-            (msg.type === 'audio_invite' || msg.type === 'audio_invite_private' || msg.type === 'audio_invite_group' || 
-             msg.type === 'video_invite' || msg.type === 'video_invite_private' || msg.type === 'video_invite_group')) {
+        if (msg.session_id === sessionId &&
+            (msg.type === 'audio_invite' || msg.type === 'audio_invite_private' || msg.type === 'audio_invite_group' ||
+                msg.type === 'video_invite' || msg.type === 'video_invite_private' || msg.type === 'video_invite_group')) {
             msg.is_missed = true;
             msg.missed_at = timestamp;
             console.log('[VIDEO] Marked invite as missed in history');
@@ -3037,11 +3038,11 @@ function restoreVideoCallStates() {
     // Restore missed call states from localStorage when tab becomes visible
     console.log('[VIDEO] Restoring video call states from localStorage');
     const missedCalls = JSON.parse(localStorage.getItem('missedVideoCalls') || '{}');
-    
+
     for (const sessionId in missedCalls) {
         const missedInfo = missedCalls[sessionId];
         const selectors = document.querySelectorAll(`[data-session-id="${sessionId}"]`);
-        
+
         selectors.forEach(el => {
             const btn = el.querySelector('.join-call-btn');
             if (btn && !btn.disabled) {
@@ -3066,13 +3067,13 @@ function addSystemMessage(content) {
     if (content && (content.includes('VideoServer') || content.includes('VIDEOSERVER') || content.includes('Missed video call (session'))) {
         return;
     }
-    
+
     // Skip empty or undefined content
     if (!content || content.trim() === '') {
         console.log('⚠️ Skipping empty system message');
         return;
     }
-    
+
     const messageDiv = document.createElement('div');
     messageDiv.className = 'system-message';
     messageDiv.textContent = content;
@@ -3085,23 +3086,23 @@ function updateUsersList(users) {
     console.log('===== UPDATING USER LIST =====');
     console.log('Received users:', users);
     console.log('Current username:', username);
-    
+
     // Update global allUsers list
     allUsers = users || [];
-    
+
     // Clear offline notification tracking for users who came back online
     offlineNotificationsShown.forEach(user => {
         if (allUsers.includes(user)) {
             offlineNotificationsShown.delete(user);
         }
     });
-    
+
     // Get all users we've chatted with privately from storage
     const chattedUsers = new Set();
     for (const key in chatHistories.private) {
         const messages = chatHistories.private[key];
         if (!messages || messages.length === 0) continue;
-        const hasMyMessages = messages.some(msg => 
+        const hasMyMessages = messages.some(msg =>
             msg.sender === username || msg.receiver === username
         );
         if (hasMyMessages) {
@@ -3112,45 +3113,45 @@ function updateUsersList(users) {
             }
         }
     }
-    
+
     // Separate online users into active (not chatted) and chatted
     const onlineUsers = users.filter(u => u !== username);
     const activeOnlyUsers = onlineUsers.filter(u => !chattedUsers.has(u));
     const chattedOnlineUsers = onlineUsers.filter(u => chattedUsers.has(u));
-    
+
     // Update Active Users Section
     updateActiveUsersSection(activeOnlyUsers);
-    
+
     // Update Private Chats List (only show users we've chatted with, excluding archived)
     usersList.innerHTML = '';
     // Filter out archived chats
     const activeChattedUsers = Array.from(chattedUsers).filter(u => !archivedChats.has(u));
-    
+
     if (activeChattedUsers.length === 0) {
         noUsersMsg.style.display = 'block';
         return;
     }
     noUsersMsg.style.display = 'none';
-    
+
     activeChattedUsers.forEach(user => {
         const isOnline = users.includes(user);
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-item';
         chatItem.dataset.user = user;
         chatItem.onclick = () => switchToPrivateChat(user);
-        
+
         // Get last message for this user
         // Get last message from private chat history
         const messages = chatHistories.private[user] || [];
         let lastMsgText = 'No messages yet';
-        
+
         if (messages.length > 0) {
             const lastMessage = messages[messages.length - 1];
             if (lastMessage.content) {
                 // Truncate long messages
                 const content = lastMessage.content.substring(0, 35);
                 lastMsgText = content + (lastMessage.content.length > 35 ? '...' : '');
-                
+
                 // Add prefix if you sent it
                 if (lastMessage.sender === username) {
                     lastMsgText = 'You: ' + lastMsgText;
@@ -3161,7 +3162,7 @@ function updateUsersList(users) {
                 lastMsgText = '🎤 Audio message';
             }
         }
-        
+
         chatItem.innerHTML = `
             <div class="chat-avatar">👤</div>
             <div class="chat-info">
@@ -3201,16 +3202,16 @@ function updateActiveUsersSection(activeUsers) {
     const activeUsersSection = document.getElementById('activeUsersSection');
     const activeUsersList = document.getElementById('activeUsersList');
     const activeUsersCount = document.getElementById('activeUsersCount');
-    
+
     if (activeUsers.length === 0) {
         activeUsersSection.style.display = 'none';
         return;
     }
-    
+
     activeUsersSection.style.display = 'block';
     activeUsersCount.textContent = activeUsers.length;
     activeUsersList.innerHTML = '';
-    
+
     activeUsers.forEach(user => {
         const userItem = document.createElement('div');
         userItem.className = 'active-user-item';
@@ -3219,7 +3220,7 @@ function updateActiveUsersSection(activeUsers) {
             // Switch to private chat when clicked
             switchToPrivateChat(user);
         };
-        
+
         userItem.innerHTML = `
             <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
             <div class="active-user-info">
@@ -3227,7 +3228,7 @@ function updateActiveUsersSection(activeUsers) {
                 <div class="active-user-status">Online</div>
             </div>
         `;
-        
+
         activeUsersList.appendChild(userItem);
     });
 }
@@ -3235,69 +3236,69 @@ function updateActiveUsersSection(activeUsers) {
 // Move user from active to chatted when first message sent
 function moveUserToChattedList(user) {
     console.log(`🚀 IMMEDIATE MOVE: Moving ${user} from active to chatted list`);
-    
+
     // Immediately remove from active users section
     const activeUserItem = document.querySelector(`.active-user-item[data-user="${user}"]`);
     if (activeUserItem) {
         activeUserItem.remove();
         console.log(`✅ Removed ${user} from active users DOM`);
     }
-    
+
     // Update active users count
     const activeUsersList = document.getElementById('activeUsersList');
     const activeUsersCount = document.getElementById('activeUsersCount');
     const activeUsersSection = document.getElementById('activeUsersSection');
-    
+
     if (activeUsersList && activeUsersList.children.length === 0) {
         activeUsersSection.style.display = 'none';
     } else if (activeUsersCount) {
         activeUsersCount.textContent = activeUsersList.children.length;
     }
-    
+
     // Add to private chats list immediately
     const usersList = document.getElementById('usersList');
     const noUsersMsg = document.getElementById('noUsersMsg');
-    
+
     // Check if user already exists in private chats
     if (!document.querySelector(`.chat-item[data-user="${user}"]`)) {
         noUsersMsg.style.display = 'none';
-        
+
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-item';
         chatItem.dataset.user = user;
         chatItem.onclick = () => switchToPrivateChat(user);
-        
+
         const isOnline = allUsers.includes(user);
-        
+
         // Create avatar
         const avatar = document.createElement('div');
         avatar.className = 'chat-avatar';
         avatar.textContent = '👤';
         chatItem.appendChild(avatar);
-        
+
         // Create chat info
         const info = document.createElement('div');
         info.className = 'chat-info';
-        
+
         const nameDiv = document.createElement('div');
         nameDiv.className = 'chat-name';
         const nameSpan = document.createElement('span');
         nameSpan.textContent = user;
         nameDiv.appendChild(nameSpan);
-        
+
         const statusSpan = document.createElement('span');
         statusSpan.style.cssText = `font-size: 14px; vertical-align: middle; color: ${isOnline ? '#2ecc71' : '#95a5a6'}; margin-left: 2px;`;
         statusSpan.textContent = '●';
         nameDiv.appendChild(statusSpan);
-        
+
         const lastMsg = document.createElement('div');
         lastMsg.className = 'chat-last-msg';
         lastMsg.textContent = 'Just now';
-        
+
         info.appendChild(nameDiv);
         info.appendChild(lastMsg);
         chatItem.appendChild(info);
-        
+
         // Create menu button
         const menuBtn = document.createElement('button');
         menuBtn.className = 'chat-menu-btn';
@@ -3306,14 +3307,14 @@ function moveUserToChattedList(user) {
             <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
         </svg>`;
         chatItem.appendChild(menuBtn);
-        
+
         usersList.insertBefore(chatItem, usersList.firstChild);
-        
+
         // Create and add badge
         const badge2 = document.createElement('span');
         badge2.className = 'unread-count';
         nameDiv.appendChild(badge2);
-        
+
         // Apply unread count if exists for this user
         const count = unreadCounts.private[user] || 0;
         if (count > 0) {
@@ -3334,17 +3335,17 @@ function updateGroupsList(groups = []) {
     console.log(`📋 UPDATE GROUPS LIST CALLED`);
     console.log(`📊 Persistent groups: ${Object.keys(persistentGroups).length}`);
     console.log(`📊 Server groups received: ${groups.length}`);
-    
+
     // Store server groups if provided
     if (groups && groups.length > 0) {
         pendingServerGroups = groups;
     }
-    
+
     // Clear any pending update
     if (groupListUpdateTimer) {
         clearTimeout(groupListUpdateTimer);
     }
-    
+
     // Debounce to prevent multiple rapid updates
     groupListUpdateTimer = setTimeout(() => {
         renderGroupsList();
@@ -3353,10 +3354,10 @@ function updateGroupsList(groups = []) {
 
 function renderGroupsList() {
     console.log(`🎨 RENDERING GROUPS LIST`);
-    
+
     // Combine server groups with persistent groups (server groups take priority)
     const allGroups = {};
-    
+
     // First add persistent groups (only if user is a member)
     for (const groupId in persistentGroups) {
         const group = persistentGroups[groupId];
@@ -3365,7 +3366,7 @@ function renderGroupsList() {
             console.log(`📦 Persistent: ${group.name} (${groupId.substring(0, 20)}...)`);
         }
     }
-    
+
     // Then add/update with server groups (these override persistent ones)
     if (pendingServerGroups && pendingServerGroups.length > 0) {
         pendingServerGroups.forEach(group => {
@@ -3381,52 +3382,52 @@ function renderGroupsList() {
         // Clear pending server groups
         pendingServerGroups = [];
     }
-    
+
     console.log(`📊 Total unique groups for ${username}: ${Object.keys(allGroups).length}`);
-    
+
     const groupIds = Object.keys(allGroups);
-    
+
     // CLEAR the list completely before rendering
     groupsList.innerHTML = '';
-    
+
     if (groupIds.length === 0) {
         noGroupsMsg.style.display = 'block';
         console.log('📭 No groups to display');
         return;
     }
-    
+
     noGroupsMsg.style.display = 'none';
-    
+
     // Render each unique group ONCE
     groupIds.forEach(groupId => {
         const groupInfo = allGroups[groupId];
-        
+
         if (!groupInfo || !groupInfo.name) {
             console.error(`❌ Invalid group info for: ${groupId}`, groupInfo);
             return;
         }
-        
+
         console.log(`✅ Rendering: ${groupInfo.name} (${groupId.substring(0, 20)}...)`)
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-item';
         chatItem.dataset.groupId = groupInfo.id;
         chatItem.onclick = () => switchToGroupChat(groupInfo.id, groupInfo.name);
-        
+
         // Check if any group member is online
         const hasOnlineMembers = groupInfo.members && groupInfo.members.some(member => allUsers.includes(member));
         const onlineStatusDot = hasOnlineMembers ? '<span style="font-size: 18px; vertical-align: middle; color: #2ecc71; margin-left: 4px;">●</span>' : '';
-        
+
         // Get last message for this group
         const messages = chatHistories.group[groupInfo.id] || [];
         let lastMsgText = 'No messages yet';
-        
+
         if (messages.length > 0) {
             const lastMessage = messages[messages.length - 1];
             if (lastMessage.content) {
                 // Truncate long messages
                 const content = lastMessage.content.substring(0, 30);
                 lastMsgText = content + (lastMessage.content.length > 30 ? '...' : '');
-                
+
                 // Add sender name prefix
                 const senderName = lastMessage.sender === username ? 'You' : lastMessage.sender;
                 lastMsgText = `${senderName}: ${lastMsgText}`;
@@ -3480,63 +3481,63 @@ function displayRecentChats() {
 
 async function switchToPrivateChat(user) {
     console.log(`🔄 SWITCHING TO PRIVATE CHAT: ${user}`);
-    
+
     // Clean up viewed state for chats with no unread messages when leaving
     cleanupViewedChats();
-    
+
     // If this chat was archived, unarchive it
     if (archivedChats.has(user)) {
         console.log(`📅 Unarchiving chat with ${user}`);
         archivedChats.delete(user);
-        
+
         // Save updated archived state
         try {
             localStorage.setItem('archivedChats', JSON.stringify(Array.from(archivedChats)));
         } catch (e) {
             console.error('Failed to save archived chats:', e);
         }
-        
+
         // Remove from active if exists and add back to private chats list
         const activeItem = document.querySelector(`.active-user-item[data-user="${user}"]`);
         if (activeItem) {
             activeItem.remove();
-            
+
             // Update active count
             const activeUsersList = document.getElementById('activeUsersList');
             const activeUsersCount = document.getElementById('activeUsersCount');
             const activeUsersSection = document.getElementById('activeUsersSection');
-            
+
             if (activeUsersList && activeUsersList.children.length === 0) {
                 activeUsersSection.style.display = 'none';
             } else if (activeUsersCount) {
                 activeUsersCount.textContent = activeUsersList.children.length;
             }
-            
+
             console.log(`✅ Removed ${user} from active users`);
         }
-        
+
         // Add to private chats if not already there
         const existingChatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
         if (!existingChatItem) {
             moveUserToChattedList(user);
         }
     }
-    
+
     currentChatType = 'private';
     currentChatTarget = user;
     chatHeaderName.textContent = user;
     chatHeaderStatus.textContent = 'Private Chat';
-    
+
     // Hide group settings button
     const groupSettingsBtn = document.getElementById('groupSettingsHeaderBtn');
     if (groupSettingsBtn) {
         groupSettingsBtn.style.display = 'none';
     }
-    
+
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     globalNetworkItem.classList.remove('active');
     addToRecentChats(user);
-    
+
     // Only set active if user already exists in private chats
     // DON'T create temporary chat item - user should only move after sending first message
     const existingChatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
@@ -3546,11 +3547,11 @@ async function switchToPrivateChat(user) {
     } else {
         console.log(`📝 User ${user} from active section - just opening chat, not moving yet`);
     }
-    
+
     // Track this chat switch to prevent immediate re-render
     lastChatSwitchTime = Date.now();
     lastChatSwitchTarget = user;
-    
+
     // Consolidate private chat history for this user
     const history = [];
     for (const key in chatHistories.private) {
@@ -3572,102 +3573,102 @@ async function switchToPrivateChat(user) {
             });
         }
     }
-    
+
     // Store consolidated history
     chatHistories.private[user] = history;
-    
+
     // Render (will use last seen index to show divider)
     renderCurrentChat(false);
-    
+
     // Clear unread count and update last seen AFTER rendering
     clearUnreadForCurrentChat();
-    
+
     // Restore draft message for this chat
     restoreDraftMessage();
-    
+
     // Then request updated history from server
-    await eel.send_message('request_private_history', '', {target_user: user})();
+    await eel.send_message('request_private_history', '', { target_user: user })();
     await eel.set_current_chat('private', user)();
 }
 
 async function switchToGroupChat(groupId, groupName) {
     // Clean up viewed state for chats with no unread messages when leaving
     cleanupViewedChats();
-    
+
     currentChatType = 'group';
     currentChatTarget = groupId;
     chatHeaderName.textContent = groupName;
     chatHeaderStatus.textContent = 'Group Chat';
-    
+
     // Show group settings button in header
     const groupSettingsBtn = document.getElementById('groupSettingsHeaderBtn');
     if (groupSettingsBtn) {
         groupSettingsBtn.style.display = 'block';
     }
-    
+
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     document.querySelector(`.chat-item[data-group-id="${groupId}"]`)?.classList.add('active');
     globalNetworkItem.classList.remove('active');
-    
+
     // Track this chat switch to prevent immediate re-render
     lastChatSwitchTime = Date.now();
     lastChatSwitchTarget = groupId;
-    
+
     // Render (will use last seen index to show divider)
     renderCurrentChat(false);
-    
+
     // Clear unread count and update last seen AFTER rendering
     clearUnreadForCurrentChat();
-    
+
     // Restore draft message for this chat
     restoreDraftMessage();
-    
+
     // Then request updated history from server
-    await eel.send_message('request_group_history', '', {group_id: groupId})();
+    await eel.send_message('request_group_history', '', { group_id: groupId })();
     await eel.set_current_chat('group', groupId)();
 }
 
-globalNetworkItem.addEventListener('click', async function() {
+globalNetworkItem.addEventListener('click', async function () {
     // Clean up viewed state for chats with no unread messages when leaving
     cleanupViewedChats();
-    
+
     currentChatType = 'global';
     currentChatTarget = null;
     chatHeaderName.textContent = 'Global Network';
     chatHeaderStatus.textContent = 'Secure broadcast channel';
-    
+
     // Hide group settings button
     const groupSettingsBtn = document.getElementById('groupSettingsHeaderBtn');
     if (groupSettingsBtn) {
         groupSettingsBtn.style.display = 'none';
     }
-    
+
     document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
     this.classList.add('active');
-    
+
     // Track this chat switch
     lastChatSwitchTime = Date.now();
     lastChatSwitchTarget = 'global';
-    
+
     // Render (will use last seen index to show divider)
     renderCurrentChat(false);
-    
+
     // Clear unread count and update last seen AFTER rendering
     clearUnreadForCurrentChat();
-    
+
     // Restore draft message for this chat
     restoreDraftMessage();
-    
+
     // Then request updated history from server
     console.log('🔄 Requesting chat history for global chat...');
     await eel.send_message('request_chat_history', '', {})();
     await eel.set_current_chat('global', null)();
-    
+
     // Ensure messages are visible after a short delay
     setTimeout(() => {
         ensureMessagesVisible();
     }, 200);
-    
+
     // Additional backup request if no messages appear
     setTimeout(() => {
         if (messagesContainer.children.length === 0) {
@@ -3683,18 +3684,18 @@ audioCallBtn.addEventListener('click', async () => {
         showNotification('Select a chat first', 'warning');
         return;
     }
-    
+
     // Validate that we have the required chat target for non-global calls
     if (currentChatType === 'private' && !currentChatTarget) {
         showNotification('Please select a user for private audio call', 'warning');
         return;
     }
-    
+
     if (currentChatType === 'group' && !currentChatTarget) {
         showNotification('Please select a group for group audio call', 'warning');
         return;
     }
-    
+
     // Determine chat ID to pass to audio server
     let chatId;
     if (currentChatType === 'global') {
@@ -3705,25 +3706,25 @@ audioCallBtn.addEventListener('click', async () => {
         showNotification('Invalid chat type', 'error');
         return;
     }
-    
-    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' : 
-                           currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
-                           `Group chat`;
-    
+
+    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' :
+        currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
+            `Group chat`;
+
     if (!confirm(`Start audio call in ${chatTypeDisplay}?`)) {
         return;
     }
-    
+
     console.log(`[AUDIO] Starting ${currentChatType} audio call with chat_id: ${chatId}`);
-    
+
     try {
         const result = await eel.start_audio_call(currentChatType, chatId)();
-        
+
         if (result.success) {
             // Open audio call window immediately
-            window.open(`${result.link}?username=${encodeURIComponent(username)}`, 'audio_call', 'width=800,height=600');
+            window.open(`${result.link}?username=${encodeURIComponent(username)}`, 'audio_call', 'width=600,height=500');
             showNotification('Audio call started!', 'success');
-            
+
             // Note: The audio invite message will be displayed when the server broadcasts it back
         } else {
             showNotification(`Failed to start call: ${result.error}`, 'error');
@@ -3740,18 +3741,18 @@ videoCallBtn.addEventListener('click', async () => {
         showNotification('Select a chat first', 'warning');
         return;
     }
-    
+
     // Validate that we have the required chat target for non-global calls
     if (currentChatType === 'private' && !currentChatTarget) {
         showNotification('Please select a user for private video call', 'warning');
         return;
     }
-    
+
     if (currentChatType === 'group' && !currentChatTarget) {
         showNotification('Please select a group for group video call', 'warning');
         return;
     }
-    
+
     // Determine chat ID to pass to video server
     let chatId;
     if (currentChatType === 'global') {
@@ -3762,25 +3763,25 @@ videoCallBtn.addEventListener('click', async () => {
         showNotification('Invalid chat type', 'error');
         return;
     }
-    
-    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' : 
-                           currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
-                           `Group chat`;
-    
+
+    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' :
+        currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
+            `Group chat`;
+
     if (!confirm(`Start video call in ${chatTypeDisplay}?`)) {
         return;
     }
-    
+
     console.log(`[VIDEO] Starting ${currentChatType} video call with chat_id: ${chatId}`);
-    
+
     try {
         const result = await eel.start_video_call(currentChatType, chatId)();
-        
+
         if (result.success) {
             // Open video call window immediately
             window.open(`${result.link}?username=${encodeURIComponent(username)}`, 'video_call', 'width=1200,height=800');
             showNotification('Video call started!', 'success');
-            
+
             // Note: The video invite message will be displayed when the server broadcasts it back
         } else {
             showNotification(`Failed to start call: ${result.error}`, 'error');
@@ -3800,7 +3801,7 @@ attachBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     try {
         const fileData = await new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -3808,22 +3809,22 @@ fileInput.addEventListener('change', async (e) => {
             reader.onerror = reject;
             reader.readAsArrayBuffer(file);
         });
-        
+
         const uint8Array = new Uint8Array(fileData);
         let base64Data = '';
         const chunkSize = 8192;
-        
+
         for (let i = 0; i < uint8Array.length; i += chunkSize) {
             const chunk = uint8Array.subarray(i, i + chunkSize);
             base64Data += String.fromCharCode.apply(null, chunk);
         }
-        
+
         base64Data = btoa(base64Data);
         const result = await eel.upload_file(file.name, file.size, base64Data)();
-        
+
         if (result.success) {
             showNotification(`✓ Uploaded: ${result.file_name}`, 'success');
-            
+
             if (currentChatType === 'private' && currentChatTarget) {
                 await eel.send_message('private_file', '', {
                     receiver: currentChatTarget,
@@ -3857,19 +3858,19 @@ fileInput.addEventListener('change', async (e) => {
 function addFileToList(file) {
     const fileItem = document.createElement('div');
     fileItem.className = 'file-item';
-    
+
     const infoSection = document.createElement('div');
     infoSection.className = 'file-info-section';
     infoSection.innerHTML = `
         <div class="file-name">${file.file_name || file.name}</div>
         <div class="file-detail">${formatFileSize(file.size || file.file_size)} • ${file.sender}</div>
     `;
-    
+
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'file-download-btn';
     downloadBtn.textContent = 'Download';
     downloadBtn.onclick = () => downloadFile(file);
-    
+
     fileItem.appendChild(infoSection);
     fileItem.appendChild(downloadBtn);
     filesList.appendChild(fileItem);
@@ -3956,7 +3957,7 @@ async function startRecording() {
             recordingDuration++;
             const minutes = Math.floor(recordingDuration / 60);
             const seconds = recordingDuration % 60;
-            document.getElementById('recordingTime').textContent = 
+            document.getElementById('recordingTime').textContent =
                 `${minutes}:${seconds.toString().padStart(2, '0')}`;
         }, 1000);
 
@@ -4026,13 +4027,13 @@ function showAudioPreview(audioBlob) {
         console.log('🎤 SEND AUDIO CLICKED');
         console.log(`📊 Current chat: ${currentChatType} -> ${currentChatTarget}`);
         console.log(`⏱️ Recording duration: ${recordingDuration}s`);
-        
+
         // Convert blob to base64
         const reader = new FileReader();
         reader.onloadend = async () => {
             const base64Audio = reader.result.split(',')[1];
             console.log(`📦 Audio data size: ${base64Audio.length} characters`);
-            
+
             try {
                 // Send the audio message based on current chat type
                 if (currentChatType === 'private' && currentChatTarget) {
@@ -4053,23 +4054,23 @@ function showAudioPreview(audioBlob) {
                     console.log(`📤 Sending global audio message`);
                     console.log(`📤 Audio data length: ${base64Audio.length}`);
                     console.log(`📤 Duration: ${recordingDuration}s`);
-                    
+
                     await eel.send_message('audio_share', base64Audio, {
                         audio_data: base64Audio,
                         duration: recordingDuration
                     })();
                 }
-                
+
                 console.log('✅ Audio message sent successfully');
                 showNotification('🎤 Audio message sent', 'success');
-                
+
                 // Don't add locally - let the server broadcast handle it to avoid duplicates
                 // The server will send it back and handleMessage() will add it properly
             } catch (error) {
                 console.error('❌ Error sending audio:', error);
                 showNotification('Failed to send audio message', 'error');
             }
-            
+
             previewUI.remove();
             URL.revokeObjectURL(audioURL);
         };
@@ -4132,10 +4133,10 @@ newGroupBtn.addEventListener('click', async () => {
 function showGroupModal(users) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
-    
+
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content settings-modal';
-    
+
     modalContent.innerHTML = `
         <div class="settings-header">
             <h3 class="modal-title">Create New Group</h3>
@@ -4195,32 +4196,32 @@ function showGroupModal(users) {
             <button class="modal-btn create" id="createBtn" style="padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all var(--transition-fast); text-transform: uppercase; font-family: 'Bangers', cursive; background: var(--accent-cyan); border: none; color: var(--bg-deep);">Create Group</button>
         </div>
     `;
-    
+
     modal.appendChild(modalContent);
     document.body.appendChild(modal);
-    
+
     document.getElementById('closeGroupModalBtn').onclick = () => modal.remove();
     document.getElementById('cancelBtn').onclick = () => modal.remove();
-    
+
     // Prevent multiple clicks
     let isCreating = false;
-    
+
     document.getElementById('createBtn').onclick = async () => {
         if (isCreating) {
             console.log('⚠️ Group creation already in progress...');
             return;
         }
-        
+
         const groupNameInput = document.getElementById('newGroupNameInput');
         const groupName = groupNameInput.value.trim();
         const admin = document.getElementById('newGroupAdminSelect').value;
         const checkboxes = document.querySelectorAll('.user-select-list input[type="checkbox"]:checked');
         const members = Array.from(checkboxes).map(cb => cb.value);
-        
+
         console.log(`📝 CREATE GROUP - Group name: "${groupName}"`);
         console.log(`👑 Admin: ${admin}`);
         console.log(`👥 Selected members: ${members.join(', ')}`);
-        
+
         if (!groupName) {
             console.log(`❌ Group name is empty!`);
             groupNameInput.style.border = '2px solid #c62828';
@@ -4232,12 +4233,12 @@ function showGroupModal(users) {
             showNotification('Select at least one member', 'warning');
             return;
         }
-        
+
         isCreating = true;
-        
+
         members.push(admin);
         const uniqueMembers = [...new Set(members)];
-        
+
         try {
             // DON'T generate group ID on client - let server create it
             // Just send the group creation request
@@ -4246,12 +4247,12 @@ function showGroupModal(users) {
                 members: uniqueMembers,
                 admin: admin
             })();
-            
+
             console.log(`✅ Group creation request sent: ${groupName}`);
             console.log(`👥 Members: ${uniqueMembers.join(', ')}`);
-            
+
             showNotification(`Group "${groupName}" created`, 'success');
-            
+
             // Server will broadcast group_list with the new group
             // which will automatically update the UI and save to localStorage
             console.log('⏳ Waiting for server to broadcast group...');
@@ -4267,11 +4268,11 @@ function showGroupModal(users) {
 
 // ===== TABS =====
 document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function () {
         const tab = this.dataset.tab;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
-        
+
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.querySelector(`.tab-content[data-tab="${tab}"]`).classList.add('active');
     });
@@ -4292,18 +4293,18 @@ let pollingInterval = null;
 // Function to refresh chat data
 function refreshChatData(force = false) {
     console.log('===== REFRESHING CHAT DATA =====');
-    
+
     // Store current scroll position before refreshing
     const wasAtBottom = isAtBottom();
     const scrollPosition = messagesContainer.scrollTop;
-    
+
     // Show loading indicator
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.disabled = true;
         refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     }
-    
+
     // Request fresh data from server
     const promises = [
         eel.get_chat_history()().catch(err => {
@@ -4315,35 +4316,35 @@ function refreshChatData(force = false) {
             return { success: false };
         })
     ];
-    
+
     Promise.all(promises).then(([chatResult, userResult]) => {
         // Process chat history
         if (chatResult.success && chatResult.messages) {
             const oldLength = chatHistories.global.length;
             const hasNewMessages = chatResult.messages.length > oldLength;
-            
+
             // Only update if forced or there are new messages
             if (force || hasNewMessages) {
                 // Get deleted messages from localStorage
                 const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
-                
+
                 // Filter out deleted messages
                 const filteredMessages = chatResult.messages.filter(msg => {
                     return !deletedMessages[msg.id || msg.timestamp];
                 });
-                
+
                 chatHistories.global = filteredMessages;
-                
+
                 // Only re-render if we're in the global chat
                 if (currentChatType === 'global') {
                     renderCurrentChat(!wasAtBottom);
-                    
+
                     // Restore scroll position if needed
                     if (!wasAtBottom) {
                         messagesContainer.scrollTop = scrollPosition;
                     }
                 }
-                
+
                 if (hasNewMessages) {
                     const newCount = Math.max(0, filteredMessages.length - oldLength);
                     if (newCount > 0) {
@@ -4352,18 +4353,18 @@ function refreshChatData(force = false) {
                 }
             }
         }
-        
+
         // Process user list
         if (userResult.success && userResult.users) {
             updateUsersList(userResult.users);
         }
-        
+
         // Reset refresh button
         if (refreshBtn) {
             refreshBtn.disabled = false;
             refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
         }
-        
+
         // Show success message if this was a manual refresh
         if (force) {
             showNotification('Chat refreshed', 'success');
@@ -4380,7 +4381,7 @@ let isUserActive = true;
 function trackUserActivity() {
     lastActivityTime = Date.now();
     isUserActive = true;
-    
+
     // Reset to fast polling when user is active
     if (pollInterval > 3000) {
         pollInterval = 3000;
@@ -4396,22 +4397,22 @@ function trackUserActivity() {
 // Main optimized polling function
 function pollForData() {
     console.log('===== STARTING OPTIMIZED POLLING =====');
-    
+
     // Initial refresh
     refreshChatData();
-    
+
     // Set up adaptive polling
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
-    
+
     // Smart polling with adaptive intervals
     pollingInterval = setInterval(() => {
         // Only poll if tab is visible
         if (document.hidden) return;
-        
+
         const timeSinceActivity = Date.now() - lastActivityTime;
-        
+
         // Adaptive polling intervals based on user activity
         if (timeSinceActivity < 30000) { // 30s
             pollInterval = 3000; // Fast: 3s when active
@@ -4420,20 +4421,20 @@ function pollForData() {
         } else {
             pollInterval = 30000; // Slow: 30s when inactive
         }
-        
+
         // Only refresh if we need to (smart debouncing)
-        const shouldRefresh = 
-            isUserActive || 
+        const shouldRefresh =
+            isUserActive ||
             timeSinceActivity < 60000 || // Always refresh within 1m of activity
             Math.random() < 0.3; // Occasionally refresh when inactive
-        
+
         if (shouldRefresh) {
             refreshChatData(false); // Don't force refresh unless necessary
         }
-        
+
         isUserActive = false; // Reset until next activity
     }, pollInterval);
-    
+
     // Immediate refresh when tab becomes visible
     const handleVisibilityChange = () => {
         if (!document.hidden) {
@@ -4441,9 +4442,9 @@ function pollForData() {
             refreshChatData(false); // Quick refresh on focus
         }
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     // Return cleanup function
     return () => {
         if (pollingInterval) clearInterval(pollingInterval);
@@ -4460,7 +4461,7 @@ function stopPolling() {
 }
 
 // ===== CLEANUP =====
-window.addEventListener('beforeunload', function() {
+window.addEventListener('beforeunload', function () {
     // Clean disconnect when closing
     stopPolling();
     if (typeof eel !== 'undefined') {
@@ -4469,17 +4470,17 @@ window.addEventListener('beforeunload', function() {
 });
 
 // ===== SETTINGS =====
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Open settings modal
     if (settingsBtn) {
-        settingsBtn.addEventListener('click', function(e) {
+        settingsBtn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
             // Use setTimeout to ensure the modal opens after the current event cycle
             setTimeout(() => {
                 settingsModal.style.display = 'flex';
                 console.log('Settings modal opened');
-                
+
                 // THIS IS THE FIX - Call addMessageMenuButtons when settings opens
                 // This suggests the buttons weren't being created properly before
                 console.log('🔧 Calling addMessageMenuButtons from settings modal');
@@ -4487,63 +4488,63 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 0);
         });
     }
-    
+
     // Close settings modal
     if (closeSettingsBtn) {
-        closeSettingsBtn.addEventListener('click', function(e) {
+        closeSettingsBtn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
             settingsModal.style.display = 'none';
             console.log('Settings modal closed');
         });
     }
-    
+
     // Close modal when clicking outside
     if (settingsModal) {
-        settingsModal.addEventListener('click', function(e) {
+        settingsModal.addEventListener('click', function (e) {
             e.stopPropagation(); // Prevent event from bubbling to document
             if (e.target === settingsModal) {
                 settingsModal.style.display = 'none';
             }
         });
     }
-    
+
     // Theme switching is handled by the enhanced theme system below
-    
+
     // Theme loading is handled by the enhanced theme system below
-    
+
     // Settings toggles
     // Remove duplicate variable declarations in DOMContentLoaded
     // notificationsToggle, soundsToggle, onlineStatusToggle are already declared above
-    
+
     if (notificationsToggle) {
         if (localStorage.getItem('notifications') === 'false') {
             notificationsToggle.checked = false;
         }
-        
-        notificationsToggle.addEventListener('change', function() {
+
+        notificationsToggle.addEventListener('change', function () {
             localStorage.setItem('notifications', this.checked);
             console.log('Notifications:', this.checked);
         });
     }
-    
+
     if (soundsToggle) {
         if (localStorage.getItem('sounds') === 'false') {
             soundsToggle.checked = false;
         }
-        
-        soundsToggle.addEventListener('change', function() {
+
+        soundsToggle.addEventListener('change', function () {
             localStorage.setItem('sounds', this.checked);
             console.log('Sounds:', this.checked);
         });
     }
-    
+
     if (onlineStatusToggle) {
         if (localStorage.getItem('onlineStatus') === 'false') {
             onlineStatusToggle.checked = false;
         }
-        
-        onlineStatusToggle.addEventListener('change', function() {
+
+        onlineStatusToggle.addEventListener('change', function () {
             localStorage.setItem('onlineStatus', this.checked);
             console.log('Online status:', this.checked);
         });
@@ -4562,7 +4563,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (localStorage.getItem('autoSave') === 'false') {
             autoSaveToggle.checked = false;
         }
-        autoSaveToggle.addEventListener('change', function() {
+        autoSaveToggle.addEventListener('change', function () {
             localStorage.setItem('autoSave', this.checked);
             console.log('Auto-save:', this.checked);
         });
@@ -4573,7 +4574,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (localStorage.getItem('enterToSend') === 'false') {
             enterToSendToggle.checked = false;
         }
-        enterToSendToggle.addEventListener('change', function() {
+        enterToSendToggle.addEventListener('change', function () {
             localStorage.setItem('enterToSend', this.checked);
             console.log('Enter to send:', this.checked);
         });
@@ -4584,7 +4585,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (localStorage.getItem('showTimestamps') === 'false') {
             timestampsToggle.checked = false;
         }
-        timestampsToggle.addEventListener('change', function() {
+        timestampsToggle.addEventListener('change', function () {
             localStorage.setItem('showTimestamps', this.checked);
             console.log('Show timestamps:', this.checked);
             // Apply timestamp visibility immediately
@@ -4601,7 +4602,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (localStorage.getItem('emojiReactions') === 'false') {
             emojiReactionsToggle.checked = false;
         }
-        emojiReactionsToggle.addEventListener('change', function() {
+        emojiReactionsToggle.addEventListener('change', function () {
             localStorage.setItem('emojiReactions', this.checked);
             console.log('Emoji reactions:', this.checked);
         });
@@ -4613,7 +4614,7 @@ document.addEventListener('DOMContentLoaded', function() {
             reduceAnimationsToggle.checked = true;
             document.body.classList.add('reduce-animations');
         }
-        reduceAnimationsToggle.addEventListener('change', function() {
+        reduceAnimationsToggle.addEventListener('change', function () {
             localStorage.setItem('reduceAnimations', this.checked);
             document.body.classList.toggle('reduce-animations', this.checked);
             console.log('Reduce animations:', this.checked);
@@ -4624,7 +4625,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (messageLimitSelect) {
         const savedLimit = localStorage.getItem('messageLimit') || '500';
         messageLimitSelect.value = savedLimit;
-        messageLimitSelect.addEventListener('change', function() {
+        messageLimitSelect.addEventListener('change', function () {
             localStorage.setItem('messageLimit', this.value);
             console.log('Message limit:', this.value);
         });
@@ -4633,18 +4634,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Enhanced theme handling with new themes
     const themeOptions = document.querySelectorAll('.theme-option');
     themeOptions.forEach(option => {
-        option.addEventListener('click', function() {
+        option.addEventListener('click', function () {
             const theme = this.dataset.theme;
-            
+
             // Remove active class from all options
             themeOptions.forEach(opt => opt.classList.remove('active'));
-            
+
             // Add active class to clicked option
             this.classList.add('active');
-            
+
             // Remove all theme classes
             document.body.classList.remove('theme-alt', 'theme-orange', 'theme-green');
-            
+
             // Apply new theme
             if (theme === 'alt') {
                 document.body.classList.add('theme-alt');
@@ -4653,7 +4654,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (theme === 'green') {
                 document.body.classList.add('theme-green');
             }
-            
+
             // Save theme preference
             localStorage.setItem('selectedTheme', theme);
             console.log('Theme changed to:', theme);
@@ -4712,11 +4713,11 @@ function showConnectionAlert(message, type = 'connected') {
         connected: '#2ecc71',
         disconnected: '#e74c3c'
     };
-    
+
     // Find the chat-header element
     const chatHeader = document.querySelector('.chat-header');
     if (!chatHeader) return;
-    
+
     const alert = document.createElement('div');
     alert.style.cssText = `
         position: absolute;
@@ -4740,7 +4741,7 @@ function showConnectionAlert(message, type = 'connected') {
         gap: 8px;
         letter-spacing: 0.5px;
     `;
-    
+
     // Add icon based on type
     const icon = document.createElement('span');
     icon.style.cssText = `
@@ -4748,14 +4749,14 @@ function showConnectionAlert(message, type = 'connected') {
         flex-shrink: 0;
     `;
     icon.textContent = type === 'connected' ? '✓' : '✕';
-    
+
     const text = document.createElement('span');
     text.textContent = message;
-    
+
     alert.appendChild(icon);
     alert.appendChild(text);
     chatHeader.appendChild(alert);
-    
+
     setTimeout(() => {
         alert.style.animation = 'slideOutRight 0.4s ease';
         setTimeout(() => alert.remove(), 400);
@@ -4783,7 +4784,7 @@ function showAudioPlayback(audioData, duration, sender) {
     const audioURL = `data:audio/wav;base64,${audioData}`;
     audioPlayer.src = audioURL;
     audioPlayer.style.background = 'var(--bg-card)';
-    
+
     // Auto-play the audio
     audioPlayer.play().catch(e => {
         console.warn('Audio autoplay prevented:', e);
@@ -4795,7 +4796,7 @@ function showAudioPlayback(audioData, duration, sender) {
         playbackUI.remove();
         URL.revokeObjectURL(audioURL);
     };
-    
+
     // Auto-close when audio ends
     audioPlayer.onended = () => {
         setTimeout(() => {
@@ -4803,7 +4804,7 @@ function showAudioPlayback(audioData, duration, sender) {
             URL.revokeObjectURL(audioURL);
         }, 1000);
     };
-    
+
     // Close on escape key
     const handleEscape = (e) => {
         if (e.key === 'Escape') {
@@ -4818,10 +4819,10 @@ function showAudioPlayback(audioData, duration, sender) {
 
 function getCurrentTime() {
     const now = new Date();
-    return now.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit', 
-        hour12: true 
+    return now.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
     });
 }
 
@@ -4882,44 +4883,44 @@ function showChatContextMenu(event, user) {
     console.log(`📋 CONTEXT MENU: Showing menu for user ${user}`);
     event.preventDefault();
     event.stopPropagation();
-    
+
     const menu = document.getElementById('chatContextMenu');
     if (!menu) {
         console.error('❌ Chat context menu not found!');
         return;
     }
-    
+
     console.log(`✅ Menu found, positioning...`);
-    
+
     // Calculate menu position
     const menuHeight = 150; // Approximate height
     const menuWidth = 180; // Approximate width
     const windowHeight = window.innerHeight;
     const windowWidth = window.innerWidth;
-    
+
     let posX = event.pageX;
     let posY = event.pageY;
-    
+
     // Check if menu would go off bottom of screen
     if (posY + menuHeight > windowHeight - 20) {
         posY = windowHeight - menuHeight - 20;
     }
-    
+
     // Check if menu would go off right side of screen
     if (posX + menuWidth > windowWidth - 20) {
         posX = windowWidth - menuWidth - 20;
     }
-    
+
     // CRITICAL FIX: Move menu to end of body to escape any clipping
     document.body.appendChild(menu);
-    
+
     menu.style.left = posX + 'px';
     menu.style.top = posY + 'px';
     menu.classList.add('show');
     menu.dataset.user = user;
-    
+
     console.log(`✅ Menu shown at position (${posX}, ${posY}) for user ${user}`);
-    
+
     // Close menu when clicking outside
     setTimeout(() => {
         document.addEventListener('click', function closeMenu() {
@@ -4933,55 +4934,55 @@ function showMessageContextMenu(event, messageElement) {
     console.log('🎯 showMessageContextMenu called!');
     console.log('📋 Event:', event);
     console.log('📋 Message element:', messageElement);
-    
+
     event.preventDefault();
     event.stopPropagation();
-    
+
     // Hide any existing context menus
     document.querySelectorAll('.context-menu').forEach(menu => {
         menu.classList.remove('show');
     });
-    
+
     const menu = document.getElementById('messageContextMenu');
     console.log('📋 Menu element found:', menu);
     if (!menu) {
         console.error('❌ messageContextMenu not found!');
         return;
     }
-    
+
     // Calculate menu position
     const menuHeight = 300; // Approximate height of context menu
     const menuWidth = 200; // Approximate width
     const windowHeight = window.innerHeight;
     const windowWidth = window.innerWidth;
-    
+
     let posX = event.pageX;
     let posY = event.pageY;
-    
+
     // Check if menu would go off bottom of screen
     if (posY + menuHeight > windowHeight - 20) {
         posY = windowHeight - menuHeight - 20;
     }
-    
+
     // Check if menu would go off right side of screen
     if (posX + menuWidth > windowWidth - 20) {
         posX = windowWidth - menuWidth - 20;
     }
-    
+
     // CRITICAL FIX: Move menu to end of body to escape any clipping
     document.body.appendChild(menu);
-    
+
     menu.style.left = posX + 'px';
     menu.style.top = posY + 'px';
     menu.classList.add('show');
     menu.dataset.messageId = messageElement.dataset.messageId;
-    
+
     console.log('✅ Menu should now be visible with class "show"');
     console.log('📋 Menu display:', window.getComputedStyle(menu).display);
     console.log('📋 Menu position:', menu.style.left, menu.style.top);
     console.log('📋 Menu z-index:', window.getComputedStyle(menu).zIndex);
     console.log('📋 Menu parent:', menu.parentElement);
-    
+
     // Close menu when clicking outside - with proper delay to avoid immediate closure
     setTimeout(() => {
         const closeMenu = (e) => {
@@ -4999,44 +5000,51 @@ function showMessageContextMenu(event, messageElement) {
 // Handle context menu actions - Enhanced with better event handling
 document.addEventListener('click', (e) => {
     console.log(`🖱️ Document click detected on:`, e.target);
-    
+
     const contextMenuItem = e.target.closest('.context-menu-item');
     if (contextMenuItem) {
         e.preventDefault();
         e.stopPropagation();
-        
+
         console.log(`🖱️ CONTEXT MENU ITEM CLICKED`);
         console.log(`🖱️ Target element:`, e.target);
         console.log(`🖱️ Closest context-menu-item:`, contextMenuItem);
-        
+
         const action = contextMenuItem.getAttribute('data-action');
         const menu = contextMenuItem.closest('.context-menu');
-        
+
         console.log(`📋 Action: ${action}, Menu ID: ${menu ? menu.id : 'NO MENU FOUND'}`);
         console.log(`📋 Menu dataset:`, menu ? menu.dataset : 'NO DATASET');
-        
+
         if (!action || !menu) {
             console.error('❌ Missing action or menu!');
             return;
         }
-        
+
         if (menu.id === 'chatContextMenu') {
             console.log(`✅ Handling chat context action: ${action} for user ${menu.dataset.user}`);
             handleChatContextAction(action, menu.dataset.user);
+            menu.classList.remove('show');
         } else if (menu.id === 'groupContextMenu') {
             console.log(`✅ Handling group context action: ${action}`);
             handleGroupContextAction(action);
+            menu.classList.remove('show');
         } else if (menu.id === 'messageContextMenu') {
             console.log(`✅ Handling message context action: ${action}`);
             console.log(`✅ Message ID from menu dataset: ${menu.dataset.messageId}`);
-            
-            // Add a simple test notification to see if this code is reached
-            showNotification(`Testing: ${action} clicked`, 'info');
-            
+
             handleMessageContextAction(action, menu.dataset.messageId);
+
+            // Don't close menu immediately for emoji action to allow picker to open
+            if (action !== 'emoji') {
+                menu.classList.remove('show');
+            } else {
+                // Close menu after a delay for emoji action
+                setTimeout(() => {
+                    menu.classList.remove('show');
+                }, 50);
+            }
         }
-        
-        menu.classList.remove('show');
     }
 }, true); // Use capture phase to ensure we catch the event first
 
@@ -5059,15 +5067,15 @@ function handleChatContextAction(action, user) {
 
 function handleMessageContextAction(action, messageId) {
     console.log(`🎯 handleMessageContextAction called with action: ${action}, messageId: ${messageId}`);
-    
+
     const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
     if (!messageElement) {
         console.log(`❌ No message element found for ID: ${messageId}`);
         return;
     }
-    
+
     console.log(`✅ Found message element:`, messageElement);
-    
+
     switch (action) {
         case 'reply':
             console.log(`📤 Calling replyToMessage`);
@@ -5114,13 +5122,13 @@ function showGroupContextMenu(event, groupId, groupName, members, admin) {
     console.log(`📋 GROUP CONTEXT MENU: Showing menu for group ${groupName}`);
     event.preventDefault();
     event.stopPropagation();
-    
+
     const menu = document.getElementById('groupContextMenu');
     if (!menu) {
         console.error('❌ Group context menu not found!');
         return;
     }
-    
+
     // Store group context
     currentGroupContext = {
         id: groupId,
@@ -5128,35 +5136,35 @@ function showGroupContextMenu(event, groupId, groupName, members, admin) {
         members: Array.isArray(members) ? members : [],
         admin: admin
     };
-    
+
     console.log(`✅ Group context stored:`, currentGroupContext);
-    
+
     // Calculate menu position
     const menuHeight = 150;
     const menuWidth = 180;
     const windowHeight = window.innerHeight;
     const windowWidth = window.innerWidth;
-    
+
     let posX = event.pageX;
     let posY = event.pageY;
-    
+
     if (posY + menuHeight > windowHeight - 20) {
         posY = windowHeight - menuHeight - 20;
     }
-    
+
     if (posX + menuWidth > windowWidth - 20) {
         posX = windowWidth - menuWidth - 20;
     }
-    
+
     // CRITICAL FIX: Move menu to end of body to escape any clipping
     document.body.appendChild(menu);
-    
+
     menu.style.left = posX + 'px';
     menu.style.top = posY + 'px';
     menu.classList.add('show');
-    
+
     console.log(`✅ Menu shown at position (${posX}, ${posY})`);
-    
+
     // Close menu when clicking outside
     setTimeout(() => {
         document.addEventListener('click', function closeMenu() {
@@ -5168,7 +5176,7 @@ function showGroupContextMenu(event, groupId, groupName, members, admin) {
 
 function handleGroupContextAction(action) {
     console.log(`🚀 GROUP ACTION: ${action} for group ${currentGroupContext.name}`);
-    
+
     switch (action) {
         case 'settings':
             openGroupSettings();
@@ -5187,22 +5195,22 @@ function handleGroupContextAction(action) {
 function openGroupSettings() {
     console.log('📂 openGroupSettings called');
     console.log('Current group context:', currentGroupContext);
-    
+
     const modal = document.getElementById('groupSettingsModal');
     const titleEl = document.getElementById('groupSettingsTitle');
     const nameInput = document.getElementById('groupNameInput');
     const adminSelect = document.getElementById('newAdminSelect');
     const kickSelect = document.getElementById('kickUserSelect');
-    
+
     if (!modal) {
         console.error('❌ Modal not found!');
         return;
     }
-    
+
     console.log('📝 Setting modal content...');
     titleEl.textContent = `${currentGroupContext.name} Settings`;
     nameInput.value = currentGroupContext.name;
-    
+
     // Populate admin select
     adminSelect.innerHTML = '<option value="">Select new admin...</option>';
     currentGroupContext.members.forEach(member => {
@@ -5213,7 +5221,7 @@ function openGroupSettings() {
             adminSelect.appendChild(option);
         }
     });
-    
+
     // Populate kick select
     kickSelect.innerHTML = '<option value="">Select user to kick...</option>';
     currentGroupContext.members.forEach(member => {
@@ -5224,7 +5232,7 @@ function openGroupSettings() {
             kickSelect.appendChild(option);
         }
     });
-    
+
     console.log('✅ Displaying modal...');
     modal.style.display = 'flex';
     console.log('Modal display set to:', modal.style.display);
@@ -5240,19 +5248,19 @@ function changeGroupName() {
         showNotification('Please enter a group name', 'error');
         return;
     }
-    
+
     console.log(`📝 Changing group name to: ${newName}`);
-    
+
     // Update persistent groups
     if (persistentGroups[currentGroupContext.id]) {
         persistentGroups[currentGroupContext.id].name = newName;
         saveGroupsToLocalStorage();
     }
-    
+
     currentGroupContext.name = newName;
     showNotification(`Group name changed to "${newName}"`, 'success');
     closeGroupSettings();
-    
+
     // Refresh groups list
     updateGroupsList();
 }
@@ -5263,21 +5271,21 @@ function changeGroupAdmin() {
         showNotification('Please select a new admin', 'error');
         return;
     }
-    
+
     // Check if current user is admin
     if (currentGroupContext.admin !== username) {
         showNotification('Only admin can transfer admin rights', 'error');
         return;
     }
-    
+
     console.log(`👑 Transferring admin to: ${newAdmin}`);
-    
+
     // Update persistent groups
     if (persistentGroups[currentGroupContext.id]) {
         persistentGroups[currentGroupContext.id].admin = newAdmin;
         saveGroupsToLocalStorage();
     }
-    
+
     currentGroupContext.admin = newAdmin;
     showNotification(`Admin transferred to ${newAdmin}`, 'success');
     closeGroupSettings();
@@ -5289,31 +5297,31 @@ function kickUser() {
         showNotification('Please select a user to kick', 'error');
         return;
     }
-    
+
     // Check if current user is admin
     if (currentGroupContext.admin !== username) {
         showNotification('Only admin can kick users', 'error');
         return;
     }
-    
+
     if (!confirm(`Kick ${userToKick} from the group?`)) {
         return;
     }
-    
+
     console.log(`🚫 Kicking user: ${userToKick}`);
-    
+
     // Remove from members
     const index = currentGroupContext.members.indexOf(userToKick);
     if (index > -1) {
         currentGroupContext.members.splice(index, 1);
     }
-    
+
     // Update persistent groups
     if (persistentGroups[currentGroupContext.id]) {
         persistentGroups[currentGroupContext.id].members = currentGroupContext.members;
         saveGroupsToLocalStorage();
     }
-    
+
     showNotification(`${userToKick} has been kicked from the group`, 'success');
     closeGroupSettings();
 }
@@ -5322,27 +5330,27 @@ function leaveGroup() {
     if (!confirm(`Leave "${currentGroupContext.name}"?`)) {
         return;
     }
-    
+
     console.log(`🚪 Leaving group: ${currentGroupContext.name}`);
-    
+
     // Remove from persistent groups
     delete persistentGroups[currentGroupContext.id];
     saveGroupsToLocalStorage();
-    
+
     // Remove from chat histories
     delete chatHistories.group[currentGroupContext.id];
-    
+
     // Remove from UI
     const groupItem = document.querySelector(`.chat-item[data-group-id="${currentGroupContext.id}"]`);
     if (groupItem) {
         groupItem.remove();
     }
-    
+
     // If this was the current chat, switch to global
     if (currentChatType === 'group' && currentChatTarget === currentGroupContext.id) {
         globalNetworkItem.click();
     }
-    
+
     showNotification(`Left "${currentGroupContext.name}"`, 'success');
     updateGroupsList();
 }
@@ -5353,31 +5361,31 @@ function deleteGroup() {
         showNotification('Only admin can delete the group', 'error');
         return;
     }
-    
+
     if (!confirm(`Delete "${currentGroupContext.name}"? This action cannot be undone.`)) {
         return;
     }
-    
+
     console.log(`🗑️ Deleting group: ${currentGroupContext.name}`);
-    
+
     // Remove from persistent groups
     delete persistentGroups[currentGroupContext.id];
     saveGroupsToLocalStorage();
-    
+
     // Remove from chat histories
     delete chatHistories.group[currentGroupContext.id];
-    
+
     // Remove from UI
     const groupItem = document.querySelector(`.chat-item[data-group-id="${currentGroupContext.id}"]`);
     if (groupItem) {
         groupItem.remove();
     }
-    
+
     // If this was the current chat, switch to global
     if (currentChatType === 'group' && currentChatTarget === currentGroupContext.id) {
         globalNetworkItem.click();
     }
-    
+
     showNotification(`Group "${currentGroupContext.name}" deleted`, 'success');
     updateGroupsList();
 }
@@ -5385,54 +5393,54 @@ function deleteGroup() {
 // Context menu action implementations
 function archiveChat(user) {
     console.log(`📦 archiveChat called for user: ${user}`);
-    
+
     const confirmed = confirm(`Archive chat with ${user}?`);
     if (!confirmed) return;
-    
+
     // Mark as archived in state
     archivedChats.add(user);
-    
+
     // Save archived state to localStorage
     try {
         localStorage.setItem('archivedChats', JSON.stringify(Array.from(archivedChats)));
     } catch (e) {
         console.error('Failed to save archived chats:', e);
     }
-    
+
     console.log(`📦 ARCHIVING: ${user}`);
-    
+
     // Remove chat item from UI
     const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
     if (chatItem) {
         chatItem.remove();
         console.log(`✅ Removed ${user} from private chats`);
     }
-    
+
     // If this was the current chat, switch to global
     if (currentChatType === 'private' && currentChatTarget === user) {
         globalNetworkItem.click();
     }
-    
+
     // Move to active if online
     const usersList = document.getElementById('usersList');
     const activeUsersList = document.getElementById('activeUsersList');
     const activeUsersSection = document.getElementById('activeUsersSection');
     const activeUsersCount = document.getElementById('activeUsersCount');
-    
+
     const isUserOnline = allUsers && allUsers.includes(user);
     console.log(`🔍 ARCHIVE: Is ${user} online? ${isUserOnline}`);
-    
+
     if (isUserOnline) {
         console.log(`✅ ARCHIVE: User ${user} is ONLINE, moving to active`);
-        
+
         if (!document.querySelector(`.active-user-item[data-user="${user}"]`)) {
             activeUsersSection.style.display = 'block';
-            
+
             const userItem = document.createElement('div');
             userItem.className = 'active-user-item';
             userItem.dataset.user = user;
             userItem.onclick = () => switchToPrivateChat(user);
-            
+
             userItem.innerHTML = `
                 <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
                 <div class="active-user-info">
@@ -5440,13 +5448,13 @@ function archiveChat(user) {
                     <div class="active-user-status">Online</div>
                 </div>
             `;
-            
+
             activeUsersList.appendChild(userItem);
             activeUsersCount.textContent = activeUsersList.children.length;
             console.log(`✅ ARCHIVE: Added ${user} to active users`);
         }
     }
-    
+
     // Show "no users" message if empty
     if (usersList.children.length === 0) {
         const noUsersMsg = document.getElementById('noUsersMsg');
@@ -5454,70 +5462,70 @@ function archiveChat(user) {
             noUsersMsg.style.display = 'block';
         }
     }
-    
+
     showNotification(`Chat with ${user} archived`, 'success');
 }
 
 function deleteChat(user) {
     console.log(`🗑️ deleteChat called for user: ${user}`);
-    
+
     const confirmed = confirm(`Delete chat with ${user}? This action cannot be undone.`);
     if (!confirmed) return;
-    
+
     console.log(`🗑️ DELETING: ${user}`);
-    
+
     // Delete from server JSON file
     eel.delete_private_chat(user)().then(() => {
         console.log(`✅ Server confirmed deletion of chat for: ${user}`);
     }).catch(err => {
         console.error(`❌ Failed to delete from server: ${err}`);
     });
-    
+
     // Delete chat history from frontend
     delete chatHistories.private[user];
-    
+
     // Remove archived state
     archivedChats.delete(user);
-    
+
     // Save updated archived state
     try {
         localStorage.setItem('archivedChats', JSON.stringify(Array.from(archivedChats)));
     } catch (e) {
         console.error('Failed to save archived chats:', e);
     }
-    
+
     // Remove chat item from UI
     const chatItem = document.querySelector(`.chat-item[data-user="${user}"]`);
     if (chatItem) {
         chatItem.remove();
         console.log(`✅ Removed ${user} from private chats`);
     }
-    
+
     // If this was the current chat, switch to global
     if (currentChatType === 'private' && currentChatTarget === user) {
         globalNetworkItem.click();
     }
-    
+
     // Move to active if online
     const usersList = document.getElementById('usersList');
     const activeUsersList = document.getElementById('activeUsersList');
     const activeUsersSection = document.getElementById('activeUsersSection');
     const activeUsersCount = document.getElementById('activeUsersCount');
-    
+
     const isUserOnline = allUsers && allUsers.includes(user);
     console.log(`🔍 DELETE: Is ${user} online? ${isUserOnline}`);
-    
+
     if (isUserOnline) {
         console.log(`✅ DELETE: User ${user} is ONLINE, moving to active`);
-        
+
         if (!document.querySelector(`.active-user-item[data-user="${user}"]`)) {
             activeUsersSection.style.display = 'block';
-            
+
             const userItem = document.createElement('div');
             userItem.className = 'active-user-item';
             userItem.dataset.user = user;
             userItem.onclick = () => switchToPrivateChat(user);
-            
+
             userItem.innerHTML = `
                 <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
                 <div class="active-user-info">
@@ -5525,13 +5533,13 @@ function deleteChat(user) {
                     <div class="active-user-status">Online</div>
                 </div>
             `;
-            
+
             activeUsersList.appendChild(userItem);
             activeUsersCount.textContent = activeUsersList.children.length;
             console.log(`✅ DELETE: Added ${user} to active users`);
         }
     }
-    
+
     // Show "no users" message if empty
     if (usersList.children.length === 0) {
         const noUsersMsg = document.getElementById('noUsersMsg');
@@ -5539,20 +5547,20 @@ function deleteChat(user) {
             noUsersMsg.style.display = 'block';
         }
     }
-    
+
     showNotification(`Chat with ${user} deleted`, 'success');
 }
 
 function replyToMessage(messageElement) {
     console.log('🎯 Reply to message called!', messageElement);
     showNotification('Reply function called!', 'success');
-    
+
     const messageBubble = messageElement.querySelector('.message-bubble');
     if (!messageBubble) {
         console.log('❌ No message bubble found');
         return;
     }
-    
+
     // Get message content, handling different message types
     let messageText = '';
     if (messageBubble.querySelector('.file-item')) {
@@ -5562,17 +5570,17 @@ function replyToMessage(messageElement) {
     } else {
         messageText = messageBubble.textContent.trim();
     }
-    
+
     const sender = messageElement.dataset.sender || messageElement.querySelector('.message-sender')?.textContent || 'User';
     const messageId = messageElement.dataset.messageId;
-    
+
     console.log('📋 Reply details:', { messageText, sender, messageId });
-    
+
     if (!messageText || !messageId) {
         console.log('❌ Missing messageText or messageId');
         return;
     }
-    
+
     // Create reply preview
     const replyPreview = document.createElement('div');
     replyPreview.className = 'reply-preview';
@@ -5587,7 +5595,7 @@ function replyToMessage(messageElement) {
             </div>
         </div>
     `;
-    
+
     // Get or create reply container
     let replyContainer = document.querySelector('.reply-container');
     if (!replyContainer) {
@@ -5598,20 +5606,20 @@ function replyToMessage(messageElement) {
     } else {
         replyContainer.innerHTML = ''; // Clear any existing reply
     }
-    
+
     // Add reply preview
     replyContainer.appendChild(replyPreview);
     replyContainer.style.display = 'block';
-    
+
     // Store original message info for reference
     replyContainer.dataset.replyTo = messageId;
     replyContainer.dataset.originalSender = sender;
     replyContainer.dataset.originalText = messageText;
-    
+
     // Focus the input
     const messageInput = document.getElementById('messageInput');
     messageInput.focus();
-    
+
     // Handle remove reply
     const removeBtn = replyPreview.querySelector('.reply-remove-btn');
     removeBtn.onclick = () => {
@@ -5643,10 +5651,10 @@ function copyMessage(messageElement) {
 function forwardMessage(messageElement) {
     const messageText = messageElement.querySelector('.message-bubble')?.textContent;
     if (!messageText) return;
-    
+
     const dialog = document.createElement('div');
     dialog.className = 'modal-overlay';
-    
+
     // Get list of users to forward to
     const users = [];
     Object.keys(chatHistories.private).forEach(key => {
@@ -5655,7 +5663,7 @@ function forwardMessage(messageElement) {
             users.push(otherUser);
         }
     });
-    
+
     dialog.innerHTML = `
         <div class="modal-content" style="max-width: 400px;">
             <h3>Forward Message To</h3>
@@ -5672,15 +5680,15 @@ function forwardMessage(messageElement) {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(dialog);
-    
+
     // Handle forward selection
     dialog.querySelectorAll('.user-forward-option').forEach(option => {
         option.onclick = async () => {
             const targetUser = option.dataset.user;
             try {
-                await eel.send_message('private', `📩 Forwarded: ${messageText}`, {receiver: targetUser})();
+                await eel.send_message('private', `📩 Forwarded: ${messageText}`, { receiver: targetUser })();
                 dialog.remove();
                 showNotification(`Message forwarded to ${targetUser}`, 'success');
             } catch (error) {
@@ -5688,7 +5696,7 @@ function forwardMessage(messageElement) {
             }
         };
     });
-    
+
     dialog.querySelector('.cancel').onclick = () => dialog.remove();
     dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
 }
@@ -5696,7 +5704,7 @@ function forwardMessage(messageElement) {
 function starMessage(messageElement) {
     const messageId = messageElement.dataset.messageId;
     const isStarred = messageElement.classList.toggle('starred');
-    
+
     // Add star icon if not exists
     let starIcon = messageElement.querySelector('.star-icon');
     if (!starIcon && isStarred) {
@@ -5711,7 +5719,7 @@ function starMessage(messageElement) {
     } else if (starIcon && !isStarred) {
         starIcon.remove();
     }
-    
+
     // Store starred state
     const starredMessages = JSON.parse(localStorage.getItem('starredMessages') || '{}');
     if (isStarred) {
@@ -5720,7 +5728,7 @@ function starMessage(messageElement) {
         delete starredMessages[messageId];
     }
     localStorage.setItem('starredMessages', JSON.stringify(starredMessages));
-    
+
     showNotification(isStarred ? 'Message starred' : 'Message unstarred', 'success');
 }
 
@@ -5728,7 +5736,7 @@ function pinMessage(messageElement) {
     const messageText = messageElement.querySelector('.message-bubble')?.textContent;
     const messageId = messageElement.dataset.messageId;
     const isPinned = messageElement.classList.contains('pinned');
-    
+
     if (!isPinned) {
         // Show pin confirmation modal
         const dialog = document.createElement('div');
@@ -5744,12 +5752,12 @@ function pinMessage(messageElement) {
                 </div>
             </div>
         `;
-        
+
         document.body.appendChild(dialog);
-        
+
         dialog.querySelector('.primary').onclick = () => {
             messageElement.classList.add('pinned');
-            
+
             // Add pin icon
             let pinIcon = messageElement.querySelector('.pin-icon');
             if (!pinIcon) {
@@ -5762,16 +5770,16 @@ function pinMessage(messageElement) {
                 pinIcon.style.fontSize = '14px';
                 messageElement.appendChild(pinIcon);
             }
-            
+
             // Store pinned state
             const pinnedMessages = JSON.parse(localStorage.getItem('pinnedMessages') || '{}');
             pinnedMessages[messageId] = true;
             localStorage.setItem('pinnedMessages', JSON.stringify(pinnedMessages));
-            
+
             dialog.remove();
             showNotification('Message pinned', 'success');
         };
-        
+
         dialog.querySelector('.cancel').onclick = () => dialog.remove();
         dialog.onclick = (e) => { if (e.target === dialog) dialog.remove(); };
     } else {
@@ -5779,11 +5787,11 @@ function pinMessage(messageElement) {
         messageElement.classList.remove('pinned');
         const pinIcon = messageElement.querySelector('.pin-icon');
         if (pinIcon) pinIcon.remove();
-        
+
         const pinnedMessages = JSON.parse(localStorage.getItem('pinnedMessages') || '{}');
         delete pinnedMessages[messageId];
         localStorage.setItem('pinnedMessages', JSON.stringify(pinnedMessages));
-        
+
         showNotification('Message unpinned', 'success');
     }
 }
@@ -5791,16 +5799,16 @@ function pinMessage(messageElement) {
 async function deleteMessage(messageElement) {
     const messageBubble = messageElement.querySelector('.message-bubble');
     if (!messageBubble) return;
-    
+
     const messageText = messageBubble.textContent;
     const messageId = messageElement.dataset.messageId;
     const isOwnMessage = messageElement.classList.contains('own');
     const sender = messageElement.dataset.sender || 'User';
-    
+
     // Show delete confirmation modal with different options based on message ownership
     const dialog = document.createElement('div');
     dialog.className = 'modal-overlay';
-    
+
     if (isOwnMessage) {
         // Own message - can delete for everyone
         dialog.innerHTML = `
@@ -5817,7 +5825,7 @@ async function deleteMessage(messageElement) {
                         Cancel
                     </button>
                     <button class="modal-btn danger" style="padding: 8px 16px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Delete for Everyone
+                        Delete 
                     </button>
                 </div>
             </div>
@@ -5845,35 +5853,35 @@ async function deleteMessage(messageElement) {
             </div>
         `;
     }
-    
+
     document.body.appendChild(dialog);
-    
+
     // Handle delete action
     dialog.querySelector('.danger').onclick = async () => {
         if (isOwnMessage) {
             // Permanent delete for own messages
             try {
                 const result = await eel.delete_message(messageId, currentChatType, currentChatTarget)();
-                
+
                 if (result && result.success) {
                     // Mark as deleted in the UI
                     messageElement.classList.add('deleted');
-                    
+
                     // Replace message content with "Message deleted"
                     const bubble = messageElement.querySelector('.message-bubble');
                     if (bubble) {
                         bubble.innerHTML = '<span class="message-deleted" style="font-style: italic; opacity: 0.7;">🚫 This message was deleted</span>';
                     }
-                    
+
                     // Remove interactive elements
                     const menuBtn = messageElement.querySelector('.message-menu-btn');
                     if (menuBtn) menuBtn.remove();
-                    
+
                     // Mark as deleted in localStorage to prevent reappearance
                     const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
                     deletedMessages[messageId] = true;
                     localStorage.setItem('deletedMessages', JSON.stringify(deletedMessages));
-                    
+
                     dialog.remove();
                     showNotification('Message deleted for everyone', 'success');
                 } else {
@@ -5897,17 +5905,17 @@ async function deleteMessage(messageElement) {
                     chatTarget: currentChatTarget
                 };
                 localStorage.setItem('deletedMessages', JSON.stringify(deletedMessages));
-                
+
                 // Remove from DOM with a fade-out animation
                 messageElement.style.transition = 'opacity 0.3s ease';
                 messageElement.style.opacity = '0';
-                
+
                 // Wait for the animation to complete before removing from DOM
                 setTimeout(() => {
                     messageElement.remove();
                     showNotification('Message removed from your chat', 'success');
                 }, 300);
-                
+
                 dialog.remove();
             } catch (error) {
                 console.error('Error removing message:', error);
@@ -5916,7 +5924,7 @@ async function deleteMessage(messageElement) {
             }
         }
     };
-    
+
     // Handle cancel action
     const cancelBtn = dialog.querySelector('.cancel');
     if (cancelBtn) {
@@ -5925,7 +5933,7 @@ async function deleteMessage(messageElement) {
             setTimeout(() => dialog.remove(), 200);
         };
     }
-    
+
     // Close on overlay click
     dialog.onclick = (e) => {
         if (e.target === dialog) {
@@ -5978,11 +5986,11 @@ function insertEmoji(emoji) {
     const cursorPos = messageInput.selectionStart;
     const textBefore = messageInput.value.substring(0, cursorPos);
     const textAfter = messageInput.value.substring(messageInput.selectionEnd);
-    
+
     messageInput.value = textBefore + emoji + textAfter;
     messageInput.focus();
     messageInput.setSelectionRange(cursorPos + emoji.length, cursorPos + emoji.length);
-    
+
     hideEmojiPicker();
 }
 
@@ -5990,28 +5998,39 @@ function insertEmoji(emoji) {
 let currentReactionMessageElement = null;
 
 function showEmojiReactionPicker(messageElement) {
+    console.log('🎯 showEmojiReactionPicker called with:', messageElement);
     currentReactionMessageElement = messageElement;
     const picker = document.getElementById('emojiReactionPicker');
-    if (!picker) return;
-    
+    console.log('🎯 Picker element found:', picker);
+    if (!picker) {
+        console.error('❌ emojiReactionPicker element not found!');
+        return;
+    }
+
+    // Move picker to body to avoid parent container clipping
+    if (picker.parentElement !== document.body) {
+        document.body.appendChild(picker);
+        console.log('✅ Moved emoji picker to document body to avoid clipping');
+    }
+
     const messageRect = messageElement.getBoundingClientRect();
-    
+
     // Position picker near the message
     picker.style.position = 'fixed';
     picker.style.transform = 'none';
-    
+
     // Calculate position (above or below message depending on space)
     const pickerHeight = 200; // Approximate height
     const pickerWidth = 280; // Approximate width
-    
+
     let left = messageRect.left;
     let top = messageRect.top - pickerHeight - 10;
-    
+
     // If picker would go off top of screen, show below message
     if (top < 10) {
         top = messageRect.bottom + 10;
     }
-    
+
     // Keep picker within horizontal bounds
     if (left + pickerWidth > window.innerWidth - 10) {
         left = window.innerWidth - pickerWidth - 10;
@@ -6019,27 +6038,95 @@ function showEmojiReactionPicker(messageElement) {
     if (left < 10) {
         left = 10;
     }
-    
+
     picker.style.left = left + 'px';
     picker.style.top = top + 'px';
-    picker.style.display = 'block';
-    
-    // Close picker when clicking outside
+    picker.style.display = 'flex';
+    picker.style.flexDirection = 'column';
+    picker.style.zIndex = '10001';
+    picker.style.backgroundColor = '#2b2d31';
+    picker.style.border = '3px solid #00b8d4';
+    picker.style.borderRadius = '12px';
+    picker.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.8)';
+    picker.style.minWidth = '280px';
+    picker.style.maxHeight = '250px';
+    picker.style.width = '280px';  // Fixed width
+    picker.style.height = 'auto';  // Auto height
+
+    // Ensure the emoji grid has proper styling
+    const emojiGrid = picker.querySelector('.emoji-grid');
+    if (emojiGrid) {
+        emojiGrid.style.display = 'grid';
+        emojiGrid.style.gridTemplateColumns = 'repeat(6, 1fr)';
+        emojiGrid.style.gap = '8px';
+        emojiGrid.style.padding = '16px';
+    }
+
+    // Ensure the header has proper styling
+    const header = picker.querySelector('.emoji-picker-header');
+    if (header) {
+        header.style.display = 'flex';
+        header.style.justifyContent = 'center';
+        header.style.alignItems = 'center';
+        header.style.padding = '12px 16px';
+        header.style.borderBottom = '2px solid #00b8d4';
+        header.style.backgroundColor = '#1a1d29';
+        header.style.borderRadius = '12px 12px 0 0';
+        header.style.fontFamily = 'Comic Neue, cursive';
+        header.style.fontWeight = '700';
+        header.style.fontSize = '14px';
+        header.style.color = '#f2f3f5';
+        header.style.textTransform = 'uppercase';
+        header.style.letterSpacing = '0.5px';
+    }
+
+    // Ensure emoji options have proper styling
+    const emojiOptions = picker.querySelectorAll('.emoji-option');
+    emojiOptions.forEach(option => {
+        option.style.fontSize = '32px';
+        option.style.padding = '8px';
+        option.style.cursor = 'pointer';
+        option.style.borderRadius = '8px';
+        option.style.transition = 'all 0.2s ease';
+        option.style.display = 'inline-block';
+        option.style.userSelect = 'none';
+        option.style.textAlign = 'center';
+    });
+
+    // Debug: Log computed styles
+    const computedStyle = window.getComputedStyle(picker);
+    console.log('✅ Emoji reaction picker should now be visible at:', left, top);
+    console.log('🎯 Picker computed styles:', {
+        display: computedStyle.display,
+        position: computedStyle.position,
+        zIndex: computedStyle.zIndex,
+        left: computedStyle.left,
+        top: computedStyle.top,
+        width: computedStyle.width,
+        height: computedStyle.height,
+        visibility: computedStyle.visibility,
+        opacity: computedStyle.opacity,
+        background: computedStyle.backgroundColor,
+        border: computedStyle.border
+    });
+
+    // Close picker when clicking outside - with longer delay to avoid immediate closure
     setTimeout(() => {
         const closePickerHandler = (e) => {
             if (!picker.contains(e.target)) {
+                console.log('🚪 Closing emoji reaction picker due to outside click');
                 picker.style.display = 'none';
                 document.removeEventListener('click', closePickerHandler);
             }
         };
         document.addEventListener('click', closePickerHandler);
-    }, 100);
+    }, 300); // Increased delay to prevent immediate closure
 }
 
 function addEmojiReaction(messageElement, emoji) {
     const messageId = messageElement.dataset.messageId;
     if (!messageId) return;
-    
+
     // Get or create reactions container at message level
     let reactionsContainer = messageElement.querySelector('.message-reactions');
     if (!reactionsContainer) {
@@ -6048,7 +6135,7 @@ function addEmojiReaction(messageElement, emoji) {
         // Append to message element itself, not message-content
         messageElement.appendChild(reactionsContainer);
     }
-    
+
     // Store reactions in localStorage
     const reactions = JSON.parse(localStorage.getItem('messageReactions') || '{}');
     if (!reactions[messageId]) {
@@ -6057,7 +6144,7 @@ function addEmojiReaction(messageElement, emoji) {
     if (!reactions[messageId][emoji]) {
         reactions[messageId][emoji] = [];
     }
-    
+
     // Toggle reaction for current user
     const userIndex = reactions[messageId][emoji].indexOf(username);
     if (userIndex > -1) {
@@ -6068,9 +6155,9 @@ function addEmojiReaction(messageElement, emoji) {
     } else {
         reactions[messageId][emoji].push(username);
     }
-    
+
     localStorage.setItem('messageReactions', JSON.stringify(reactions));
-    
+
     // Update UI
     renderMessageReactions(messageElement, messageId, reactions[messageId] || {});
 }
@@ -6084,9 +6171,9 @@ function renderMessageReactions(messageElement, messageId, reactions) {
         // Append to message element itself, not message-content
         messageElement.appendChild(reactionsContainer);
     }
-    
+
     reactionsContainer.innerHTML = '';
-    
+
     Object.entries(reactions).forEach(([emoji, users]) => {
         if (users.length > 0) {
             const reactionItem = document.createElement('div');
@@ -6094,18 +6181,18 @@ function renderMessageReactions(messageElement, messageId, reactions) {
             if (users.includes(username)) {
                 reactionItem.classList.add('own-reaction');
             }
-            
+
             reactionItem.innerHTML = `
                 <span class="reaction-emoji">${emoji}</span>
                 <span class="reaction-count">${users.length}</span>
             `;
-            
+
             reactionItem.title = users.join(', ');
             reactionItem.onclick = (e) => {
                 e.stopPropagation();
                 showEmojiReactionModal(messageElement, emoji, users, messageId);
             };
-            
+
             reactionsContainer.appendChild(reactionItem);
         }
     });
@@ -6128,7 +6215,7 @@ function showEmojiReactionModal(messageElement, emoji, users, messageId) {
         z-index: 10001;
         animation: fadeIn 0.2s ease;
     `;
-    
+
     // Create modal content
     const modal = document.createElement('div');
     modal.className = 'emoji-reaction-modal';
@@ -6142,9 +6229,9 @@ function showEmojiReactionModal(messageElement, emoji, users, messageId) {
         box-shadow: 0 10px 40px rgba(0, 184, 212, 0.3);
         animation: scaleIn 0.3s ease;
     `;
-    
+
     const isOwnReaction = users.includes(username);
-    
+
     // Create header with emoji
     const header = document.createElement('div');
     header.style.cssText = `
@@ -6160,7 +6247,7 @@ function showEmojiReactionModal(messageElement, emoji, users, messageId) {
         <span style="color: #e4e7f0; font-size: 16px; font-weight: 600;">Reaction</span>
     `;
     modal.appendChild(header);
-    
+
     // Create users list
     const usersList = document.createElement('div');
     usersList.style.cssText = `
@@ -6168,7 +6255,7 @@ function showEmojiReactionModal(messageElement, emoji, users, messageId) {
         overflow-y: auto;
         margin-bottom: 16px;
     `;
-    
+
     users.forEach(user => {
         const userItem = document.createElement('div');
         userItem.style.cssText = `
@@ -6198,7 +6285,7 @@ function showEmojiReactionModal(messageElement, emoji, users, messageId) {
         usersList.appendChild(userItem);
     });
     modal.appendChild(usersList);
-    
+
     // Create buttons container
     const buttonsContainer = document.createElement('div');
     buttonsContainer.style.cssText = `
@@ -6206,7 +6293,7 @@ function showEmojiReactionModal(messageElement, emoji, users, messageId) {
         gap: 10px;
         justify-content: flex-end;
     `;
-    
+
     // Create close button
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'Close';
@@ -6236,7 +6323,7 @@ function showEmojiReactionModal(messageElement, emoji, users, messageId) {
         setTimeout(() => overlay.remove(), 200);
     };
     buttonsContainer.appendChild(closeBtn);
-    
+
     // Create remove button (only if user added this reaction)
     if (isOwnReaction) {
         const removeBtn = document.createElement('button');
@@ -6271,11 +6358,11 @@ function showEmojiReactionModal(messageElement, emoji, users, messageId) {
         };
         buttonsContainer.appendChild(removeBtn);
     }
-    
+
     modal.appendChild(buttonsContainer);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
-    
+
     // Close on background click
     overlay.onclick = (e) => {
         if (e.target === overlay) {
@@ -6291,22 +6378,22 @@ function updatePinnedMessagesBar() {
     const pinnedBar = document.getElementById('pinnedMessagesBar');
     const pinnedMessageText = document.getElementById('pinnedMessageText');
     const pinnedMessages = JSON.parse(localStorage.getItem('pinnedMessages') || '{}');
-    
+
     const pinnedMessageIds = Object.keys(pinnedMessages).filter(id => pinnedMessages[id]);
-    
+
     if (pinnedMessageIds.length > 0) {
         // Get the first pinned message to display
         const firstPinnedId = pinnedMessageIds[0];
         const messageElement = document.querySelector(`[data-message-id="${firstPinnedId}"]`);
-        
+
         if (messageElement) {
             const messageBubble = messageElement.querySelector('.message-bubble');
             const messageContent = messageBubble ? messageBubble.textContent : 'Pinned message';
             const sender = messageElement.dataset.sender || 'User';
-            
+
             pinnedMessageText.textContent = `${sender}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`;
             pinnedBar.style.display = 'flex';
-            
+
             // Add click handler to scroll to message
             pinnedMessageText.onclick = () => {
                 messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -6327,10 +6414,10 @@ function searchUsersAndMessages(query) {
         clearSearch();
         return;
     }
-    
+
     // Search and reorder users
     searchAndReorderUsers(query);
-    
+
     // If in a chat, also search messages
     if (currentChatType !== 'global') {
         searchMessages(query);
@@ -6339,7 +6426,7 @@ function searchUsersAndMessages(query) {
 
 function searchAndReorderUsers(query) {
     const lowerQuery = query.toLowerCase();
-    
+
     // Get current theme for highlight color
     const currentTheme = document.body.className || 'default';
     let highlightColor;
@@ -6350,13 +6437,13 @@ function searchAndReorderUsers(query) {
     } else {
         highlightColor = 'rgba(0, 184, 212, 0.2)'; // Default cyan theme
     }
-    
+
     // Search active users
     const activeUsersList = document.getElementById('activeUsersList');
     const activeUsers = Array.from(activeUsersList.children);
     const matchingActiveUsers = [];
     const nonMatchingActiveUsers = [];
-    
+
     activeUsers.forEach(userItem => {
         const userName = userItem.dataset.user.toLowerCase();
         if (userName.includes(lowerQuery)) {
@@ -6367,19 +6454,19 @@ function searchAndReorderUsers(query) {
             nonMatchingActiveUsers.push(userItem);
         }
     });
-    
+
     // Reorder active users: matching first
     activeUsersList.innerHTML = '';
     [...matchingActiveUsers, ...nonMatchingActiveUsers].forEach(item => {
         activeUsersList.appendChild(item);
     });
-    
+
     // Search private chat users
     const usersList = document.getElementById('usersList');
     const chatUsers = Array.from(usersList.children);
     const matchingChatUsers = [];
     const nonMatchingChatUsers = [];
-    
+
     chatUsers.forEach(userItem => {
         const userName = userItem.dataset.user?.toLowerCase() || '';
         if (userName.includes(lowerQuery)) {
@@ -6390,7 +6477,7 @@ function searchAndReorderUsers(query) {
             nonMatchingChatUsers.push(userItem);
         }
     });
-    
+
     // Reorder chat users: matching first
     usersList.innerHTML = '';
     [...matchingChatUsers, ...nonMatchingChatUsers].forEach(item => {
@@ -6404,16 +6491,16 @@ function clearSearch() {
     activeUsers.forEach(item => {
         item.style.background = '';
     });
-    
+
     // Remove highlights from chat users
     const chatUsers = document.querySelectorAll('.chat-item');
     chatUsers.forEach(item => {
         item.style.background = '';
     });
-    
+
     // Restore original order by refreshing user lists
     updateUsersList(allUsers);
-    
+
     // If in a chat, restore original messages
     if (currentChatType !== 'global') {
         renderCurrentChat();
@@ -6425,19 +6512,19 @@ function searchMessages(query) {
         renderCurrentChat();
         return;
     }
-    
+
     const currentMessages = getCurrentChatMessages();
-    const filteredMessages = currentMessages.filter(message => 
+    const filteredMessages = currentMessages.filter(message =>
         message.content.toLowerCase().includes(query.toLowerCase()) ||
         message.sender.toLowerCase().includes(query.toLowerCase())
     );
-    
+
     renderSearchResults(filteredMessages, query);
 }
 
 function renderSearchResults(messages, query) {
     messagesContainer.innerHTML = '';
-    
+
     if (messages.length === 0) {
         const noResults = document.createElement('div');
         noResults.className = 'no-results';
@@ -6451,7 +6538,7 @@ function renderSearchResults(messages, query) {
         messagesContainer.appendChild(noResults);
         return;
     }
-    
+
     messages.forEach(message => {
         const messageDiv = addMessage(message);
         // Highlight search terms
@@ -6490,18 +6577,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load persistent groups on startup
     console.log('===== LOADING PERSISTENT GROUPS ON STARTUP =====');
     updateGroupsList();
-    
+
     // Connect refresh button to soft refresh chat data instead of full page reload
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', (e) => {
             e.preventDefault();
             console.log('===== SOFT REFRESH TRIGGERED =====');
-            
+
             // Show loading state
             refreshBtn.disabled = true;
             refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
-            
+
             // Request fresh data from server
             Promise.all([
                 eel.send_message('request_chat_history', '', {})(),
@@ -6519,7 +6606,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-    
+
     // Connect group settings header button
     const groupSettingsHeaderBtn = document.getElementById('groupSettingsHeaderBtn');
     if (groupSettingsHeaderBtn) {
@@ -6528,15 +6615,15 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('🎯 GROUP SETTINGS BUTTON CLICKED!');
             console.log(`Current chat type: ${currentChatType}`);
             console.log(`Current chat target: ${currentChatTarget}`);
-            
+
             e.preventDefault();
             e.stopPropagation();
-            
+
             if (currentChatType === 'group' && currentChatTarget) {
                 // Get group info from persistentGroups
                 const groupInfo = persistentGroups[currentChatTarget];
                 console.log('Group info:', groupInfo);
-                
+
                 if (groupInfo) {
                     // Set current group context for settings
                     currentGroupContext = {
@@ -6557,7 +6644,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error('❌ Group settings button not found!');
     }
-    
+
     // Add keyboard shortcut for refresh (Ctrl+R)
     document.addEventListener('keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
@@ -6565,12 +6652,12 @@ document.addEventListener('DOMContentLoaded', () => {
             refreshChatData(true); // Force refresh
         }
     });
-    
+
     // Reset polling on user activity
     ['click', 'keypress', 'scroll', 'touchstart'].forEach(event => {
         document.addEventListener(event, resetPollingInterval, { passive: true });
     });
-    
+
     // Reset polling when tab becomes visible
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
@@ -6585,7 +6672,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const emojiPicker = document.getElementById('emojiPicker');
     const emojiPickerModal = document.getElementById('emojiPickerModal');
     const closeEmojiBtn = document.getElementById('closeEmojiBtn');
-    
+
     if (emojiBtn) {
         console.log('✅ Emoji button found, attaching click handler');
         emojiBtn.addEventListener('click', (e) => {
@@ -6597,7 +6684,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error('❌ Emoji button not found!');
     }
-    
+
     if (closeEmojiBtn) {
         closeEmojiBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -6605,7 +6692,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hideEmojiPicker();
         });
     }
-    
+
     // Handle emoji clicks inside the picker
     if (emojiPicker) {
         emojiPicker.addEventListener('click', (e) => {
@@ -6621,7 +6708,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     // Close emoji picker when clicking outside (modal overlay)
     if (emojiPickerModal) {
         emojiPickerModal.addEventListener('click', (e) => {
@@ -6630,7 +6717,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     // Emoji selection (only if mainApp is active)
     document.addEventListener('click', (e) => {
         const mainApp = document.getElementById('mainApp');
@@ -6641,7 +6728,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-    
+
     // Emoji reaction picker
     const emojiReactionPickerElement = document.getElementById('emojiReactionPicker');
     if (emojiReactionPickerElement) {
@@ -6656,7 +6743,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     // Pinned messages bar close button
     const closePinnedBar = document.getElementById('closePinnedBar');
     if (closePinnedBar) {
@@ -6666,11 +6753,11 @@ document.addEventListener('DOMContentLoaded', () => {
             pinnedBar.style.display = 'none';
         });
     }
-    
+
     // Search functionality
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
-    
+
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
             const query = e.target.value.trim();
@@ -6680,7 +6767,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearSearch();
             }
         });
-        
+
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 const query = e.target.value.trim();
@@ -6692,7 +6779,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     if (searchBtn) {
         searchBtn.addEventListener('click', () => {
             const query = searchInput.value.trim();
@@ -6703,7 +6790,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
+
     // Add message menu buttons to existing messages
     addMessageMenuButtons();
 });
@@ -6713,7 +6800,7 @@ function addMessageMenuButtons() {
     messages.forEach((message, index) => {
         // Check if button already exists and has handler
         let menuBtn = message.querySelector('.message-menu-btn');
-        
+
         if (!menuBtn) {
             // Create new button
             menuBtn = document.createElement('button');
@@ -6725,23 +6812,23 @@ function addMessageMenuButtons() {
             `;
             message.appendChild(menuBtn);
         }
-        
+
         // Always ensure the handler is properly attached (remove old ones first)
         if (!menuBtn.dataset.handlerAttached) {
-            menuBtn.addEventListener('click', function(e) {
+            menuBtn.addEventListener('click', function (e) {
                 console.log('🖱️ Message menu button clicked!');
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 // Ensure message has a unique ID
                 if (!message.dataset.messageId) {
                     message.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                 }
-                
+
                 console.log('📋 Showing context menu for message:', message.dataset.messageId);
                 showMessageContextMenu(e, message);
             });
-            
+
             // Mark as having handler to prevent duplicates
             menuBtn.dataset.handlerAttached = 'true';
         }
@@ -6764,22 +6851,22 @@ class SoundManager {
     createSound(frequency, duration, type = 'sine') {
         return () => {
             if (localStorage.getItem('sounds') === 'false') return;
-            
+
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const oscillator = audioContext.createOscillator();
                 const gainNode = audioContext.createGain();
-                
+
                 oscillator.connect(gainNode);
                 gainNode.connect(audioContext.destination);
-                
+
                 oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
                 oscillator.type = type;
-                
+
                 gainNode.gain.setValueAtTime(0, audioContext.currentTime);
                 gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
                 gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
-                
+
                 oscillator.start(audioContext.currentTime);
                 oscillator.stop(audioContext.currentTime + duration);
             } catch (error) {
@@ -6799,7 +6886,7 @@ const soundManager = new SoundManager();
 
 // Enhanced notification function with sound
 const originalShowNotification = showNotification;
-showNotification = function(message, type = 'info') {
+showNotification = function (message, type = 'info') {
     // Play appropriate sound
     if (localStorage.getItem('notifications') !== 'false') {
         switch (type) {
@@ -6816,7 +6903,7 @@ showNotification = function(message, type = 'info') {
                 soundManager.playSound('notification');
         }
     }
-    
+
     // Call original notification function
     originalShowNotification(message, type);
 };
@@ -6830,14 +6917,14 @@ function playMessageSound() {
 
 // Enhanced message handling with sound
 const originalAddMessage = addMessage;
-addMessage = function(message, skipSound = false) {
+addMessage = function (message, skipSound = false) {
     const result = originalAddMessage(message);
-    
+
     // Play sound for new messages (not our own)
     if (!skipSound && message.sender !== username) {
         playMessageSound();
     }
-    
+
     return result;
 };
 
@@ -6890,37 +6977,37 @@ const browserNotificationManager = new BrowserNotificationManager();
 
 // Enhanced message handling with browser notifications
 const originalHandleMessage = handleMessage;
-handleMessage = function(data) {
+handleMessage = function (data) {
     const result = originalHandleMessage(data);
-    
+
     // Show browser notification for new messages
     if (data.type === 'message' && data.sender !== username) {
-        const chatName = data.chat_type === 'global' ? 'Global Network' : 
-                        data.chat_type === 'group' ? `Group: ${data.receiver}` : 
-                        data.sender;
-        
+        const chatName = data.chat_type === 'global' ? 'Global Network' :
+            data.chat_type === 'group' ? `Group: ${data.receiver}` :
+                data.sender;
+
         browserNotificationManager.showBrowserNotification(
             `New message from ${data.sender}`,
             `${chatName}: ${data.content.substring(0, 100)}${data.content.length > 100 ? '...' : ''}`
         );
     }
-    
+
     return result;
 };
 //
 
 // Ensure emoji picker works properly
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     console.log('🔧 Setting up emoji picker and message menu fixes...');
-    
+
     // Fix emoji picker clicks
     const emojiPickerModal = document.getElementById('emojiPickerModal');
     if (emojiPickerModal) {
-        emojiPickerModal.addEventListener('click', function(e) {
+        emojiPickerModal.addEventListener('click', function (e) {
             console.log('🎯 Emoji picker modal clicked, target:', e.target);
             console.log('🎯 Target classes:', e.target.classList);
             console.log('🎯 Target data-emoji:', e.target.getAttribute('data-emoji'));
-            
+
             if (e.target.classList.contains('emoji')) {
                 const emoji = e.target.getAttribute('data-emoji');
                 if (emoji) {
@@ -6938,17 +7025,39 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         console.log('✅ Emoji picker click handler attached');
     }
-    
+
+    // Fix emoji REACTION picker clicks
+    const emojiReactionPicker = document.getElementById('emojiReactionPicker');
+    if (emojiReactionPicker) {
+        emojiReactionPicker.addEventListener('click', function (e) {
+            console.log('🎯 Emoji REACTION picker clicked, target:', e.target);
+
+            if (e.target.classList.contains('emoji-option')) {
+                const emoji = e.target.getAttribute('data-emoji');
+                if (emoji && currentReactionMessageElement) {
+                    console.log('✅ Reaction emoji clicked:', emoji);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    addEmojiReaction(currentReactionMessageElement, emoji);
+                    emojiReactionPicker.style.display = 'none';
+                } else {
+                    console.log('❌ No emoji data or message element found');
+                }
+            }
+        });
+        console.log('✅ Emoji reaction picker click handler attached');
+    }
+
     // Fix message context menu
     const messageContextMenu = document.getElementById('messageContextMenu');
     if (messageContextMenu) {
-        messageContextMenu.addEventListener('click', function(e) {
+        messageContextMenu.addEventListener('click', function (e) {
             const menuItem = e.target.closest('.context-menu-item');
             if (menuItem) {
                 const action = menuItem.getAttribute('data-action');
                 const messageId = messageContextMenu.dataset.messageId;
                 console.log('✅ Context menu action:', action, 'for message:', messageId);
-                
+
                 if (action && messageId) {
                     handleMessageContextAction(action, messageId);
                     messageContextMenu.classList.remove('show');
@@ -6957,22 +7066,22 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         console.log('✅ Message context menu handler attached');
     }
-    
+
     // Ensure message menu buttons work
     function attachMessageMenuHandlers() {
         const messages = document.querySelectorAll('.message');
         messages.forEach(message => {
             const menuBtn = message.querySelector('.message-menu-btn');
             if (menuBtn && !menuBtn.dataset.handlerAttached) {
-                menuBtn.addEventListener('click', function(e) {
+                menuBtn.addEventListener('click', function (e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    
+
                     // Ensure message has an ID
                     if (!message.dataset.messageId) {
                         message.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                     }
-                    
+
                     console.log('✅ Message menu button clicked for:', message.dataset.messageId);
                     showMessageContextMenu(e, message);
                 });
@@ -6980,32 +7089,32 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    
+
     // Attach handlers initially and on new messages
     attachMessageMenuHandlers();
-    
+
     // Re-attach handlers when new messages are added
     const messagesContainer = document.getElementById('messagesContainer');
     if (messagesContainer) {
-        const observer = new MutationObserver(function() {
+        const observer = new MutationObserver(function () {
             attachMessageMenuHandlers();
         });
         observer.observe(messagesContainer, { childList: true, subtree: true });
         console.log('✅ Message observer attached');
     }
-    
+
     console.log('✅ All fixes applied successfully');
 });
 // ===== ADDITIONAL MESSAGE MENU FIX =====
 // Add event delegation for message menu buttons to ensure they always work
-document.addEventListener('click', function(e) {
+document.addEventListener('click', function (e) {
     // Check if clicked element is a message menu button or its child
     const menuBtn = e.target.closest('.message-menu-btn');
     if (menuBtn) {
         console.log('🎯 Message menu button clicked via delegation!');
         e.preventDefault();
         e.stopPropagation();
-        
+
         // Find the parent message element
         const messageElement = menuBtn.closest('.message');
         if (messageElement) {
@@ -7013,7 +7122,7 @@ document.addEventListener('click', function(e) {
             if (!messageElement.dataset.messageId) {
                 messageElement.dataset.messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             }
-            
+
             console.log('📋 Calling showMessageContextMenu via delegation');
             showMessageContextMenu(e, messageElement);
         } else {

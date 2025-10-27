@@ -1048,7 +1048,7 @@ class CollaborationServer:
         print(f"[SERVER] ========================================")
 
     def _handle_video_missed(self, client_socket: socket.socket, message: Dict):
-        """Handle missed video call notifications"""
+        """Handle missed video call notifications - DO NOT STORE, just update UI"""
         session_id = message.get('session_id')
         session_type = message.get('session_type', 'global')
         chat_id = message.get('chat_id')
@@ -1065,14 +1065,11 @@ class CollaborationServer:
             'timestamp': timestamp
         }
 
+        # DO NOT STORE - just broadcast to update UI state
+        # The clients will update the existing video invite to show "Missed Call"
+        
         if session_type == 'global':
-            # Persist to global chat
-            self.chat_history.append(missed_msg)
-            storage.add_global_message(missed_msg)
-            if len(self.chat_history) > 1000:
-                self.chat_history = self.chat_history[-1000:]
-
-            # Broadcast to all
+            # Broadcast to all (but don't store in history)
             self.broadcast(json.dumps(missed_msg))
 
         elif session_type == 'private':
@@ -1081,10 +1078,7 @@ class CollaborationServer:
             if not other:
                 return
 
-            # Store in private history for both participants
-            storage.add_private_message(sender, other, missed_msg)
-
-            # Send to both if online
+            # Send to both if online (but don't store)
             with self.lock:
                 for sock, info in self.clients.items():
                     if info['username'] in [sender, other]:
@@ -1095,11 +1089,7 @@ class CollaborationServer:
             if group_id not in self.groups:
                 return
 
-            # Persist to group history
-            self.group_messages[group_id].append(missed_msg)
-            storage.add_group_message(group_id, missed_msg)
-
-            # Notify group members
+            # Notify group members (but don't store)
             self._notify_group_members(group_id, missed_msg)
 
     def _handle_audio_invite(self, client_socket: socket.socket, message: Dict):
@@ -1244,14 +1234,11 @@ class CollaborationServer:
             'timestamp': timestamp
         }
 
+        # DO NOT STORE - just broadcast to update UI state
+        # The clients will update the existing audio invite to show "Missed Call"
+        
         if session_type == 'global':
-            # Persist to global chat
-            self.chat_history.append(missed_msg)
-            storage.add_global_message(missed_msg)
-            if len(self.chat_history) > 1000:
-                self.chat_history = self.chat_history[-1000:]
-
-            # Broadcast to all
+            # Broadcast to all (but don't store in history)
             self.broadcast(json.dumps(missed_msg))
 
         elif session_type == 'private':
@@ -1260,10 +1247,7 @@ class CollaborationServer:
             if not other:
                 return
 
-            # Store in private history for both participants
-            storage.add_private_message(sender, other, missed_msg)
-
-            # Send to both if online
+            # Send to both if online (but don't store)
             with self.lock:
                 for sock, info in self.clients.items():
                     if info['username'] in [sender, other]:
@@ -1274,11 +1258,7 @@ class CollaborationServer:
             if group_id not in self.groups:
                 return
 
-            # Persist to group history
-            self.group_messages[group_id].append(missed_msg)
-            storage.add_group_message(group_id, missed_msg)
-
-            # Notify group members
+            # Notify group members (but don't store)
             self._notify_group_members(group_id, missed_msg)
 
     def handle_file_transfer(self, client_socket: socket.socket, address: Tuple):
