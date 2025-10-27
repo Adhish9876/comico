@@ -563,6 +563,97 @@ def start_video_call(chat_type, chat_id):
         return {'success': False, 'error': str(e)}
 
 @eel.expose
+def start_audio_call(chat_type, chat_id):
+    """Start an audio call"""
+    try:
+        requests = get_requests()
+        
+        # Determine session name
+        if chat_type == 'global':
+            session_name = 'Global Audio Call'
+        elif chat_type == 'private':
+            session_name = f'Private Audio Call'
+        elif chat_type == 'group':
+            session_name = f'Group Audio Call - {chat_id}'
+        else:
+            session_name = 'Audio Call'
+        
+        print(f"[CLIENT] Audio Chat ID: {chat_id}")
+        print(f"[CLIENT] Audio Session Name: {session_name}")
+        print(f"[CLIENT] Audio Chat Type: {chat_type}")
+        
+        # Call audio server API to create session with chat_id
+        response = requests.post('https://localhost:5000/api/create_audio_session', json={
+            'session_type': chat_type,
+            'session_name': session_name,
+            'creator': state.username,
+            'chat_id': chat_id  # CRITICAL: Pass chat_id to audio server
+        }, verify=False)  # Disable SSL verification for self-signed certificate
+        
+        if response.status_code != 200:
+            return {'success': False, 'error': 'Failed to create audio session'}
+        
+        result = response.json()
+        
+        if result.get('success'):
+            session_id = result['session_id']
+            link = result['link']
+            
+            print(f"[CLIENT] Audio session created: {session_id}")
+            print(f"[CLIENT] Audio link: {link}")
+            print(f"[CLIENT] Chat type: {chat_type}, Chat ID: {chat_id}")
+            
+            # Send audio invite to appropriate recipients
+            if chat_type == 'global':
+                message_type = 'audio_invite'
+                message_data = {
+                    'type': message_type,
+                    'sender': state.username,
+                    'session_id': session_id,
+                    'link': link,
+                    'timestamp': datetime.now().strftime("%I:%M %p")
+                }
+                print(f"[CLIENT] Sending global audio invite")
+            elif chat_type == 'private':
+                message_type = 'audio_invite_private'
+                message_data = {
+                    'type': message_type,
+                    'sender': state.username,
+                    'receiver': chat_id,
+                    'session_id': session_id,
+                    'link': link,
+                    'timestamp': datetime.now().strftime("%I:%M %p")
+                }
+                print(f"[CLIENT] Sending private audio invite to: {chat_id}")
+            elif chat_type == 'group':
+                message_type = 'audio_invite_group'
+                message_data = {
+                    'type': message_type,
+                    'sender': state.username,
+                    'group_id': chat_id,
+                    'session_id': session_id,
+                    'link': link,
+                    'timestamp': datetime.now().strftime("%I:%M %p")
+                }
+                print(f"[CLIENT] Sending group audio invite to group: {chat_id}")
+            else:
+                return {'success': False, 'error': 'Invalid chat type'}
+            
+            # Send the audio invite message to server
+            if state.connected and state.socket:
+                state.socket.send((json.dumps(message_data) + '\n').encode('utf-8'))
+                print(f"[CLIENT] Audio invite message sent successfully")
+            else:
+                print(f"[CLIENT] ERROR: Not connected or no socket available")
+            
+            return result
+        else:
+            return result
+    except Exception as e:
+        print(f"[CLIENT] Audio call error: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
 def get_chat_history():
     """Get current chat history"""
     print("[CLIENT] get_chat_history called")

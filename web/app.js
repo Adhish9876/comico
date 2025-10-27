@@ -645,6 +645,7 @@ const globalNetworkItem = document.getElementById('globalNetworkItem');
 const noUsersMsg = document.getElementById('noUsersMsg');
 const noGroupsMsg = document.getElementById('noGroupsMsg');
 const refreshUsersBtn = document.getElementById('refreshUsersBtn');
+const audioCallBtn = document.getElementById('audioCallBtn');
 const videoCallBtn = document.getElementById('videoCallBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsModal = document.getElementById('settingsModal');
@@ -1762,6 +1763,73 @@ function handleMessage(message) {
             }
         }
     }
+    // Handle audio invites with proper storage
+    else if (msgType === 'audio_invite') {
+        console.log('[AUDIO] Global audio invite received');
+        chatHistories.global.push(message);
+        
+        // Display the invite if we're viewing global chat
+        if (currentChatType === 'global') {
+            if (message.is_acknowledgment) {
+                // This is just an acknowledgment, don't show the invite again
+                return;
+            }
+            handleAudioInvite(message);
+        } else if (message.sender !== username) {
+            // We're not in global chat but someone else started a call
+            showNotification(`${message.sender} started an audio call in Global Network`, 'info');
+        }
+    }
+    else if (msgType === 'audio_invite_private') {
+        console.log('[AUDIO] Private audio invite received');
+        const otherUser = message.sender === username ? message.receiver : message.sender;
+
+        if (!chatHistories.private[otherUser]) {
+            chatHistories.private[otherUser] = [];
+        }
+        chatHistories.private[otherUser].push(message);
+
+        // Both sender and receiver should see the join button if they're viewing the chat
+        if (currentChatType === 'private' && currentChatTarget === otherUser) {
+            if (message.is_acknowledgment) {
+                // This is just an acknowledgment, don't show the invite again
+                return;
+            }
+            handleAudioInvite(message);
+        } else if (message.sender !== username) {
+            // We're the receiver but not viewing this chat
+            showNotification(`${message.sender} started an audio call`, 'info');
+        }
+    }
+    else if (msgType === 'audio_invite_group') {
+        console.log('[AUDIO] Group audio invite received');
+
+        if (!chatHistories.group[message.group_id]) {
+            chatHistories.group[message.group_id] = [];
+        }
+        chatHistories.group[message.group_id].push(message);
+
+        // Display the invite if we're viewing this group chat
+        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+            if (message.is_acknowledgment) {
+                // This is just an acknowledgment, don't show the invite again
+                return;
+            }
+            handleAudioInvite(message);
+        } else if (message.sender !== username) {
+            // We're not viewing this group but someone else started a call
+            showNotification(`${message.sender} started an audio call in group`, 'info');
+        }
+    }
+    else if (msgType === 'audio_missed') {
+        // Only handle the missed call state, don't show AudioServer system message
+        if (message.sender === 'AudioServer') {
+            // Silently update the call states without showing a system message
+            handleAudioMissed(message);
+            return; // Don't add to chat history
+        }
+        handleAudioMissed(message);
+    }
     // Handle video invites with proper storage
     else if (msgType === 'video_invite') {
         console.log('[VIDEO] Global video invite received');
@@ -1900,7 +1968,9 @@ function renderCurrentChat(preserveScroll = true) {
                 insertNewMessagesDivider();
             }
             
-            if (msg.type === 'video_invite') {
+            if (msg.type === 'audio_invite') {
+                handleAudioInvite(msg, true); // true = from history
+            } else if (msg.type === 'video_invite') {
                 handleVideoInvite(msg, true); // true = from history
             } else {
                 addMessage(msg, false); // Don't auto-scroll for each message
@@ -1915,7 +1985,9 @@ function renderCurrentChat(preserveScroll = true) {
                 insertNewMessagesDivider();
             }
             
-            if (msg.type === 'video_invite_private') {
+            if (msg.type === 'audio_invite_private') {
+                handleAudioInvite(msg, true); // true = from history
+            } else if (msg.type === 'video_invite_private') {
                 handleVideoInvite(msg, true); // true = from history
             } else {
                 addMessage(msg, false);
@@ -1932,7 +2004,9 @@ function renderCurrentChat(preserveScroll = true) {
                 insertNewMessagesDivider();
             }
             
-            if (msg.type === 'video_invite_group') {
+            if (msg.type === 'audio_invite_group') {
+                handleAudioInvite(msg, true); // true = from history
+            } else if (msg.type === 'video_invite_group') {
                 handleVideoInvite(msg, true); // true = from history
             } else {
                 addMessage(msg, false);
@@ -2192,7 +2266,7 @@ function addMessage(message, autoScroll = true) {
         audioItem.appendChild(playBtn);
         content.appendChild(audioItem);
     }
-    else if (!['private_file', 'file_share', 'file_notification', 'group_file', 'audio_message', 'private_audio', 'group_audio', 'video_invite', 'video_invite_private', 'video_invite_group'].includes(message.type)) {
+    else if (!['private_file', 'file_share', 'file_notification', 'group_file', 'audio_message', 'private_audio', 'group_audio', 'audio_invite', 'audio_invite_private', 'audio_invite_group', 'video_invite', 'video_invite_private', 'video_invite_group'].includes(message.type)) {
         // Regular text message
         const bubble = document.createElement('div');
         bubble.className = 'message-bubble';
@@ -2506,6 +2580,186 @@ function handleVideoInvite(message, isFromHistory = false) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
+function handleAudioInvite(message, isFromHistory = false) {
+    const { sender, link, session_id } = message;
+    console.log('[AUDIO] Handling audio invite from', sender, 'isFromHistory:', isFromHistory);
+    
+    // Check if this call was marked as missed in localStorage
+    const missedCalls = JSON.parse(localStorage.getItem('missedAudioCalls') || '{}');
+    const wasMissed = missedCalls[session_id];
+    
+    const isMissed = message.is_missed || wasMissed || false;
+    const missedTime = message.missed_at || (wasMissed ? wasMissed.timestamp : '');
+    
+    // Determine if this is the user's own audio call
+    const isOwn = sender === username;
+    
+    // Create wrapper message div
+    const messageWrapper = document.createElement('div');
+    messageWrapper.className = isOwn ? 'message own' : 'message';
+    if (session_id) messageWrapper.dataset.sessionId = session_id;
+    
+    // Create avatar
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    avatar.textContent = sender.charAt(0).toUpperCase();
+    
+    // Create content wrapper
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    
+    // Create the audio message div (this will be the inner content)
+    const audioMessage = document.createElement('div');
+    audioMessage.style.display = 'contents';
+    if (session_id) audioMessage.dataset.sessionId = session_id;
+    
+    // Show modal ONLY for real-time incoming calls (not historical ones, not your own calls)
+    if (!isMissed && sender !== username && !isFromHistory) {
+        showIncomingAudioCallModal(sender, link, session_id);
+    }
+
+    if (isMissed) {
+        // Reduced size and updated styling for missed call message
+        audioMessage.innerHTML = `
+       <div style="background: #2a2828;
+            border: 1px solid #3d3838; 
+            border-radius: 8px; 
+            padding: 16px; 
+            margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            max-width: 380px;
+            width: fit-content;
+            min-width: 320px;">
+    <div style="display: flex; 
+                align-items: center; 
+                gap: 12px; 
+                margin-bottom: 12px;">
+        <div style="font-size: 26px; 
+                    line-height: 1; 
+                    flex-shrink: 0;
+                    filter: grayscale(40%) brightness(0.7);
+                    opacity: 0.8;">🔇</div>
+        <div style="flex: 1; 
+                    min-width: 0;">
+            <div style="font-weight: 500; 
+                        font-size: 14px; 
+                        color: #c4c0c0; 
+                        margin-bottom: 4px; 
+                        line-height: 1.4;">
+                ${sender} started an audio call
+            </div>
+            <div style="font-size: 11px; 
+                        color: #857f7f; 
+                        line-height: 1.3;">
+                ${message.timestamp || new Date().toLocaleTimeString()}
+            </div>
+        </div>
+    </div>
+    <button class="join-call-btn" 
+            disabled
+            style="width: 100%; 
+                   background: #484444; 
+                   border: 1px solid #524e4e; 
+                   border-radius: 6px; 
+                   padding: 10px 12px; 
+                   color: #908a8a; 
+                   font-weight: 500; 
+                   font-size: 13px; 
+                   cursor: not-allowed; 
+                   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                   text-transform: uppercase;
+                   letter-spacing: 0.8px;
+                   display: flex;
+                   align-items: center;
+                   justify-content: center;
+                   gap: 8px;
+                   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+                   opacity: 0.7;">
+        <span style="filter: grayscale(40%) brightness(0.7);">🔇</span>
+        <span>Missed Call (${missedTime})</span>
+    </button>
+</div>
+
+        `;
+    } else {
+        // Reduced size and updated styling for active audio call invitation
+        audioMessage.innerHTML = `
+       <div style="background: #2a2828;
+            border: 1px solid #3d3838; 
+            border-radius: 8px; 
+            padding: 16px; 
+            margin: 8px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            max-width: 380px;
+            width: fit-content;
+            min-width: 320px;">
+    <div style="display: flex; 
+                align-items: center; 
+                gap: 12px; 
+                margin-bottom: 12px;">
+        <div style="font-size: 26px; 
+                    line-height: 1; 
+                    flex-shrink: 0;
+                    filter: grayscale(20%) brightness(0.9);">🎙️</div>
+        <div style="flex: 1; 
+                    min-width: 0;">
+            <div style="font-weight: 500; 
+                        font-size: 14px; 
+                        color: #e0dede; 
+                        margin-bottom: 4px; 
+                        line-height: 1.4;">
+                ${sender} started an audio call
+            </div>
+            <div style="font-size: 11px; 
+                        color: #9a9696; 
+                        line-height: 1.3;">
+                ${message.timestamp || new Date().toLocaleTimeString()}
+            </div>
+        </div>
+    </div>
+    <button class="join-call-btn" 
+            onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'audio_call', 'width=800,height=600')"
+            style="width: 100%; 
+                   background: linear-gradient(135deg, #00b8d4, #00b8d4); 
+                   border: 1px solid #00acc1; 
+                   border-radius: 6px; 
+                   padding: 10px 12px; 
+                   color: #ffffff; 
+                   font-weight: 600; 
+                   font-size: 13px; 
+                   cursor: pointer; 
+                   transition: all 0.2s ease;
+                   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                   text-transform: uppercase;
+                   letter-spacing: 0.8px;
+                   display: flex;
+                   align-items: center;
+                   justify-content: center;
+                   gap: 8px;
+                   box-shadow: 0 2px 6px #00b8d4;"
+            onmouseover="this.style.background='linear-gradient(135deg, #00acc1, #00b8d4)'; this.style.boxShadow='0 4px 12px rgba(0, 184, 212, 0.6)';"
+            onmouseout="this.style.background='linear-gradient(135deg, #00b8d4, #00b8d4)'; this.style.boxShadow='0 2px 6px rgba(0, 184, 212, 0.4)';">
+        <span>🎙️</span>
+        <span>Join Audio Call</span>
+    </button>
+</div>
+
+
+        `;
+    }
+    
+    // Append audio message to content wrapper
+    content.appendChild(audioMessage);
+    
+    // Build the message structure: avatar + content
+    messageWrapper.appendChild(avatar);
+    messageWrapper.appendChild(content);
+    
+    // Append to messages container
+    messagesContainer.appendChild(messageWrapper);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
 function showIncomingCallModal(sender, link, sessionId) {
     // Check if this call has been ignored
     const ignoredCalls = JSON.parse(localStorage.getItem('ignoredVideoCalls') || '{}');
@@ -2636,11 +2890,142 @@ function handleVideoMissed(message) {
     }
 }
 
+function showIncomingAudioCallModal(sender, link, sessionId) {
+    // Check if this call has been ignored
+    const ignoredCalls = JSON.parse(localStorage.getItem('ignoredAudioCalls') || '{}');
+    if (ignoredCalls[sessionId]) {
+        console.log('[AUDIO] Call already ignored, not showing modal');
+        return;
+    }
+    
+    // Remove any existing modal
+    const existing = document.getElementById('incomingAudioCallModal');
+    if (existing) existing.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'incomingAudioCallModal';
+    modal.innerHTML = `
+        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+            <div style="background: linear-gradient(135deg, #2d3142, #1a1d29); border: 3px solid #00b8d4; border-radius: 16px; padding: 32px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0, 184, 212, 0.6); animation: slideIn 0.3s ease;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="font-size: 64px; margin-bottom: 16px; animation: pulse 2s infinite;">🎙️</div>
+                    <h2 style="color: var(--text-bright); font-family: 'Bangers', cursive; font-size: 24px; margin: 0 0 8px 0; letter-spacing: 2px;">${sender} is calling...</h2>
+                    <p style="color: var(--text-muted); font-size: 14px; margin: 0;">Incoming audio call</p>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                    <button id="answerAudioCallBtn" style="flex: 1; background: linear-gradient(135deg, #00b8d4, #0097a7); border: none; border-radius: 8px; padding: 14px; color: white; font-weight: 600; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 12px rgba(0, 184, 212, 0.4); transition: all 0.2s;">
+                        📞 Answer
+                    </button>
+                    <button id="ignoreAudioCallBtn" style="flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; color: #bbb; font-weight: 600; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">
+                        ❌ Ignore
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // Add hover effects and click handlers
+    const answerBtn = document.getElementById('answerAudioCallBtn');
+    const ignoreBtn = document.getElementById('ignoreAudioCallBtn');
+    
+    answerBtn.onmouseover = () => answerBtn.style.transform = 'scale(1.05)';
+    answerBtn.onmouseout = () => answerBtn.style.transform = 'scale(1)';
+    answerBtn.onclick = () => {
+        // Remove from ignored calls when answering
+        const ignoredCalls = JSON.parse(localStorage.getItem('ignoredAudioCalls') || '{}');
+        if (ignoredCalls[sessionId]) {
+            delete ignoredCalls[sessionId];
+            localStorage.setItem('ignoredAudioCalls', JSON.stringify(ignoredCalls));
+        }
+        window.open(`${link}?username=${encodeURIComponent(username)}`, 'audio_call', 'width=800,height=600');
+        modal.remove();
+    };
+    
+    ignoreBtn.onmouseover = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.15)'; ignoreBtn.style.color = '#fff'; };
+    ignoreBtn.onmouseout = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.1)'; ignoreBtn.style.color = '#bbb'; };
+    ignoreBtn.onclick = () => {
+        // Mark this call as ignored in localStorage
+        const ignoredCalls = JSON.parse(localStorage.getItem('ignoredAudioCalls') || '{}');
+        ignoredCalls[sessionId] = true;
+        localStorage.setItem('ignoredAudioCalls', JSON.stringify(ignoredCalls));
+        console.log('[AUDIO] Call ignored and saved:', sessionId);
+        modal.remove();
+    };
+    
+    // Auto-remove modal after 30 seconds
+    setTimeout(() => {
+        if (document.getElementById('incomingAudioCallModal')) {
+            modal.remove();
+        }
+    }, 30000);
+}
+
+function handleAudioMissed(message) {
+    const sessionId = message.session_id;
+    const timestamp = message.timestamp || getCurrentTime();
+    if (!sessionId) return;
+
+    console.log('[AUDIO] Handling missed call for session:', sessionId);
+    
+    // Close incoming call modal if it's open
+    const modal = document.getElementById('incomingAudioCallModal');
+    if (modal) modal.remove();
+    
+    // Remove from ignored calls (since it's now officially missed)
+    const ignoredCalls = JSON.parse(localStorage.getItem('ignoredAudioCalls') || '{}');
+    if (ignoredCalls[sessionId]) {
+        delete ignoredCalls[sessionId];
+        localStorage.setItem('ignoredAudioCalls', JSON.stringify(ignoredCalls));
+    }
+
+    // Store missed call state in localStorage to persist across tab switches
+    const missedCalls = JSON.parse(localStorage.getItem('missedAudioCalls') || '{}');
+    missedCalls[sessionId] = {
+        timestamp: timestamp,
+        session_type: message.session_type,
+        chat_id: message.chat_id
+    };
+    localStorage.setItem('missedAudioCalls', JSON.stringify(missedCalls));
+
+    // Find all audio invite messages with this session ID
+    const selectors = document.querySelectorAll(`[data-session-id="${sessionId}"]`);
+    console.log('[AUDIO] Found', selectors.length, 'invite messages to update');
+    
+    selectors.forEach(el => {
+        const btn = el.querySelector('.join-call-btn');
+        if (btn && !btn.disabled) {  // Only update if not already disabled
+            console.log('[AUDIO] Updating button to missed call');
+            btn.disabled = true;
+            btn.textContent = `🔇 Missed Call (${timestamp})`;
+            btn.style.background = 'linear-gradient(135deg, #555, #777)';
+            btn.style.cursor = 'default';
+            btn.onmouseover = null;
+            btn.onmouseout = null;
+        }
+    });
+    
+    // Also update in stored history
+    if (message.session_type === 'global') {
+        updateVideoInviteInHistory(chatHistories.global, sessionId, timestamp);
+    } else if (message.session_type === 'private' && message.chat_id) {
+        const otherUser = message.chat_id;
+        if (chatHistories.private[otherUser]) {
+            updateVideoInviteInHistory(chatHistories.private[otherUser], sessionId, timestamp);
+        }
+    } else if (message.session_type === 'group' && message.chat_id) {
+        if (chatHistories.group[message.chat_id]) {
+            updateVideoInviteInHistory(chatHistories.group[message.chat_id], sessionId, timestamp);
+        }
+    }
+}
+
 function updateVideoInviteInHistory(history, sessionId, timestamp) {
     // Find and mark the video invite as missed in history
     for (let msg of history) {
         if (msg.session_id === sessionId && 
-            (msg.type === 'video_invite' || msg.type === 'video_invite_private' || msg.type === 'video_invite_group')) {
+            (msg.type === 'audio_invite' || msg.type === 'audio_invite_private' || msg.type === 'audio_invite_group' || 
+             msg.type === 'video_invite' || msg.type === 'video_invite_private' || msg.type === 'video_invite_group')) {
             msg.is_missed = true;
             msg.missed_at = timestamp;
             console.log('[VIDEO] Marked invite as missed in history');
@@ -3290,6 +3675,63 @@ globalNetworkItem.addEventListener('click', async function() {
             eel.send_message('request_chat_history', '', {})();
         }
     }, 1000);
+});
+
+// ===== AUDIO CALL =====
+audioCallBtn.addEventListener('click', async () => {
+    if (!currentChatType) {
+        showNotification('Select a chat first', 'warning');
+        return;
+    }
+    
+    // Validate that we have the required chat target for non-global calls
+    if (currentChatType === 'private' && !currentChatTarget) {
+        showNotification('Please select a user for private audio call', 'warning');
+        return;
+    }
+    
+    if (currentChatType === 'group' && !currentChatTarget) {
+        showNotification('Please select a group for group audio call', 'warning');
+        return;
+    }
+    
+    // Determine chat ID to pass to audio server
+    let chatId;
+    if (currentChatType === 'global') {
+        chatId = 'global';
+    } else if (currentChatType === 'private' || currentChatType === 'group') {
+        chatId = currentChatTarget;
+    } else {
+        showNotification('Invalid chat type', 'error');
+        return;
+    }
+    
+    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' : 
+                           currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
+                           `Group chat`;
+    
+    if (!confirm(`Start audio call in ${chatTypeDisplay}?`)) {
+        return;
+    }
+    
+    console.log(`[AUDIO] Starting ${currentChatType} audio call with chat_id: ${chatId}`);
+    
+    try {
+        const result = await eel.start_audio_call(currentChatType, chatId)();
+        
+        if (result.success) {
+            // Open audio call window immediately
+            window.open(`${result.link}?username=${encodeURIComponent(username)}`, 'audio_call', 'width=800,height=600');
+            showNotification('Audio call started!', 'success');
+            
+            // Note: The audio invite message will be displayed when the server broadcasts it back
+        } else {
+            showNotification(`Failed to start call: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('[AUDIO] Error starting audio call:', error);
+        showNotification('Error starting audio call', 'error');
+    }
 });
 
 // ===== VIDEO CALL =====

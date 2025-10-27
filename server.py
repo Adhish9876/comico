@@ -350,6 +350,10 @@ class CollaborationServer:
             'video_invite': self._handle_video_invite,
             'video_invite_private': self._handle_video_invite_private,
             'video_invite_group': self._handle_video_invite_group,
+            'audio_invite': self._handle_audio_invite,
+            'audio_invite_private': self._handle_audio_invite_private,
+            'audio_invite_group': self._handle_audio_invite_group,
+            'audio_missed': self._handle_audio_missed,
             'video_missed': self._handle_video_missed,
             'get_users': self._handle_get_users,
             'request_groups': self._handle_request_groups,
@@ -1058,6 +1062,185 @@ class CollaborationServer:
             'session_type': session_type,
             'chat_id': chat_id,
             'content': f"Missed video call (session {session_id}) at {timestamp}",
+            'timestamp': timestamp
+        }
+
+        if session_type == 'global':
+            # Persist to global chat
+            self.chat_history.append(missed_msg)
+            storage.add_global_message(missed_msg)
+            if len(self.chat_history) > 1000:
+                self.chat_history = self.chat_history[-1000:]
+
+            # Broadcast to all
+            self.broadcast(json.dumps(missed_msg))
+
+        elif session_type == 'private':
+            # chat_id should be the other user's username
+            other = chat_id
+            if not other:
+                return
+
+            # Store in private history for both participants
+            storage.add_private_message(sender, other, missed_msg)
+
+            # Send to both if online
+            with self.lock:
+                for sock, info in self.clients.items():
+                    if info['username'] in [sender, other]:
+                        self._send_to_client(sock, missed_msg)
+
+        elif session_type == 'group':
+            group_id = chat_id
+            if group_id not in self.groups:
+                return
+
+            # Persist to group history
+            self.group_messages[group_id].append(missed_msg)
+            storage.add_group_message(group_id, missed_msg)
+
+            # Notify group members
+            self._notify_group_members(group_id, missed_msg)
+
+    def _handle_audio_invite(self, client_socket: socket.socket, message: Dict):
+        """Handle global audio call invite"""
+        sender = message.get('sender')
+        session_id = message.get('session_id')
+        link = message.get('link')
+        timestamp = message.get('timestamp', self._timestamp())
+
+        print(f"[SERVER] ========================================")
+        print(f"[SERVER] GLOBAL AUDIO INVITE from {sender}")
+        print(f"[SERVER] Session ID: {session_id}")
+        print(f"[SERVER] Link: {link}")
+        print(f"[SERVER] ========================================")
+
+        # Create audio invite message
+        audio_invite = {
+            'type': 'audio_invite',
+            'sender': sender,
+            'session_id': session_id,
+            'link': link,
+            'content': f"🎙️ {sender} started an audio call",
+            'timestamp': timestamp
+        }
+
+        # Add to global chat history
+        self.chat_history.append(audio_invite)
+        storage.add_global_message(audio_invite)
+        if len(self.chat_history) > 1000:
+            self.chat_history = self.chat_history[-1000:]
+
+        # Broadcast to all clients
+        self.broadcast(json.dumps(audio_invite), exclude=None)
+
+    def _handle_audio_invite_private(self, client_socket: socket.socket, message: Dict):
+        """Handle private audio call invite"""
+        sender = message.get('sender')
+        receiver = message.get('receiver')
+        session_id = message.get('session_id')
+        link = message.get('link')
+        timestamp = message.get('timestamp', self._timestamp())
+
+        print(f"[SERVER] ========================================")
+        print(f"[SERVER] PRIVATE AUDIO INVITE from {sender} to {receiver}")
+        print(f"[SERVER] Session ID: {session_id}")
+        print(f"[SERVER] Link: {link}")
+        print(f"[SERVER] ========================================")
+
+        # Create audio invite message
+        audio_invite_message = {
+            'type': 'audio_invite_private',
+            'sender': sender,
+            'receiver': receiver,
+            'session_id': session_id,
+            'link': link,
+            'content': f"🎙️ {sender} started a private audio call",
+            'timestamp': timestamp
+        }
+
+        # Store in private chat history
+        storage.add_private_message(sender, receiver, audio_invite_message)
+
+        # Send to both sender and receiver if they're online
+        with self.lock:
+            for sock, info in self.clients.items():
+                if info['username'] == receiver:
+                    print(f"[SERVER] Sending audio invite to receiver: {receiver}")
+                    self._send_to_client(sock, audio_invite_message)
+                elif info['username'] == sender:
+                    print(f"[SERVER] Sending audio invite confirmation to sender: {sender}")
+                    self._send_to_client(sock, audio_invite_message)
+
+        print(f"[SERVER] Sent audio invite to sender {sender}")
+
+    def _handle_audio_invite_group(self, client_socket: socket.socket, message: Dict):
+        """Handle group audio call invite"""
+        sender = message.get('sender')
+        group_id = message.get('group_id')
+        session_id = message.get('session_id')
+        link = message.get('link')
+        timestamp = message.get('timestamp', self._timestamp())
+
+        print(f"[SERVER] ========================================")
+        print(f"[SERVER] GROUP AUDIO INVITE from {sender} to group {group_id}")
+        print(f"[SERVER] Session ID: {session_id}")
+        print(f"[SERVER] Link: {link}")
+        print(f"[SERVER] ========================================")
+
+        # Validate group exists
+        if group_id not in self.groups:
+            print(f"[SERVER] ERROR: Group {group_id} not found")
+            self._send_to_client(client_socket, {
+                'type': 'system',
+                'content': 'Error: Invalid group ID for audio call'
+            })
+            return
+
+        # Create audio invite message
+        audio_invite_message = {
+            'type': 'audio_invite_group',
+            'sender': sender,
+            'group_id': group_id,
+            'session_id': session_id,
+            'link': link,
+            'content': f"🎙️ {sender} started a group audio call",
+            'timestamp': timestamp
+        }
+
+        # Store in group history
+        if group_id not in self.group_messages:
+            self.group_messages[group_id] = []
+        self.group_messages[group_id].append(audio_invite_message)
+        storage.add_group_message(group_id, audio_invite_message)
+
+        # Send to all group members
+        sent_count = 0
+        with self.lock:
+            for sock, info in self.clients.items():
+                if info['username'] in self.groups[group_id]['members']:
+                    print(f"[SERVER] Sending audio invite to group member: {info['username']}")
+                    self._send_to_client(sock, audio_invite_message)
+                    sent_count += 1
+        
+        print(f"[SERVER] Successfully sent audio invite to {sent_count} members")
+        print(f"[SERVER] ========================================")
+
+    def _handle_audio_missed(self, client_socket: socket.socket, message: Dict):
+        """Handle missed audio call notifications"""
+        session_id = message.get('session_id')
+        session_type = message.get('session_type', 'global')
+        chat_id = message.get('chat_id')
+        sender = message.get('sender', 'AudioServer')
+        timestamp = message.get('timestamp', self._timestamp())
+
+        missed_msg = {
+            'type': 'audio_missed',
+            'sender': sender,
+            'session_id': session_id,
+            'session_type': session_type,
+            'chat_id': chat_id,
+            'content': f"Missed audio call (session {session_id}) at {timestamp}",
             'timestamp': timestamp
         }
 

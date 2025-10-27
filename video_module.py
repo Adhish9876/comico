@@ -25,6 +25,8 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Active video sessions
 video_sessions: Dict[str, Dict] = {}
+# Active audio sessions
+audio_sessions: Dict[str, Dict] = {}
 
 # Track users in each session/room
 _users_in_room = {}  # room_id -> [sid, sid, ...]
@@ -33,7 +35,7 @@ _name_of_sid = {}    # sid -> display_name
 
 @app.route('/')
 def index():
-    return "Shadow Nexus Video Server Running"
+    return "Shadow Nexus Media Server Running - Video & Audio Calls"
 
 @app.route('/video/<session_id>')
 def video_room(session_id):
@@ -46,6 +48,18 @@ def video_room(session_id):
                          session_id=session_id,
                          session_type=session.get('type', 'global'),
                          session_name=session.get('name', 'Video Call'))
+
+@app.route('/audio/<session_id>')
+def audio_room(session_id):
+    """Audio call room page"""
+    if session_id not in audio_sessions:
+        return "Invalid session", 404
+    
+    session = audio_sessions[session_id]
+    return render_template('audio_room.html', 
+                         session_id=session_id,
+                         session_type=session.get('type', 'global'),
+                         session_name=session.get('name', 'Audio Call'))
 
 @app.route('/api/create_session', methods=['POST'])
 def api_create_session():
@@ -64,16 +78,33 @@ def api_create_session():
         'link': f'https://localhost:5000/video/{session_id}'
     })
 
+@app.route('/api/create_audio_session', methods=['POST'])
+def api_create_audio_session():
+    """API endpoint to create audio session"""
+    data = request.get_json()
+    session_type = data.get('session_type', 'global')
+    session_name = data.get('session_name', 'Audio Call')
+    creator = data.get('creator', 'Unknown')
+    chat_id = data.get('chat_id', 'global')
+    
+    session_id = create_audio_session(session_type, session_name, creator, chat_id)
+    
+    return jsonify({
+        'success': True,
+        'session_id': session_id,
+        'link': f'https://localhost:5000/audio/{session_id}'
+    })
+
 @socketio.on('connect')
 def handle_connect():
     sid = request.sid
-    print(f"[VIDEO SERVER] Client connected: {sid}")
+    print(f"[MEDIA SERVER] Client connected: {sid}")
     emit('connected', {'sid': sid})
 
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid
-    print(f"[VIDEO SERVER] Client disconnected: {sid}")
+    print(f"[MEDIA SERVER] Client disconnected: {sid}")
     
     # Remove from room
     if sid in _room_of_sid:
@@ -88,7 +119,7 @@ def handle_disconnect():
             
             # CHECK IF ROOM IS NOW EMPTY
             if len(_users_in_room[room_id]) == 0:
-                print(f"[VIDEO SERVER] Room {room_id} is now empty - notifying chat server")
+                print(f"[MEDIA SERVER] Room {room_id} is now empty - notifying chat server")
                 _users_in_room.pop(room_id)
                 # Notify chat server that session is empty
                 notify_chat_server_session_empty(room_id)
@@ -96,16 +127,17 @@ def handle_disconnect():
         _room_of_sid.pop(sid)
         _name_of_sid.pop(sid)
         
-        print(f"[VIDEO SERVER] User <{sid}> left room <{room_id}>")
+        print(f"[MEDIA SERVER] User <{sid}> left room <{room_id}>")
 
 @socketio.on('join_session')
 def handle_join_session(data):
-    """Handle user joining video session (room) - mesh topology"""
+    """Handle user joining video or audio session (room) - mesh topology"""
     sid = request.sid
     room_id = data.get('session_id')
     username = data.get('username', 'Guest')
     
-    if room_id not in video_sessions:
+    # Check if session exists in either video or audio sessions
+    if room_id not in video_sessions and room_id not in audio_sessions:
         emit('error', {'message': 'Invalid session'})
         return
     
@@ -114,14 +146,16 @@ def handle_join_session(data):
     _room_of_sid[sid] = room_id
     _name_of_sid[sid] = username
     
-    print(f"[VIDEO SERVER] {username} <{sid}> joined session {room_id}")
+    # Determine session type for logging
+    session_type = "VIDEO" if room_id in video_sessions else "AUDIO"
+    print(f"[{session_type} SERVER] {username} <{sid}> joined session {room_id}")
     
     # Initialize room user list if needed
     if room_id not in _users_in_room:
         _users_in_room[room_id] = [sid]
         # First user in room
         emit('user-list', {'my_id': sid}, room=sid)
-        print(f"[VIDEO SERVER] First user in room {room_id}")
+        print(f"[{session_type} SERVER] First user in room {room_id}")
     else:
         # Existing users in room - send them to new user
         existing_users = {u_id: _name_of_sid[u_id] for u_id in _users_in_room[room_id]}
@@ -132,7 +166,7 @@ def handle_join_session(data):
         
         # Add new user to room
         _users_in_room[room_id].append(sid)
-        print(f"[VIDEO SERVER] New user joined. Room {room_id} now has {len(_users_in_room[room_id])} users")
+        print(f"[{session_type} SERVER] New user joined. Room {room_id} now has {len(_users_in_room[room_id])} users")
 
 @socketio.on('leave_session')
 def handle_leave_session(data):
@@ -147,11 +181,11 @@ def handle_leave_session(data):
         
         # Check if room is now empty
         if len(_users_in_room[room_id]) == 0:
-            print(f"[VIDEO SERVER] Room {room_id} is now empty after leave")
+            print(f"[MEDIA SERVER] Room {room_id} is now empty after leave")
             _users_in_room.pop(room_id)
             notify_chat_server_session_empty(room_id)
         
-        print(f"[VIDEO SERVER] User {sid} left room {room_id}")
+        print(f"[MEDIA SERVER] User {sid} left room {room_id}")
 
 @socketio.on('data')
 def handle_data(msg):
@@ -161,11 +195,11 @@ def handle_data(msg):
     msg_type = msg.get('type')
     
     if sender_sid != request.sid:
-        print(f"[VIDEO SERVER] WARNING: sender_id mismatch!")
+        print(f"[MEDIA SERVER] WARNING: sender_id mismatch!")
         return
     
     if msg_type != 'new-ice-candidate':
-        print(f"[VIDEO SERVER] {msg_type} from {sender_sid} to {target_sid}")
+        print(f"[MEDIA SERVER] {msg_type} from {sender_sid} to {target_sid}")
     
     # Forward to target
     socketio.emit('data', msg, room=target_sid)
@@ -177,7 +211,7 @@ def handle_hand_raise(data):
     user_id = data['user_id']
     raised = data['raised']
     
-    print(f"[VIDEO SERVER] Hand {'raised' if raised else 'lowered'} by {user_id}")
+    print(f"[MEDIA SERVER] Hand {'raised' if raised else 'lowered'} by {user_id}")
     
     emit('hand_raise', {
         'user_id': user_id,
@@ -190,7 +224,7 @@ def handle_screen_share(data):
     user_id = data['user_id']
     sharing = data['sharing']
     
-    print(f"[VIDEO SERVER] Screen {'share' if sharing else 'stop'} by {user_id}")
+    print(f"[MEDIA SERVER] Screen {'share' if sharing else 'stop'} by {user_id}")
     
     emit('screen_share', {
         'user_id': user_id,
@@ -203,7 +237,7 @@ def handle_reaction(data):
     user_id = data['user_id']
     emoji = data['emoji']
     
-    print(f"[VIDEO SERVER] Reaction {emoji} from {user_id}")
+    print(f"[MEDIA SERVER] Reaction {emoji} from {user_id}")
     
     emit('reaction', {
         'user_id': user_id,
@@ -235,27 +269,51 @@ def create_video_session(session_type: str, session_name: str, creator: str, cha
         'chat_id': chat_id,
         'created_at': datetime.now().isoformat()
     }
-    print(f"[VIDEO SERVER] Created session {session_id} ({session_type}) for chat {chat_id}")
+    print(f"[MEDIA SERVER] Created session {session_id} ({session_type}) for chat {chat_id}")
+    return session_id
+
+def create_audio_session(session_type: str, session_name: str, creator: str, chat_id: str) -> str:
+    """Create a new audio session"""
+    session_id = str(uuid.uuid4())[:8]
+    audio_sessions[session_id] = {
+        'id': session_id,
+        'type': session_type,
+        'name': session_name,
+        'creator': creator,
+        'chat_id': chat_id,
+        'created_at': datetime.now().isoformat()
+    }
+    print(f"[AUDIO SERVER] Created session {session_id} ({session_type}) for chat {chat_id}")
     return session_id
 
 def notify_chat_server_session_empty(session_id: str):
     
     try:
+        # Check if it's a video session first
         session = video_sessions.get(session_id)
+        session_type_prefix = 'video'
+        server_name = 'VideoServer'
+        
+        # If not found in video sessions, check audio sessions
         if not session:
-            print(f"[VIDEO SERVER] Session {session_id} not found in video_sessions")
+            session = audio_sessions.get(session_id)
+            session_type_prefix = 'audio'
+            server_name = 'AudioServer'
+        
+        if not session:
+            print(f"[SERVER] Session {session_id} not found in video or audio sessions")
             return
 
         payload = {
-            'type': 'video_missed',
-            'sender': 'VideoServer',
+            'type': f'{session_type_prefix}_missed',
+            'sender': server_name,
             'session_id': session_id,
             'session_type': session.get('type', 'global'),
             'chat_id': session.get('chat_id', 'global'),
             'timestamp': datetime.now().strftime('%I:%M %p')
         }
 
-        print(f"[VIDEO SERVER] Notifying chat server about empty session: {payload}")
+        print(f"[{server_name.upper()}] Notifying chat server about empty session: {payload}")
 
         # Connect to chat server TCP socket
         chat_host = 'localhost'
@@ -265,7 +323,7 @@ def notify_chat_server_session_empty(session_id: str):
         s.connect((chat_host, chat_port))
         
         # Send FAKE username first (server requires it) but mark as system
-        s.send((json.dumps({'username': '_VideoServer_System_'}) + '\n').encode('utf-8'))
+        s.send((json.dumps({'username': f'_{server_name}_System_'}) + '\n').encode('utf-8'))
         
         # Wait a tiny bit for server to process username
         import time as pytime
@@ -279,20 +337,21 @@ def notify_chat_server_session_empty(session_id: str):
         
         s.close()
     except Exception as e:
-        print(f"[VIDEO SERVER] Error notifying chat server: {str(e)}")
+        print(f"[MEDIA SERVER] Error notifying chat server: {str(e)}")
 
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("🎥 Shadow Nexus Video Server (WebRTC)")
+    print("🎥🎙️ Shadow Nexus Media Server (WebRTC)")
     print("="*60)
-    print("Video server starting on https://0.0.0.0:5000\n")
+    print("Media server starting on https://0.0.0.0:5000")
+    print("Supports both Video and Audio calls\n")
     
     # Create self-signed certificate if it doesn't exist
     cert_file = 'cert.pem'
     key_file = 'key.pem'
     
     if not os.path.exists(cert_file) or not os.path.exists(key_file):
-        print("[VIDEO SERVER] Generating self-signed certificate...")
+        print("[MEDIA SERVER] Generating self-signed certificate...")
         try:
             from cryptography import x509
             from cryptography.x509.oid import NameOID
@@ -347,14 +406,14 @@ if __name__ == '__main__':
                     encryption_algorithm=serialization.NoEncryption()
                 ))
             
-            print("[VIDEO SERVER] Certificate generated successfully\n")
+            print("[MEDIA SERVER] Certificate generated successfully\n")
         except ImportError:
-            print("[VIDEO SERVER] Installing cryptography library...")
+            print("[MEDIA SERVER] Installing cryptography library...")
             os.system("pip install cryptography")
-            print("[VIDEO SERVER] Please run the server again after installation\n")
+            print("[MEDIA SERVER] Please run the server again after installation\n")
             exit(1)
     
     # Run with HTTPS using Flask-SocketIO built-in server
-    print("[VIDEO SERVER] Server running on https://0.0.0.0:5000\n")
+    print("[MEDIA SERVER] Server running on https://0.0.0.0:5000\n")
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, 
                 certfile=cert_file, keyfile=key_file)
