@@ -40,6 +40,16 @@ class CollaborationServer:
         self.lock = threading.Lock()
         self.running = True
         
+        # Heartbeat tracking
+        self.client_last_seen: Dict[socket.socket, float] = {}
+        self.heartbeat_interval = 30  # Send heartbeat every 30 seconds
+        self.client_timeout = 90  # Consider client dead after 90 seconds of no response
+        
+        # Heartbeat tracking
+        self.client_last_seen: Dict[socket.socket, float] = {}
+        self.heartbeat_interval = 30  # Send heartbeat every 30 seconds
+        self.client_timeout = 90  # Consider client dead after 90 seconds of no response
+        
         print(f"Server initializing on {host}:{port} (chat) and {host}:{file_port} (files)")
         print(f"Loaded {len(self.chat_history)} historical global messages")
         print(f"Loaded {len(self.file_metadata)} historical files")
@@ -73,6 +83,10 @@ class CollaborationServer:
             
             file_thread = threading.Thread(target=self.accept_file_connections, daemon=True)
             file_thread.start()
+            
+            # Start heartbeat thread
+            heartbeat_thread = threading.Thread(target=self.heartbeat_monitor, daemon=True)
+            heartbeat_thread.start()
             
             self.accept_connections()
             
@@ -128,6 +142,7 @@ class CollaborationServer:
 
     def handle_client(self, client_socket: socket.socket, address: Tuple):
         """Handle communication with a connected client"""
+        import time
         username = None
         recv_buffer = ""
         is_system_connection = False
@@ -176,8 +191,10 @@ class CollaborationServer:
                 self.clients[client_socket] = {
                     'username': username,
                     'address': address,
-                    'connected_at': datetime.now()
+                    'connected_at': datetime.now(),
+                    'last_heartbeat': time.time()
                 }
+                self.client_last_seen[client_socket] = time.time()
                 if username not in self.recent_chats:
                     self.recent_chats[username] = []
             
@@ -190,7 +207,6 @@ class CollaborationServer:
             recv_buffer = leftover or ""
 
             # Small delay to ensure client receive thread is ready
-            import time
             time.sleep(0.2)
             
             self._send_welcome_messages(client_socket, username)
@@ -369,6 +385,8 @@ class CollaborationServer:
             'get_users': self._handle_get_users,
             'request_groups': self._handle_request_groups,
             'delete_message': self._handle_delete_message,
+            'ping': self._handle_ping,
+            'pong': self._handle_pong,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -1534,6 +1552,8 @@ class CollaborationServer:
                 if username is None:
                     username = self.clients[client_socket]['username']
                 del self.clients[client_socket]
+                if client_socket in self.client_last_seen:
+                    del self.client_last_seen[client_socket]
                 print(f"👋 User '{username}' disconnected")
             else:
                 print(f"[SERVER] Socket not found in clients list")
@@ -1676,6 +1696,94 @@ class CollaborationServer:
         else:
             print(f"   ❌ Failed to delete message")
 
+    def heartbeat_monitor(self):
+        """Monitor client connections and send heartbeats"""
+        import time
+        print("[HEARTBEAT] Starting heartbeat monitor")
+        
+        while self.running:
+            try:
+                current_time = time.time()
+                disconnected_clients = []
+                
+                with self.lock:
+                    clients_to_check = list(self.clients.items())
+                
+                for client_socket, client_info in clients_to_check:
+                    try:
+                        username = client_info.get('username', '')
+                        if username.startswith('_') and username.endswith('_System_'):
+                            continue
+                        
+                        last_seen = self.client_last_seen.get(client_socket, current_time)
+                        time_since_last_seen = current_time - last_seen
+                        
+                        if time_since_last_seen > self.client_timeout:
+                            print(f"[HEARTBEAT] Client {username} timed out ({time_since_last_seen:.1f}s)")
+                            disconnected_clients.append((client_socket, username))
+                        elif time_since_last_seen > self.heartbeat_interval:
+                            try:
+                                ping_msg = {
+                                    'type': 'ping',
+                                    'timestamp': current_time
+                                }
+                                client_socket.send((json.dumps(ping_msg) + '\n').encode('utf-8'))
+                                print(f"[HEARTBEAT] Sent ping to {username}")
+                            except Exception as e:
+                                print(f"[HEARTBEAT] Failed to send ping to {username}: {e}")
+                                disconnected_clients.append((client_socket, username))
+                    
+                    except Exception as e:
+                        print(f"[HEARTBEAT] Error checking client {client_info.get('username', 'Unknown')}: {e}")
+                        disconnected_clients.append((client_socket, client_info.get('username')))
+                
+                for client_socket, username in disconnected_clients:
+                    print(f"[HEARTBEAT] Cleaning up disconnected client: {username}")
+                    self.handle_disconnect(client_socket, username)
+                
+                time.sleep(10)
+                
+            except Exception as e:
+                print(f"[HEARTBEAT] Monitor error: {e}")
+                time.sleep(5)
+        
+        print("[HEARTBEAT] Heartbeat monitor stopped")
+
+    def _handle_ping(self, client_socket: socket.socket, message: Dict):
+        """Handle ping from client - respond with pong"""
+        import time
+        try:
+            pong_msg = {
+                'type': 'pong',
+                'timestamp': time.time()
+            }
+            client_socket.send((json.dumps(pong_msg) + '\n').encode('utf-8'))
+            
+            with self.lock:
+                self.client_last_seen[client_socket] = time.time()
+                if client_socket in self.clients:
+                    self.clients[client_socket]['last_heartbeat'] = time.time()
+            
+        except Exception as e:
+            username = self.clients.get(client_socket, {}).get('username', 'Unknown')
+            print(f"[HEARTBEAT] Error sending pong to {username}: {e}")
+
+    def _handle_pong(self, client_socket: socket.socket, message: Dict):
+        """Handle pong from client - update last seen time"""
+        import time
+        try:
+            with self.lock:
+                self.client_last_seen[client_socket] = time.time()
+                if client_socket in self.clients:
+                    self.clients[client_socket]['last_heartbeat'] = time.time()
+            
+            username = self.clients.get(client_socket, {}).get('username', 'Unknown')
+            print(f"[HEARTBEAT] Received pong from {username}")
+            
+        except Exception as e:
+            username = self.clients.get(client_socket, {}).get('username', 'Unknown')
+            print(f"[HEARTBEAT] Error handling pong from {username}: {e}")
+
     def cleanup(self):
         """Clean up server resources"""
         with self.lock:
@@ -1685,6 +1793,7 @@ class CollaborationServer:
                 except:
                     pass
             self.clients.clear()
+            self.client_last_seen.clear()
         
         try:
             self.server_socket.close()

@@ -65,7 +65,7 @@ eel.init('web')
 class ClientState:
     def __init__(self):
         self.username: Optional[str] = None
-        self.server_host = "172.20.10.9"
+        self.server_host = "172.20.10.3"
         self.server_port = 5555
         self.file_port = 5556
         self.audio_port = 5557
@@ -79,8 +79,41 @@ class ClientState:
         self.current_chat_type = 'global'
         self.current_chat_target = None
         self.audio_engine = None
+        self.last_ping_time = 0
+        self.heartbeat_interval = 30
 
 state = ClientState()
+
+# Heartbeat sender thread
+def send_heartbeat():
+    """Send periodic heartbeat to server to maintain connection"""
+    print(f"[HEARTBEAT] Starting heartbeat sender for {state.username}")
+    
+    while state.running and state.connected:
+        try:
+            current_time = time.time()
+            
+            if current_time - state.last_ping_time >= state.heartbeat_interval:
+                if state.socket and state.connected:
+                    try:
+                        ping_msg = {
+                            'type': 'ping',
+                            'timestamp': current_time
+                        }
+                        state.socket.send((json.dumps(ping_msg) + '\n').encode('utf-8'))
+                        state.last_ping_time = current_time
+                        print("[HEARTBEAT] Sent ping to server")
+                    except Exception as e:
+                        print(f"[HEARTBEAT] Failed to send ping: {e}")
+                        break
+            
+            time.sleep(5)
+            
+        except Exception as e:
+            print(f"[HEARTBEAT] Heartbeat sender error: {e}")
+            break
+    
+    print(f"[HEARTBEAT] Heartbeat sender stopped for {state.username}")
 
 # Socket receive thread
 def receive_messages():
@@ -117,8 +150,24 @@ def receive_messages():
                     try:
                         message = json.loads(message_data.decode('utf-8'))
                         
-                        # Store data locally for frontend to retrieve
+                        # Handle heartbeat messages
                         msg_type = message.get('type')
+                        if msg_type == 'ping':
+                            try:
+                                pong_msg = {
+                                    'type': 'pong',
+                                    'timestamp': time.time()
+                                }
+                                state.socket.send((json.dumps(pong_msg) + '\n').encode('utf-8'))
+                                print("[HEARTBEAT] Responded to server ping")
+                            except Exception as e:
+                                print(f"[HEARTBEAT] Failed to send pong: {e}")
+                            continue
+                        elif msg_type == 'pong':
+                            print("[HEARTBEAT] Received pong from server")
+                            continue
+                        
+                        # Store data locally for frontend to retrieve
                         if msg_type == 'chat_history':
                             state.last_chat_history = message.get('messages', [])
                         elif msg_type == 'user_list':
@@ -197,6 +246,10 @@ def connect_to_server(username: str, host: str, port: int):
         # Start receive thread
         thread = threading.Thread(target=receive_messages, daemon=True)
         thread.start()
+        
+        # Start heartbeat thread
+        heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
+        heartbeat_thread.start()
         
         print(f"[CLIENT] Connected as {username}")
         
@@ -492,7 +545,7 @@ def start_video_call(chat_type, chat_id):
         #print chat_type
         print(f"[CLIENT] Chat Type: {chat_type}")
         # Call video server API to create session with chat_id
-        response = requests.post('https://172.20.10.9:5000/api/create_session', json={
+        response = requests.post('https://172.20.10.3:5000/api/create_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,
@@ -583,7 +636,7 @@ def start_audio_call(chat_type, chat_id):
         print(f"[CLIENT] Audio Chat Type: {chat_type}")
         
         # Call audio server API to create session with chat_id
-        response = requests.post('https://172.20.10.9:5000/api/create_audio_session', json={
+        response = requests.post('https://172.20.10.3:5000/api/create_audio_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,
@@ -838,7 +891,7 @@ def find_available_port(start_port=8081, max_attempts=10):
         try:
             # Try to bind to the port
             test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            test_socket.bind(('172.20.10.9', port))
+            test_socket.bind(('172.20.10.3', port))
             test_socket.close()
             return port
         except OSError:

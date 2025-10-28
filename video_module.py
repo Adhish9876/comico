@@ -75,7 +75,7 @@ def api_create_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'https://172.20.10.9:5000/video/{session_id}'
+        'link': f'https://172.20.10.3:5000/video/{session_id}'
     })
 
 @app.route('/api/create_audio_session', methods=['POST'])
@@ -92,7 +92,7 @@ def api_create_audio_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'https://172.20.10.9:5000/audio/{session_id}'
+        'link': f'https://172.20.10.3:5000/audio/{session_id}'
     })
 
 @socketio.on('connect')
@@ -277,6 +277,19 @@ def handle_audio_level(data):
         'is_speaking': is_speaking
     }, room=session_id, skip_sid=request.sid)
 
+@socketio.on('camera_toggle')
+def handle_camera_toggle(data):
+    session_id = data['session_id']
+    user_id = data['user_id']
+    camera_enabled = data['camera_enabled']
+    
+    print(f"[MEDIA SERVER] Camera {'enabled' if camera_enabled else 'disabled'} by {user_id}")
+    
+    emit('camera_toggle', {
+        'user_id': user_id,
+        'camera_enabled': camera_enabled
+    }, room=session_id, skip_sid=request.sid)
+
 def create_video_session(session_type: str, session_name: str, creator: str, chat_id: str) -> str:
     """Create a new video session"""
     session_id = str(uuid.uuid4())[:8]
@@ -335,7 +348,7 @@ def notify_chat_server_session_empty(session_id: str):
         print(f"[{server_name.upper()}] Notifying chat server about empty session: {payload}")
 
         # Connect to chat server TCP socket
-        chat_host = '172.20.10.9'
+        chat_host = '172.20.10.3'
         chat_port = 5555
         s = py_socket.socket(py_socket.AF_INET, py_socket.SOCK_STREAM)
         s.settimeout(5.0)
@@ -390,7 +403,7 @@ if __name__ == '__main__':
             
             # Generate certificate
             subject = issuer = x509.Name([
-                x509.NameAttribute(NameOID.COMMON_NAME, u"172.20.10.9"),
+                x509.NameAttribute(NameOID.COMMON_NAME, u"172.20.10.3"),
             ])
             
             cert = x509.CertificateBuilder().subject_name(
