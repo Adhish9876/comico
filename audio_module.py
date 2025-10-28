@@ -44,7 +44,7 @@ def get_audio_format():
 class AudioEngine:
     """Handles all audio operations"""
     
-    def __init__(self, username: str, server_host: str = 'localhost', audio_port: int = 5557):
+    def __init__(self, username: str, server_host: str = '192.168.137.175', audio_port: int = 5557):
         self.username = username
         self.server_host = server_host
         self.audio_port = audio_port
