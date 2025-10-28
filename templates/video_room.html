@@ -965,30 +965,42 @@ const participantCount = document.getElementById('participantCount');
 const connectingOverlay = document.getElementById('connectingOverlay');
 
     const PC_CONFIG = {
-        iceServers: [
-            {
-                urls: ['stun:stun.l.google.com:19302', 
-                       'stun:stun1.l.google.com:19302',
-                       'stun:stun2.l.google.com:19302']
-            }
-        ]
+        // No STUN servers needed for local network calls
+        iceServers: [],
+        iceCandidatePoolSize: 0
     };
 
     async function initVideoCall() {
         try {
+            console.log('[VIDEO] Initializing video call...');
+            
             // Try to get both video and audio
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 1280, height: 720 },
-                    audio: true
+                    video: { 
+                        width: { ideal: 1280 }, 
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
                 });
                 console.log('[VIDEO] Got both video and audio');
+                console.log('[VIDEO] Video tracks:', localStream.getVideoTracks().length);
+                console.log('[VIDEO] Audio tracks:', localStream.getAudioTracks().length);
             } catch (fullError) {
                 console.warn('[VIDEO] Failed to get video+audio, trying audio only:', fullError);
                 // If both fail, try audio only
                 try {
                     localStream = await navigator.mediaDevices.getUserMedia({
-                        audio: true
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
                     });
                     console.log('[VIDEO] Got audio only');
                 } catch (audioError) {
@@ -996,7 +1008,11 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                     // If audio fails, try video only
                     try {
                         localStream = await navigator.mediaDevices.getUserMedia({
-                            video: { width: 1280, height: 720 }
+                            video: { 
+                                width: { ideal: 1280 }, 
+                                height: { ideal: 720 },
+                                facingMode: 'user'
+                            }
                         });
                         console.log('[VIDEO] Got video only');
                     } catch (videoError) {
@@ -1012,19 +1028,35 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             }
             
             if (localStream) {
+                console.log('[VIDEO] Setting local video source');
                 localVideo.srcObject = localStream;
+                
+                // Wait for video to be ready
+                await new Promise((resolve) => {
+                    localVideo.onloadedmetadata = () => {
+                        console.log('[VIDEO] Local video metadata loaded');
+                        resolve();
+                    };
+                });
+                
                 // Initialize audio level detection only if we have audio
                 if (localStream.getAudioTracks().length > 0) {
                     initAudioLevelDetection();
                 }
             }
             
+            console.log('[VIDEO] Connecting to signaling server...');
             socket.connect();
-            socket.emit('join_session', { session_id: sessionId, username: username });
+            
+            // Wait for socket connection before joining
+            socket.on('connect', () => {
+                console.log('[VIDEO] Socket connected, joining session...');
+                socket.emit('join_session', { session_id: sessionId, username: username });
+            });
             
             setTimeout(() => {
                 connectingOverlay.style.display = 'none';
-            }, 1000);
+            }, 2000);
             
         } catch (error) {
             console.error('[VIDEO] Error in initVideoCall:', error);
@@ -1033,35 +1065,74 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     }
 
     function createPeerConnection(peer_id) {
-        console.log(`Creating peer connection for ${peer_id}`);
+        console.log(`[LOCAL-WEBRTC] Creating peer connection for ${peer_id}`);
         _peer_list[peer_id] = new RTCPeerConnection(PC_CONFIG);
 
         _peer_list[peer_id].onicecandidate = (event) => {
             if (event.candidate) {
+                console.log(`[LOCAL-WEBRTC] Sending ICE candidate to ${peer_id}:`, event.candidate.candidate);
                 socket.emit('data', {
                     sender_id: myID,
                     target_id: peer_id,
                     type: 'new-ice-candidate',
                     candidate: event.candidate
                 });
+            } else {
+                console.log(`[LOCAL-WEBRTC] ICE gathering complete for ${peer_id}`);
             }
         };
 
         _peer_list[peer_id].ontrack = (event) => {
-            console.log(`Track received from ${peer_id}`);
-            const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+            console.log(`[LOCAL-WEBRTC] Track received from ${peer_id}:`, event.track.kind, event.track.enabled);
+            console.log(`[LOCAL-WEBRTC] Event streams:`, event.streams?.length || 0);
+            
+            // For local network, we should get the stream directly
+            let stream;
+            if (event.streams && event.streams[0]) {
+                stream = event.streams[0];
+                console.log(`[LOCAL-WEBRTC] Using provided stream with ${stream.getTracks().length} tracks`);
+            } else {
+                stream = new MediaStream([event.track]);
+                console.log(`[LOCAL-WEBRTC] Created new stream with single track`);
+            }
+            
+            // Ensure we have the track
+            if (stream.getTracks().length === 0) {
+                console.error(`[LOCAL-WEBRTC] No tracks in stream for ${peer_id}`);
+                return;
+            }
+            
             addRemoteVideo(peer_id, stream);
         };
 
         _peer_list[peer_id].onnegotiationneeded = () => {
-            handleNegotiationNeededEvent(peer_id);
+            console.log(`[LOCAL-WEBRTC] Negotiation needed for ${peer_id}`);
+            // Add small delay to ensure both sides are ready
+            setTimeout(() => {
+                handleNegotiationNeededEvent(peer_id);
+            }, 100);
         };
 
         _peer_list[peer_id].onconnectionstatechange = () => {
-            console.log(`PC ${peer_id} state:`, _peer_list[peer_id].connectionState);
-            if (_peer_list[peer_id].connectionState === 'failed' || 
-                _peer_list[peer_id].connectionState === 'disconnected') {
-                closeConnection(peer_id);
+            const state = _peer_list[peer_id].connectionState;
+            console.log(`[LOCAL-WEBRTC] PC ${peer_id} connection state: ${state}`);
+            
+            if (state === 'connected') {
+                console.log(`[LOCAL-WEBRTC] ✅ Successfully connected to ${peer_id}`);
+            } else if (state === 'failed' || state === 'disconnected') {
+                console.log(`[LOCAL-WEBRTC] ❌ Connection ${state} for ${peer_id}, cleaning up`);
+                setTimeout(() => closeConnection(peer_id), 1000);
+            }
+        };
+
+        _peer_list[peer_id].oniceconnectionstatechange = () => {
+            const iceState = _peer_list[peer_id].iceConnectionState;
+            console.log(`[LOCAL-WEBRTC] ICE connection state for ${peer_id}: ${iceState}`);
+            
+            if (iceState === 'connected' || iceState === 'completed') {
+                console.log(`[LOCAL-WEBRTC] ✅ ICE connected to ${peer_id}`);
+            } else if (iceState === 'failed') {
+                console.log(`[LOCAL-WEBRTC] ❌ ICE failed for ${peer_id}`);
             }
         };
 
@@ -1070,17 +1141,37 @@ const connectingOverlay = document.getElementById('connectingOverlay');
 
     function addLocalTracks(peer_id) {
         if (localStream && _peer_list[peer_id]) {
-            localStream.getTracks().forEach((track) => {
-                _peer_list[peer_id].addTrack(track, localStream);
+            console.log(`[WEBRTC] Adding local tracks to peer ${peer_id}`);
+            const tracks = localStream.getTracks();
+            console.log(`[WEBRTC] Local stream has ${tracks.length} tracks:`, tracks.map(t => t.kind));
+            
+            tracks.forEach((track) => {
+                console.log(`[WEBRTC] Adding ${track.kind} track to peer ${peer_id}`);
+                const sender = _peer_list[peer_id].addTrack(track, localStream);
+                console.log(`[WEBRTC] Track added, sender:`, sender);
             });
+        } else {
+            console.error(`[WEBRTC] Cannot add tracks - localStream: ${!!localStream}, peer: ${!!_peer_list[peer_id]}`);
         }
     }
 
     async function handleNegotiationNeededEvent(peer_id) {
         try {
-            console.log(`Creating offer for ${peer_id}`);
-            const offer = await _peer_list[peer_id].createOffer();
+            console.log(`[LOCAL-WEBRTC] Creating offer for ${peer_id}`);
+            
+            // Check if we're already in the process of negotiating
+            if (_peer_list[peer_id].signalingState !== 'stable') {
+                console.log(`[LOCAL-WEBRTC] Skipping negotiation for ${peer_id} - not in stable state: ${_peer_list[peer_id].signalingState}`);
+                return;
+            }
+            
+            const offer = await _peer_list[peer_id].createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            
             await _peer_list[peer_id].setLocalDescription(offer);
+            console.log(`[LOCAL-WEBRTC] Set local description (offer) for ${peer_id}`);
             
             socket.emit('data', {
                 sender_id: myID,
@@ -1088,27 +1179,33 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                 type: 'offer',
                 sdp: _peer_list[peer_id].localDescription
             });
+            
+            console.log(`[LOCAL-WEBRTC] Sent offer to ${peer_id}`);
         } catch (e) {
-            console.error('Error in negotiation:', e);
+            console.error(`[LOCAL-WEBRTC] Error in negotiation for ${peer_id}:`, e);
         }
     }
 
     async function handleOfferMsg(msg) {
         const peer_id = msg['sender_id'];
-        console.log(`Offer received from ${peer_id}`);
+        console.log(`[WEBRTC] Offer received from ${peer_id}`);
         
         if (!_peer_list[peer_id]) {
+            console.log(`[WEBRTC] Creating new peer connection for offer from ${peer_id}`);
             createPeerConnection(peer_id);
             addLocalTracks(peer_id);
         }
         
         try {
+            console.log(`[WEBRTC] Setting remote description for ${peer_id}`);
             const desc = new RTCSessionDescription(msg['sdp']);
             await _peer_list[peer_id].setRemoteDescription(desc);
             
+            console.log(`[WEBRTC] Creating answer for ${peer_id}`);
             const answer = await _peer_list[peer_id].createAnswer();
             await _peer_list[peer_id].setLocalDescription(answer);
             
+            console.log(`[WEBRTC] Sending answer to ${peer_id}`);
             socket.emit('data', {
                 sender_id: myID,
                 target_id: peer_id,
@@ -1116,19 +1213,21 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                 sdp: _peer_list[peer_id].localDescription
             });
         } catch (e) {
-            console.error('Error handling offer:', e);
+            console.error(`[WEBRTC] Error handling offer from ${peer_id}:`, e);
         }
     }
 
     async function handleAnswerMsg(msg) {
         const peer_id = msg['sender_id'];
-        console.log(`Answer received from ${peer_id}`);
+        console.log(`[WEBRTC] Answer received from ${peer_id}`);
         
         try {
+            console.log(`[WEBRTC] Setting remote description (answer) for ${peer_id}`);
             const desc = new RTCSessionDescription(msg['sdp']);
             await _peer_list[peer_id].setRemoteDescription(desc);
+            console.log(`[WEBRTC] Successfully set remote description for ${peer_id}`);
         } catch (e) {
-            console.error('Error handling answer:', e);
+            console.error(`[WEBRTC] Error handling answer from ${peer_id}:`, e);
         }
     }
 
@@ -1136,24 +1235,47 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         const peer_id = msg['sender_id'];
         
         try {
-            const candidate = new RTCIceCandidate(msg.candidate);
-            await _peer_list[peer_id].addIceCandidate(candidate);
+            if (_peer_list[peer_id] && _peer_list[peer_id].remoteDescription) {
+                const candidate = new RTCIceCandidate(msg.candidate);
+                await _peer_list[peer_id].addIceCandidate(candidate);
+                console.log(`[WEBRTC] Added ICE candidate for ${peer_id}`);
+            } else {
+                console.warn(`[WEBRTC] Cannot add ICE candidate for ${peer_id} - no remote description yet`);
+            }
         } catch (e) {
-            console.error('Error adding ICE candidate:', e);
+            console.error(`[WEBRTC] Error adding ICE candidate for ${peer_id}:`, e);
         }
     }
 
     function closeConnection(peer_id) {
-        console.log(`Closing connection with ${peer_id}`);
+        console.log(`[LOCAL-WEBRTC] Closing connection with ${peer_id}`);
         if (peer_id in _peer_list) {
-            _peer_list[peer_id].onicecandidate = null;
-            _peer_list[peer_id].ontrack = null;
-            _peer_list[peer_id].onnegotiationneeded = null;
-            _peer_list[peer_id].close();
+            try {
+                _peer_list[peer_id].onicecandidate = null;
+                _peer_list[peer_id].ontrack = null;
+                _peer_list[peer_id].onnegotiationneeded = null;
+                _peer_list[peer_id].onconnectionstatechange = null;
+                _peer_list[peer_id].oniceconnectionstatechange = null;
+                _peer_list[peer_id].close();
+            } catch (e) {
+                console.error(`[LOCAL-WEBRTC] Error closing peer connection for ${peer_id}:`, e);
+            }
             delete _peer_list[peer_id];
         }
         removeRemoteVideo(peer_id);
         updateLayout();
+        
+        // If the peer still exists in names, try to reconnect after a delay
+        if (_peer_names[peer_id]) {
+            console.log(`[LOCAL-WEBRTC] Scheduling reconnection attempt for ${peer_id}`);
+            setTimeout(() => {
+                if (_peer_names[peer_id] && !_peer_list[peer_id]) {
+                    console.log(`[LOCAL-WEBRTC] Attempting to reconnect to ${peer_id}`);
+                    createPeerConnection(peer_id);
+                    addLocalTracks(peer_id);
+                }
+            }, 2000);
+        }
     }
 
     function addRemoteVideo(peer_id, stream) {
@@ -1510,11 +1632,22 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     }
 
     function start_webrtc() {
-        console.log('Starting WebRTC connections');
+        console.log('[WEBRTC] Starting WebRTC connections');
+        console.log('[WEBRTC] Peer list:', Object.keys(_peer_list));
+        console.log('[WEBRTC] Local stream ready:', !!localStream);
+        
+        if (!localStream) {
+            console.error('[WEBRTC] Cannot start WebRTC - no local stream');
+            return;
+        }
+        
         for (let peer_id in _peer_list) {
             if (_peer_list[peer_id] === undefined) {
+                console.log('[WEBRTC] Creating connection for peer:', peer_id);
                 createPeerConnection(peer_id);
                 addLocalTracks(peer_id);
+            } else {
+                console.log('[WEBRTC] Peer connection already exists for:', peer_id);
             }
         }
     }
@@ -1524,29 +1657,39 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     });
 
     socket.on('user-list', (data) => {
-        console.log('User list received:', data);
+        console.log('[SOCKET] User list received:', data);
         myID = data['my_id'];
+        console.log('[SOCKET] My ID is:', myID);
         
         if ('list' in data) {
             const recvd_list = data['list'];
+            console.log('[SOCKET] Received peer list:', recvd_list);
+            
             for (let peer_id in recvd_list) {
                 _peer_list[peer_id] = undefined;
-                _peer_names[peer_id] = recvd_list[peer_id]; // STORE THE USERNAME!
+                _peer_names[peer_id] = recvd_list[peer_id];
                 console.log('[USER-LIST] Added peer:', peer_id, 'name:', recvd_list[peer_id]);
             }
             updateParticipantList(Object.keys(_peer_list));
-            start_webrtc();
+            
+            // Wait a bit for local stream to be ready before starting WebRTC
+            setTimeout(() => {
+                console.log('[SOCKET] Starting WebRTC connections...');
+                start_webrtc();
+            }, 500);
         } else {
+            console.log('[SOCKET] No existing users in room');
             updateParticipantList([]);
         }
     });
 
     socket.on('user-connect', (data) => {
-        console.log('New user connected:', data);
+        console.log('[SOCKET] New user connected:', data);
         const peer_id = data['sid'];
         const peer_name = data['name'];
         
         if (peer_id !== myID) {
+            console.log('[SOCKET] Adding new peer:', peer_id, 'name:', peer_name);
             _peer_list[peer_id] = undefined;
             _peer_names[peer_id] = peer_name;
             
@@ -1565,6 +1708,18 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             }
             
             updateParticipantList(Object.keys(_peer_list));
+            
+            // Create peer connection for new user with delay to ensure both sides are ready
+            console.log('[SOCKET] Creating peer connection for new user:', peer_id);
+            setTimeout(() => {
+                if (!_peer_list[peer_id] || _peer_list[peer_id] === undefined) {
+                    console.log('[SOCKET] Creating delayed peer connection for:', peer_id);
+                    createPeerConnection(peer_id);
+                    addLocalTracks(peer_id);
+                } else {
+                    console.log('[SOCKET] Peer connection already exists for:', peer_id);
+                }
+            }, 200);
         }
     });
 

@@ -1816,8 +1816,10 @@ function handleMessage(message) {
             }
             handleAudioInvite(message);
         } else if (message.sender !== username) {
-            // We're not in global chat but someone else started a call
+            // We're not in global chat but someone else started a call - show notification AND popup
             showNotification(`${message.sender} started an audio call in Global Network`, 'info');
+            // Show popup modal for global calls too (like private calls)
+            showIncomingAudioCallModal(message.sender, message.link, message.session_id);
         }
     }
     else if (msgType === 'audio_invite_private') {
@@ -1883,8 +1885,10 @@ function handleMessage(message) {
             }
             handleVideoInvite(message);
         } else if (message.sender !== username) {
-            // We're not in global chat but someone else started a call
+            // We're not in global chat but someone else started a call - show notification AND popup
             showNotification(`${message.sender} started a video call in Global Network`, 'info');
+            // Show popup modal for global calls too (like private calls)
+            showIncomingCallModal(message.sender, message.link, message.session_id);
         }
     }
     else if (msgType === 'video_invite_private') {

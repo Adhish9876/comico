@@ -148,25 +148,44 @@ def handle_join_session(data):
     
     # Determine session type for logging
     session_type = "VIDEO" if room_id in video_sessions else "AUDIO"
-    print(f"[{session_type} SERVER] {username} <{sid}> joined session {room_id}")
+    print(f"[{session_type} SERVER] {username} <{sid}> joining session {room_id}")
     
     # Initialize room user list if needed
     if room_id not in _users_in_room:
-        _users_in_room[room_id] = [sid]
-        # First user in room
+        _users_in_room[room_id] = []
+    
+    # Always add the new user first
+    _users_in_room[room_id].append(sid)
+    current_users = len(_users_in_room[room_id])
+    
+    print(f"[{session_type} SERVER] Room {room_id} now has {current_users} users")
+    
+    if current_users == 1:
+        # First user in room - send empty user list
         emit('user-list', {'my_id': sid}, room=sid)
-        print(f"[{session_type} SERVER] First user in room {room_id}")
+        print(f"[{session_type} SERVER] First user {username} in room {room_id}")
     else:
-        # Existing users in room - send them to new user
-        existing_users = {u_id: _name_of_sid[u_id] for u_id in _users_in_room[room_id]}
+        # Get existing users (excluding the new user)
+        existing_user_ids = [u for u in _users_in_room[room_id] if u != sid]
+        existing_users = {u_id: _name_of_sid.get(u_id, 'Unknown') for u_id in existing_user_ids}
+        
+        print(f"[{session_type} SERVER] Sending {len(existing_users)} existing users to {username}")
+        print(f"[{session_type} SERVER] Existing users: {existing_users}")
+        
+        # Send existing users to new user
         emit('user-list', {'list': existing_users, 'my_id': sid}, room=sid)
         
+        # Use socketio.sleep for better async handling
+        socketio.sleep(0.3)
+        
         # Notify existing users about new user
+        print(f"[{session_type} SERVER] Notifying {len(existing_user_ids)} existing users about {username}")
         emit('user-connect', {'sid': sid, 'name': username}, room=room_id, skip_sid=sid)
         
-        # Add new user to room
-        _users_in_room[room_id].append(sid)
-        print(f"[{session_type} SERVER] New user joined. Room {room_id} now has {len(_users_in_room[room_id])} users")
+        # Additional delay to ensure message is processed
+        socketio.sleep(0.1)
+        
+        print(f"[{session_type} SERVER] User {username} successfully joined room {room_id} with {current_users} total users")
 
 @socketio.on('leave_session')
 def handle_leave_session(data):
