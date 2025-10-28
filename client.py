@@ -65,7 +65,7 @@ eel.init('web')
 class ClientState:
     def __init__(self):
         self.username: Optional[str] = None
-        self.server_host = "192.168.137.175"
+        self.server_host = "172.20.10.9"
         self.server_port = 5555
         self.file_port = 5556
         self.audio_port = 5557
@@ -492,7 +492,7 @@ def start_video_call(chat_type, chat_id):
         #print chat_type
         print(f"[CLIENT] Chat Type: {chat_type}")
         # Call video server API to create session with chat_id
-        response = requests.post('https://192.168.137.175:5000/api/create_session', json={
+        response = requests.post('https://172.20.10.9:5000/api/create_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,
@@ -583,7 +583,7 @@ def start_audio_call(chat_type, chat_id):
         print(f"[CLIENT] Audio Chat Type: {chat_type}")
         
         # Call audio server API to create session with chat_id
-        response = requests.post('https://192.168.137.175:5000/api/create_audio_session', json={
+        response = requests.post('https://172.20.10.9:5000/api/create_audio_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,
@@ -838,7 +838,7 @@ def find_available_port(start_port=8081, max_attempts=10):
         try:
             # Try to bind to the port
             test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            test_socket.bind(('192.168.137.175', port))
+            test_socket.bind(('172.20.10.9', port))
             test_socket.close()
             return port
         except OSError:

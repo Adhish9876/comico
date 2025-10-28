@@ -1533,6 +1533,10 @@ function handleMessage(message) {
                 unreadCounts.private[otherUser] = (unreadCounts.private[otherUser] || 0) + 1;
                 updateTotalUnreadCount();
                 updateUnreadCountsUI();
+                
+                // IMPORTANT: Increment unread count for Active Users section
+                incrementUnreadCount(otherUser);
+                
                 const preview = (message.content || '').slice(0, 40);
                 if (isWindowFocused) {
                     showInAppBanner(`New message from ${message.sender}${preview ? ': ' + preview : ''}`);
@@ -3196,8 +3200,8 @@ function updateUsersList(users) {
     const activeOnlyUsers = onlineUsers.filter(u => !chattedUsers.has(u));
     const chattedOnlineUsers = onlineUsers.filter(u => chattedUsers.has(u));
 
-    // Update Active Users Section
-    updateActiveUsersSection(activeOnlyUsers);
+    // Update Active Users Section (pass all online users for proper filtering)
+    updateActiveUsersSection(activeOnlyUsers, onlineUsers);
 
     // Update Private Chats List (only show users we've chatted with, excluding archived)
     usersList.innerHTML = '';
@@ -3274,8 +3278,11 @@ function updateUsersList(users) {
     updateUnreadCountsUI();
 }
 
+// Track unread messages per user
+const unreadMessages = {};
+
 // Update Active Users Section
-function updateActiveUsersSection(activeUsers) {
+function updateActiveUsersSection(activeUsers, allOnlineUsers = []) {
     const activeUsersSection = document.getElementById('activeUsersSection');
     const activeUsersList = document.getElementById('activeUsersList');
     const activeUsersCount = document.getElementById('activeUsersCount');
@@ -3294,9 +3301,16 @@ function updateActiveUsersSection(activeUsers) {
         userItem.className = 'active-user-item';
         userItem.dataset.user = user;
         userItem.onclick = () => {
+            // Clear unread count when clicked
+            clearUnreadCount(user);
             // Switch to private chat when clicked
             switchToPrivateChat(user);
         };
+
+        // Check if there are unread messages from this user
+        const unreadCount = unreadMessages[user] || 0;
+        const notificationBadge = unreadCount > 0 ? 
+            `<div class="notification-badge">${unreadCount > 9 ? '9+' : unreadCount}</div>` : '';
 
         userItem.innerHTML = `
             <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
@@ -3304,10 +3318,62 @@ function updateActiveUsersSection(activeUsers) {
                 <div class="active-user-name">${user}</div>
                 <div class="active-user-status">Online</div>
             </div>
+            ${notificationBadge}
         `;
 
         activeUsersList.appendChild(userItem);
     });
+}
+
+// Function to increment unread count for a user
+function incrementUnreadCount(user) {
+    if (!unreadMessages[user]) {
+        unreadMessages[user] = 0;
+    }
+    unreadMessages[user]++;
+    console.log(`📬 Unread count for ${user}: ${unreadMessages[user]}`);
+    
+    // Update the UI immediately - only update if user is in active users section
+    const activeUserItem = document.querySelector(`.active-user-item[data-user="${user}"]`);
+    if (activeUserItem) {
+        // User is in active section, update the badge
+        const existingBadge = activeUserItem.querySelector('.notification-badge');
+        const count = unreadMessages[user];
+        
+        if (existingBadge) {
+            existingBadge.textContent = count > 9 ? '9+' : count;
+        } else {
+            // Add new badge
+            const badge = document.createElement('div');
+            badge.className = 'notification-badge';
+            badge.textContent = count > 9 ? '9+' : count;
+            activeUserItem.appendChild(badge);
+        }
+        console.log(`✅ Updated notification badge for ${user} in Active Users`);
+    }
+}
+
+// Function to clear unread count for a user
+function clearUnreadCount(user) {
+    if (unreadMessages[user]) {
+        console.log(`✅ Clearing unread count for ${user}`);
+        delete unreadMessages[user];
+        
+        // Remove badge from UI
+        const activeUserItem = document.querySelector(`.active-user-item[data-user="${user}"]`);
+        if (activeUserItem) {
+            const badge = activeUserItem.querySelector('.notification-badge');
+            if (badge) {
+                badge.remove();
+            }
+        }
+    }
+}
+
+// Helper function to check if user is already in private chats
+function isUserInPrivateChats(user) {
+    // Check if user has any chat history
+    return chatHistories.private && chatHistories.private[user] && chatHistories.private[user].length > 0;
 }
 
 // Move user from active to chatted when first message sent
@@ -3558,6 +3624,9 @@ function displayRecentChats() {
 
 async function switchToPrivateChat(user) {
     console.log(`🔄 SWITCHING TO PRIVATE CHAT: ${user}`);
+
+    // Clear unread count for this user in Active Users section
+    clearUnreadCount(user);
 
     // Reset date tracker when switching chats
     resetDateTracker();

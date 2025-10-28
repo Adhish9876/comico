@@ -931,7 +931,7 @@
         const sessionType = "{{ session_type }}";
         const urlParams = new URLSearchParams(window.location.search);
         const username = urlParams.get('username') || 'Guest';
-        const socket = io('https://192.168.137.175:5000', { autoConnect: false });
+        const socket = io('https://172.20.10.9:5000', { autoConnect: false });
         let isVideoDisabled = false;
         let isHandRaised = false;
         let isScreenSharing = false;
