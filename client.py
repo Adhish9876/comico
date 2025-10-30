@@ -106,10 +106,8 @@ def receive_messages():
             try:
                 data = state.socket.recv(4096)
                 if not data:
-                    print("[CLIENT] No data received, connection may be closed")
-                    # Don't break immediately - the server might just be slow
-                    time.sleep(0.1)
-                    continue
+                    print("[CLIENT] Connection closed by server")
+                    break
             except socket.timeout:
                 # Timeout is normal, just continue
                 continue
@@ -126,6 +124,22 @@ def receive_messages():
                         
                         # Store data locally for frontend to retrieve
                         msg_type = message.get('type')
+                        
+                        # Handle ping messages from server - respond with pong to stay connected
+                        if msg_type == 'ping':
+                            try:
+                                pong_msg = json.dumps({'type': 'pong', 'timestamp': datetime.now().strftime("%I:%M %p")}) + '\n'
+                                state.socket.send(pong_msg.encode('utf-8'))
+                                print("[CLIENT] Responded to server ping")
+                            except Exception as e:
+                                print(f"[CLIENT] Failed to send pong: {e}")
+                            continue  # Don't forward ping to frontend
+                        
+                        # Handle pong responses (if we ever send pings)
+                        if msg_type == 'pong':
+                            print("[CLIENT] Received pong from server")
+                            continue  # Don't forward pong to frontend
+                        
                         if msg_type == 'chat_history':
                             state.last_chat_history = message.get('messages', [])
                         elif msg_type == 'user_list':
@@ -141,8 +155,7 @@ def receive_messages():
         
         except (ConnectionResetError, BrokenPipeError) as e:
             print(f"[CLIENT] Connection lost: {e}")
-            if state.running:
-                eel.showError("Connection lost")
+            # onDisconnected() will be called in finally block and show notification
             break
         except Exception as e:
             print(f"[CLIENT] Receive error: {e}")
@@ -351,7 +364,7 @@ def upload_file(file_name: str, file_size: int, file_data):
             file_bytes = file_data
         
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(120.0)  # Increase timeout to 2 minutes for large files
+        sock.settimeout(300.0)  # 5 minutes timeout to match server for large files
         sock.connect((state.server_host, state.file_port))
         
         print(f"[CLIENT] Uploading file: {file_name} ({file_size} bytes)")
@@ -393,7 +406,7 @@ def download_file(file_id: str):
     
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(30.0)
+        sock.settimeout(300.0)  # 5 minutes timeout to match server for large files
         sock.connect((state.server_host, state.file_port))
         
         # Request file

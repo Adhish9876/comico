@@ -40,6 +40,11 @@ class CollaborationServer:
         self.lock = threading.Lock()
         self.running = True
         
+        # Heartbeat tracking to detect inactive clients gracefully
+        self.last_activity: Dict[socket.socket, float] = {}
+        self.heartbeat_interval = 30  # Send ping every 30 seconds
+        self.client_timeout = 180  # Disconnect after 3 minutes of no activity
+        
         print(f"Server initializing on {host}:{port} (chat) and {host}:{file_port} (files)")
         print(f"Loaded {len(self.chat_history)} historical global messages")
         print(f"Loaded {len(self.file_metadata)} historical files")
@@ -52,11 +57,11 @@ class CollaborationServer:
     # Add TCP keepalive to detect dead connections
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         
-        # Platform-specific keepalive settings
+        # Platform-specific keepalive settings - more lenient to prevent premature disconnects
         if hasattr(socket, 'TCP_KEEPIDLE'):  # Linux
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 120)  # Wait 2 minutes before first probe
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 30)  # 30s between probes
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 8)  # 8 probes before giving up
         
         return sock
 
@@ -73,6 +78,11 @@ class CollaborationServer:
             
             file_thread = threading.Thread(target=self.accept_file_connections, daemon=True)
             file_thread.start()
+            
+            # Start heartbeat monitor thread
+            heartbeat_thread = threading.Thread(target=self._heartbeat_monitor, daemon=True)
+            heartbeat_thread.start()
+            print(f"✓ Heartbeat monitor started")
             
             self.accept_connections()
             
@@ -133,7 +143,8 @@ class CollaborationServer:
         is_system_connection = False
         
         try:
-            client_socket.settimeout(10.0)
+            # Increased timeout for initial handshake to accommodate slow connections
+            client_socket.settimeout(30.0)
             username, leftover = self._receive_username_with_buffer(client_socket)
             if not username:
                 return
@@ -178,6 +189,8 @@ class CollaborationServer:
                     'address': address,
                     'connected_at': datetime.now()
                 }
+                # Track activity for heartbeat monitoring
+                self.last_activity[client_socket] = time.time()
                 if username not in self.recent_chats:
                     self.recent_chats[username] = []
             
@@ -190,10 +203,14 @@ class CollaborationServer:
             recv_buffer = leftover or ""
 
             # Small delay to ensure client receive thread is ready
-            import time
             time.sleep(0.2)
             
-            self._send_welcome_messages(client_socket, username)
+            try:
+                self._send_welcome_messages(client_socket, username)
+            except Exception as e:
+                print(f"❌ Error sending welcome messages to {username}: {e}")
+                import traceback
+                traceback.print_exc()
             
             client_socket.settimeout(None)
             
@@ -201,26 +218,55 @@ class CollaborationServer:
                 try:
                     data = client_socket.recv(4096)
                     if not data:
+                        print(f"[SERVER] Client {username} closed connection gracefully")
                         break
+                    
+                    # Update activity timestamp
+                    with self.lock:
+                        self.last_activity[client_socket] = time.time()
                     
                     recv_buffer += data.decode('utf-8')
                     recv_buffer = self._process_messages(client_socket, recv_buffer)
                     
                 except ConnectionResetError:
+                    print(f"[SERVER] Connection reset by {username}")
                     break
+                except socket.timeout:
+                    # Should not happen with settimeout(None), but handle gracefully
+                    print(f"[SERVER] Socket timeout for {username} - continuing")
+                    continue
+                except UnicodeDecodeError as e:
+                    # Handle corrupted data gracefully without disconnecting
+                    print(f"⚠️ Unicode decode error from {username}: {e} - skipping corrupted data")
+                    recv_buffer = ""  # Clear buffer and continue
+                    continue
                 except Exception as e:
+                    # Log error but try to continue unless it's a critical socket error
                     import traceback
-                    print(f"❌ Error handling message from {username}: {e}")
-                    print(f"❌ Full traceback:")
+                    print(f"⚠️ Error handling message from {username}: {e}")
                     traceback.print_exc()
-                    break
+                    
+                    # Only break on critical errors
+                    if isinstance(e, (BrokenPipeError, ConnectionAbortedError, OSError)):
+                        print(f"[SERVER] Critical socket error for {username} - disconnecting")
+                        break
+                    else:
+                        # For non-critical errors, clear buffer and continue
+                        recv_buffer = ""
+                        continue
                     
         except socket.timeout:
-            print(f"⏱️ Connection timeout for {address}")
+            print(f"⏱️ Connection timeout for {username or address}")
         except Exception as e:
+            import traceback
             print(f"❌ Error handling client {username or address}: {e}")
+            traceback.print_exc()
         finally:
             if not is_system_connection:
+                # Clean up activity tracking
+                with self.lock:
+                    if client_socket in self.last_activity:
+                        del self.last_activity[client_socket]
                 self.handle_disconnect(client_socket, username)
 
     def _receive_username_with_buffer(self, client_socket: socket.socket) -> Tuple[Optional[str], str]:
@@ -335,9 +381,19 @@ class CollaborationServer:
 
     def _route_message(self, client_socket: socket.socket, message: Dict):
         """Route message to appropriate handler"""
+        # Update activity on any message received
+        with self.lock:
+            if client_socket in self.last_activity:
+                self.last_activity[client_socket] = time.time()
+        
         if 'timestamp' not in message:
             message['timestamp'] = self._timestamp()
         msg_type = message.get('type', 'chat')
+        
+        # Handle heartbeat/ping messages
+        if msg_type == 'ping':
+            self._send_to_client(client_socket, {'type': 'pong', 'timestamp': self._timestamp()})
+            return
         
         handlers = {
             'chat': self._handle_chat_message,
@@ -386,6 +442,43 @@ class CollaborationServer:
                 print(f"[SERVER] ERROR: No handler found for {msg_type}")
             else:
                 print(f"[SERVER] No handler for message type: {msg_type}")
+
+    def _heartbeat_monitor(self):
+        """Monitor client activity and send periodic pings"""
+        print("[SERVER] Heartbeat monitor thread started")
+        while self.running:
+            try:
+                time.sleep(self.heartbeat_interval)
+                
+                current_time = time.time()
+                inactive_clients = []
+                
+                # Check for inactive clients
+                with self.lock:
+                    for sock, last_time in list(self.last_activity.items()):
+                        if current_time - last_time > self.client_timeout:
+                            inactive_clients.append(sock)
+                
+                # Disconnect inactive clients
+                for sock in inactive_clients:
+                    username = self.clients.get(sock, {}).get('username', 'Unknown')
+                    print(f"[HEARTBEAT] Disconnecting inactive client: {username} (no activity for {self.client_timeout}s)")
+                    self.handle_disconnect(sock, username)
+                
+                # Send ping to all active clients (optional - helps keep connection alive)
+                with self.lock:
+                    for sock in list(self.clients.keys()):
+                        try:
+                            self._send_to_client(sock, {'type': 'ping', 'timestamp': self._timestamp()})
+                        except Exception as e:
+                            # Don't disconnect on ping failure - will be caught by next heartbeat check
+                            pass
+                            
+            except Exception as e:
+                if self.running:
+                    print(f"[HEARTBEAT] Error in heartbeat monitor: {e}")
+        
+        print("[SERVER] Heartbeat monitor thread stopped")
 
     def _handle_get_users(self, client_socket: socket.socket, message: Dict):
         """Handle explicit request for user list"""
@@ -1276,7 +1369,8 @@ class CollaborationServer:
     def handle_file_transfer(self, client_socket: socket.socket, address: Tuple):
         """Handle file upload or download"""
         try:
-            client_socket.settimeout(30.0)
+            # Increased timeout for large file transfers - 5 minutes
+            client_socket.settimeout(300.0)
             
             first_data = client_socket.recv(4096).decode('utf-8')
             first_msg = json.loads(first_data)
@@ -1463,6 +1557,10 @@ class CollaborationServer:
 
     def broadcast(self, message: str, exclude: Optional[socket.socket] = None):
         """Broadcast message to all clients except excluded one"""
+        # Track failed attempts per socket (class-level to persist across calls)
+        if not hasattr(self, '_broadcast_failures'):
+            self._broadcast_failures = {}
+        
         with self.lock:
             total_clients = len(self.clients)
             excluded_str = "excluding 1" if exclude else "to all"
@@ -1478,15 +1576,36 @@ class CollaborationServer:
                         sent_count += 1
                         username = self.clients[sock].get('username', 'Unknown')
                         print(f"   ✓ Sent to {username}")
-                    except Exception as e:
-                        print(f"   ❌ Failed to send to {self.clients.get(sock, {}).get('username', 'Unknown')}: {e}")
+                        # Reset failed attempts on success
+                        if sock in self._broadcast_failures:
+                            del self._broadcast_failures[sock]
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError) as e:
+                        # Critical errors - disconnect immediately
+                        print(f"   ❌ Critical error sending to {self.clients.get(sock, {}).get('username', 'Unknown')}: {e}")
                         disconnected.append(sock)
+                    except Exception as e:
+                        # Non-critical errors - log but don't disconnect immediately
+                        username = self.clients.get(sock, {}).get('username', 'Unknown')
+                        print(f"   ⚠️ Temporary error sending to {username}: {e}")
+                        
+                        # Track failed attempts
+                        if sock not in self._broadcast_failures:
+                            self._broadcast_failures[sock] = 0
+                        self._broadcast_failures[sock] += 1
+                        
+                        # Only disconnect after multiple consecutive failures (3+)
+                        if self._broadcast_failures[sock] >= 3:
+                            print(f"   ❌ Too many failures for {username} - marking for disconnect")
+                            disconnected.append(sock)
+                            if sock in self._broadcast_failures:
+                                del self._broadcast_failures[sock]
             
             print(f"   Total sent: {sent_count}/{total_clients}")
-            
-            for sock in disconnected:
-                username = self.clients.get(sock, {}).get('username', 'Unknown')
-                self.handle_disconnect(sock, username)
+        
+        # Handle disconnections outside the lock to avoid deadlock
+        for sock in disconnected:
+            username = self.clients.get(sock, {}).get('username', 'Unknown')
+            self.handle_disconnect(sock, username)
 
     def broadcast_user_list(self):
         """Broadcast current user list to all clients"""
@@ -1569,7 +1688,9 @@ class CollaborationServer:
             message_str = json.dumps(message) + '\n'
             client_socket.send(message_str.encode('utf-8'))
         except Exception as e:
-            print(f"❌ Error sending to client: {e}")
+            msg_type = message.get('type', 'unknown')
+            username = self.clients.get(client_socket, {}).get('username', 'Unknown')
+            print(f"❌ Error sending {msg_type} to {username}: {e}")
 
     def _send_error(self, client_socket: socket.socket, error_message: str):
         """Send error message to client"""

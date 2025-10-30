@@ -4895,30 +4895,30 @@ document.addEventListener('DOMContentLoaded', function () {
 eel.expose(onDisconnected);
 function onDisconnected() {
     console.log('[DISCONNECT] Server connection lost');
-    showNotification('⚠️ Server connection lost', 'error');
+    showNotification('⚠️ Server disconnected. Please reconnect.', 'error');
     
-    // Show full screen spinner with server down message
+    // Immediately go back to login screen without spinner
     const spinner = document.getElementById('fullScreenSpinner');
     const spinnerSubtitle = spinner.querySelector('.spinner-subtitle');
     
+    // Ensure spinner is hidden
+    spinner.classList.remove('active');
+    
+    // Hide main app and show login screen
+    mainApp.classList.remove('active');
+    loginScreen.classList.add('active');
+    
+    // Reset login button
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'CONNECT';
+    
+    // Reset spinner subtitle for next connection
     if (spinnerSubtitle) {
-        spinnerSubtitle.textContent = '⚠️ Server is down. Reconnecting...';
+        spinnerSubtitle.textContent = 'Connecting to Shadow Network...';
     }
     
-    spinner.classList.add('active');
-    
-    // After 3 seconds, go back to login screen
-    setTimeout(() => {
-        spinner.classList.remove('active');
-        mainApp.classList.remove('active');
-        loginScreen.classList.add('active');
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'CONNECT';
-        
-        if (spinnerSubtitle) {
-            spinnerSubtitle.textContent = 'Connecting to Shadow Network...';
-        }
-    }, 3000);
+    // Clear any stored state
+    localStorage.removeItem('currentUsername');
 }
 
 // Handle user connection alerts
