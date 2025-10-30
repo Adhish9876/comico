@@ -1116,10 +1116,21 @@
                 console.log(`[WEBRTC] Track received from ${peer_id}, kind: ${event.track.kind}`);
                 const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
 
-                // Add delay to ensure proper stream handling
-                setTimeout(() => {
-                    addRemoteVideo(peer_id, stream);
-                }, 100);
+                // Immediately add remote video without delay
+                addRemoteVideo(peer_id, stream);
+                
+                // Force show video immediately if it's a video track
+                if (event.track.kind === 'video') {
+                    setTimeout(() => {
+                        const placeholder = document.getElementById(`placeholder-${peer_id}`);
+                        const videoElement = document.querySelector(`#video-${peer_id} video`);
+                        if (placeholder && videoElement) {
+                            console.log(`[WEBRTC] 🚨 FORCE SHOWING video for ${peer_id} on track received`);
+                            placeholder.style.display = 'none';
+                            videoElement.style.display = 'block';
+                        }
+                    }, 500);
+                }
             };
 
             _peer_list[peer_id].onnegotiationneeded = () => {
@@ -1293,7 +1304,10 @@
                 video.autoplay = true;
                 video.playsinline = true;
                 video.muted = false; // Ensure remote videos are not muted
+                
+                // Set stream and force load
                 video.srcObject = stream;
+                video.load(); // Force video element to load the stream
 
                 // Camera off placeholder
                 const cameraOffPlaceholder = document.createElement('div');
@@ -1328,8 +1342,10 @@
                 videoWrapper.appendChild(handIndicator);
                 videoWrapper.appendChild(screenIndicator);
 
-                // Enhanced video track monitoring for camera state
-                monitorVideoTrack(peer_id, stream, video);
+                // Enhanced video track monitoring for camera state - with delay
+                setTimeout(() => {
+                    monitorVideoTrack(peer_id, stream, video);
+                }, 1000); // Give video element time to fully initialize
 
                 // Add click-to-enlarge functionality
                 videoWrapper.addEventListener('click', () => toggleVideoEnlarge(peer_id));
@@ -1377,16 +1393,30 @@
                 console.log('[MONITOR] 📹 Video track found:', {
                     enabled: videoTrack.enabled,
                     readyState: videoTrack.readyState,
-                    kind: videoTrack.kind
+                    kind: videoTrack.kind,
+                    id: videoTrack.id,
+                    label: videoTrack.label
                 });
 
-                // Monitor track enabled state
+                // Monitor track enabled state - FIXED: Use multiple criteria for remote tracks
                 const checkVideoState = () => {
-                    const isVideoWorking = videoTrack.enabled && videoTrack.readyState !== 'ended';
+                    // For remote tracks, use multiple checks instead of just readyState
+                    const hasValidStream = videoElement.srcObject && videoElement.srcObject.active;
+                    const hasVideoTracks = videoElement.srcObject && videoElement.srcObject.getVideoTracks().length > 0;
+                    const trackEnabled = videoTrack.enabled;
+                    const trackLive = videoTrack.readyState === 'live';
+                    
+                    // Consider video working if track is enabled AND (live OR we have valid stream)
+                    const isVideoWorking = trackEnabled && (trackLive || hasValidStream);
+                    
                     console.log('[MONITOR] 🔍 Video state check:', {
-                        enabled: videoTrack.enabled,
+                        enabled: trackEnabled,
                         readyState: videoTrack.readyState,
-                        isWorking: isVideoWorking
+                        hasValidStream: hasValidStream,
+                        hasVideoTracks: hasVideoTracks,
+                        isWorking: isVideoWorking,
+                        videoElementSrc: videoElement.srcObject ? 'has stream' : 'no stream',
+                        videoElementDisplay: videoElement.style.display
                     });
 
                     if (!isVideoWorking) {
@@ -1403,6 +1433,36 @@
                     console.log('[MONITOR] ⏰ Initial video state check for', peer_id);
                     checkVideoState();
                 }, 500);
+                
+                // Fallback check after longer delay in case initial check fails
+                setTimeout(() => {
+                    console.log('[MONITOR] 🔄 Fallback video check for', peer_id);
+                    if (videoElement.srcObject && videoElement.srcObject.getVideoTracks().length > 0) {
+                        const track = videoElement.srcObject.getVideoTracks()[0];
+                        if (track.enabled) {
+                            console.log('[MONITOR] 🔄 Fallback: Track is enabled, forcing video display');
+                            const placeholder = document.getElementById(`placeholder-${peer_id}`);
+                            if (placeholder) {
+                                placeholder.style.display = 'none';
+                                videoElement.style.display = 'block';
+                                console.log('[MONITOR] 🔄 Fallback: Video forced to display for', peer_id);
+                            }
+                        }
+                    }
+                }, 3000); // Try again after 3 seconds
+                
+                // Even more aggressive fallback - just show video if we have tracks
+                setTimeout(() => {
+                    console.log('[MONITOR] 🚨 Aggressive fallback for', peer_id);
+                    if (videoElement.srcObject && videoElement.srcObject.getVideoTracks().length > 0) {
+                        const placeholder = document.getElementById(`placeholder-${peer_id}`);
+                        if (placeholder && placeholder.style.display !== 'none') {
+                            console.log('[MONITOR] 🚨 Aggressive: Showing video regardless of state for', peer_id);
+                            placeholder.style.display = 'none';
+                            videoElement.style.display = 'block';
+                        }
+                    }
+                }, 5000); // Final attempt after 5 seconds
 
                 // Monitor track state changes
                 videoTrack.onended = () => {
@@ -1410,15 +1470,25 @@
                     showCameraOffPlaceholder(peer_id);
                 };
 
-                // Monitor video element events
+                // Monitor video element events - these are more reliable for remote streams
                 videoElement.onloadedmetadata = () => {
                     console.log('[MONITOR] 📊 Video metadata loaded for', peer_id);
-                    hideCameraOffPlaceholder(peer_id);
+                    // Force show video immediately when metadata loads
+                    const placeholder = document.getElementById(`placeholder-${peer_id}`);
+                    if (placeholder) {
+                        placeholder.style.display = 'none';
+                        videoElement.style.display = 'block';
+                        console.log('[MONITOR] 📊 Forcing video display on metadata load for', peer_id);
+                    }
                 };
 
                 videoElement.onplaying = () => {
                     console.log('[MONITOR] ▶️ Video playing for', peer_id);
-                    hideCameraOffPlaceholder(peer_id);
+                    const placeholder = document.getElementById(`placeholder-${peer_id}`);
+                    if (placeholder) {
+                        placeholder.style.display = 'none';
+                        videoElement.style.display = 'block';
+                    }
                 };
 
                 videoElement.onpause = () => {
@@ -1426,11 +1496,63 @@
                     checkVideoState();
                 };
 
-                // Store monitor reference for cleanup
+                // Additional event for when video actually starts displaying frames
+                videoElement.oncanplay = () => {
+                    console.log('[MONITOR] 🎬 Video can play for', peer_id);
+                    const placeholder = document.getElementById(`placeholder-${peer_id}`);
+                    if (placeholder) {
+                        placeholder.style.display = 'none';
+                        videoElement.style.display = 'block';
+                    }
+                };
+
+                // Force show video when we get any data
+                videoElement.onloadeddata = () => {
+                    console.log('[MONITOR] 📥 Video data loaded for', peer_id);
+                    const placeholder = document.getElementById(`placeholder-${peer_id}`);
+                    if (placeholder) {
+                        placeholder.style.display = 'none';
+                        videoElement.style.display = 'block';
+                    }
+                };
+
+                // Store monitor reference for cleanup and add periodic check
                 if (!window.trackMonitors) window.trackMonitors = {};
                 if (window.trackMonitors[peer_id]) {
                     clearInterval(window.trackMonitors[peer_id]);
                 }
+                
+                // Periodic check to ensure video is actually displaying
+                window.trackMonitors[peer_id] = setInterval(() => {
+                    const placeholder = document.getElementById(`placeholder-${peer_id}`);
+                    const isPlaceholderVisible = placeholder && placeholder.style.display !== 'none';
+                    
+                    if (videoElement.srcObject) {
+                        const tracks = videoElement.srcObject.getVideoTracks();
+                        
+                        if (tracks.length > 0 && tracks[0].enabled) {
+                            // We have enabled video tracks
+                            if (videoElement.videoWidth > 2 && videoElement.videoHeight > 2) {
+                                // Video has proper dimensions
+                                if (isPlaceholderVisible) {
+                                    console.log('[MONITOR] 🔄 Periodic check: Video has dimensions, hiding placeholder for', peer_id);
+                                    hideCameraOffPlaceholder(peer_id);
+                                }
+                            } else if (isPlaceholderVisible) {
+                                // Force show video even with small dimensions if we have enabled tracks
+                                console.log('[MONITOR] 🔄 Periodic check: Forcing video display for enabled track', peer_id);
+                                placeholder.style.display = 'none';
+                                videoElement.style.display = 'block';
+                            }
+                        } else if (tracks.length > 0 && !tracks[0].enabled) {
+                            // Track is disabled (camera off)
+                            if (!isPlaceholderVisible) {
+                                console.log('[MONITOR] 🔄 Periodic check: Camera disabled for', peer_id);
+                                showCameraOffPlaceholder(peer_id);
+                            }
+                        }
+                    }
+                }, 1000); // Check every 1 second for faster response
             } else {
                 console.log('[MONITOR] ❌ No video track found for', peer_id, '- showing placeholder');
                 // Give it a moment in case the track arrives later
@@ -1450,13 +1572,47 @@
             console.log('[PLACEHOLDER] 🙈 Hiding placeholder for', peer_id, {
                 hasPlaceholder: !!placeholder,
                 hasVideo: !!video,
-                videoSrc: video?.srcObject ? 'has stream' : 'no stream'
+                videoSrc: video?.srcObject ? 'has stream' : 'no stream',
+                videoReady: video?.readyState || 'unknown'
             });
 
             if (placeholder && video) {
-                placeholder.style.display = 'none';
-                video.style.display = 'block';
-                console.log('[PLACEHOLDER] ✅ Placeholder hidden, video shown for', peer_id);
+                // Check video state - be more permissive for WebRTC streams
+                const hasStream = video.srcObject && video.srcObject.active;
+                const hasVideoTracks = video.srcObject && video.srcObject.getVideoTracks().length > 0;
+                const videoReady = video.readyState >= 2; // HAVE_CURRENT_DATA or higher
+                const hasValidDimensions = video.videoWidth > 2 && video.videoHeight > 2; // Ignore tiny placeholder dimensions
+                
+                // Show video if we have tracks AND (stream is active OR video has valid dimensions OR video is ready)
+                const shouldShowVideo = hasVideoTracks && (hasStream || hasValidDimensions || videoReady);
+                
+                if (shouldShowVideo) {
+                    placeholder.style.display = 'none';
+                    video.style.display = 'block';
+                    console.log('[PLACEHOLDER] ✅ Placeholder hidden, video shown for', peer_id);
+                } else {
+                    console.log('[PLACEHOLDER] ⏳ Video not ready yet for', peer_id, {
+                        hasStream,
+                        hasVideoTracks,
+                        videoReady,
+                        videoWidth: video.videoWidth,
+                        videoHeight: video.videoHeight,
+                        hasValidDimensions,
+                        shouldShowVideo
+                    });
+                    // Try again in a moment, but don't loop forever
+                    if (!video._hideAttempts) video._hideAttempts = 0;
+                    video._hideAttempts++;
+                    if (video._hideAttempts < 10) { // Max 10 attempts (5 seconds)
+                        setTimeout(() => hideCameraOffPlaceholder(peer_id), 500);
+                    } else {
+                        console.log('[PLACEHOLDER] ⏰ Max attempts reached, forcing video display for', peer_id);
+                        if (hasVideoTracks) {
+                            placeholder.style.display = 'none';
+                            video.style.display = 'block';
+                        }
+                    }
+                }
             } else {
                 console.error('[PLACEHOLDER] ❌ Missing elements for hiding placeholder:', peer_id, {
                     placeholder: !!placeholder,
@@ -2225,6 +2381,25 @@
             });
         }
 
+        // Debug function to force show all videos
+        function debugForceShowAllVideos() {
+            console.log('[DEBUG] 🚨 FORCING ALL VIDEOS TO SHOW');
+            const allVideoWrappers = document.querySelectorAll('.video-wrapper');
+            allVideoWrappers.forEach(wrapper => {
+                const placeholder = wrapper.querySelector('.camera-off-placeholder');
+                const video = wrapper.querySelector('video');
+                if (placeholder && video) {
+                    const peerId = wrapper.id.replace('video-', '');
+                    console.log(`[DEBUG] 🚨 Forcing video for ${peerId || 'local'}`);
+                    placeholder.style.display = 'none';
+                    video.style.display = 'block';
+                }
+            });
+        }
+
+        // Make debug function available globally
+        window.debugForceShowAllVideos = debugForceShowAllVideos;
+
         document.addEventListener('DOMContentLoaded', function () {
             console.log('[LAYOUT] DOM loaded, initializing video room');
             initializeLocalVideo();
@@ -2302,6 +2477,13 @@
         });
 
         window.addEventListener('beforeunload', () => leaveCall());
+
+        // Debug keyboard shortcut - press 'V' to force show all videos
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'v' || e.key === 'V') {
+                debugForceShowAllVideos();
+            }
+        });
 
         // Handle page visibility changes to detect when user switches tabs
         document.addEventListener('visibilitychange', () => {
