@@ -1126,8 +1126,10 @@
                         const videoElement = document.querySelector(`#video-${peer_id} video`);
                         if (placeholder && videoElement) {
                             console.log(`[WEBRTC] 🚨 FORCE SHOWING video for ${peer_id} on track received`);
-                            placeholder.style.display = 'none';
-                            videoElement.style.display = 'block';
+                            placeholder.style.setProperty('display', 'none', 'important');
+                            videoElement.style.setProperty('display', 'block', 'important');
+                            videoElement.style.setProperty('visibility', 'visible', 'important');
+                            videoElement.style.setProperty('opacity', '1', 'important');
                         }
                     }, 500);
                 }
@@ -1443,8 +1445,10 @@
                             console.log('[MONITOR] 🔄 Fallback: Track is enabled, forcing video display');
                             const placeholder = document.getElementById(`placeholder-${peer_id}`);
                             if (placeholder) {
-                                placeholder.style.display = 'none';
-                                videoElement.style.display = 'block';
+                                placeholder.style.setProperty('display', 'none', 'important');
+                                videoElement.style.setProperty('display', 'block', 'important');
+                                videoElement.style.setProperty('visibility', 'visible', 'important');
+                                videoElement.style.setProperty('opacity', '1', 'important');
                                 console.log('[MONITOR] 🔄 Fallback: Video forced to display for', peer_id);
                             }
                         }
@@ -1458,8 +1462,10 @@
                         const placeholder = document.getElementById(`placeholder-${peer_id}`);
                         if (placeholder && placeholder.style.display !== 'none') {
                             console.log('[MONITOR] 🚨 Aggressive: Showing video regardless of state for', peer_id);
-                            placeholder.style.display = 'none';
-                            videoElement.style.display = 'block';
+                            placeholder.style.setProperty('display', 'none', 'important');
+                            videoElement.style.setProperty('display', 'block', 'important');
+                            videoElement.style.setProperty('visibility', 'visible', 'important');
+                            videoElement.style.setProperty('opacity', '1', 'important');
                         }
                     }
                 }, 5000); // Final attempt after 5 seconds
@@ -1473,11 +1479,13 @@
                 // Monitor video element events - these are more reliable for remote streams
                 videoElement.onloadedmetadata = () => {
                     console.log('[MONITOR] 📊 Video metadata loaded for', peer_id);
-                    // Force show video immediately when metadata loads
+                    // Force show video immediately when metadata loads with aggressive CSS
                     const placeholder = document.getElementById(`placeholder-${peer_id}`);
                     if (placeholder) {
-                        placeholder.style.display = 'none';
-                        videoElement.style.display = 'block';
+                        placeholder.style.setProperty('display', 'none', 'important');
+                        videoElement.style.setProperty('display', 'block', 'important');
+                        videoElement.style.setProperty('visibility', 'visible', 'important');
+                        videoElement.style.setProperty('opacity', '1', 'important');
                         console.log('[MONITOR] 📊 Forcing video display on metadata load for', peer_id);
                     }
                 };
@@ -1486,8 +1494,10 @@
                     console.log('[MONITOR] ▶️ Video playing for', peer_id);
                     const placeholder = document.getElementById(`placeholder-${peer_id}`);
                     if (placeholder) {
-                        placeholder.style.display = 'none';
-                        videoElement.style.display = 'block';
+                        placeholder.style.setProperty('display', 'none', 'important');
+                        videoElement.style.setProperty('display', 'block', 'important');
+                        videoElement.style.setProperty('visibility', 'visible', 'important');
+                        videoElement.style.setProperty('opacity', '1', 'important');
                     }
                 };
 
@@ -1501,8 +1511,10 @@
                     console.log('[MONITOR] 🎬 Video can play for', peer_id);
                     const placeholder = document.getElementById(`placeholder-${peer_id}`);
                     if (placeholder) {
-                        placeholder.style.display = 'none';
-                        videoElement.style.display = 'block';
+                        placeholder.style.setProperty('display', 'none', 'important');
+                        videoElement.style.setProperty('display', 'block', 'important');
+                        videoElement.style.setProperty('visibility', 'visible', 'important');
+                        videoElement.style.setProperty('opacity', '1', 'important');
                     }
                 };
 
@@ -1511,8 +1523,10 @@
                     console.log('[MONITOR] 📥 Video data loaded for', peer_id);
                     const placeholder = document.getElementById(`placeholder-${peer_id}`);
                     if (placeholder) {
-                        placeholder.style.display = 'none';
-                        videoElement.style.display = 'block';
+                        placeholder.style.setProperty('display', 'none', 'important');
+                        videoElement.style.setProperty('display', 'block', 'important');
+                        videoElement.style.setProperty('visibility', 'visible', 'important');
+                        videoElement.style.setProperty('opacity', '1', 'important');
                     }
                 };
 
@@ -1541,8 +1555,10 @@
                             } else if (isPlaceholderVisible) {
                                 // Force show video even with small dimensions if we have enabled tracks
                                 console.log('[MONITOR] 🔄 Periodic check: Forcing video display for enabled track', peer_id);
-                                placeholder.style.display = 'none';
-                                videoElement.style.display = 'block';
+                                placeholder.style.setProperty('display', 'none', 'important');
+                                videoElement.style.setProperty('display', 'block', 'important');
+                                videoElement.style.setProperty('visibility', 'visible', 'important');
+                                videoElement.style.setProperty('opacity', '1', 'important');
                             }
                         } else if (tracks.length > 0 && !tracks[0].enabled) {
                             // Track is disabled (camera off)
@@ -2390,9 +2406,30 @@
                 const video = wrapper.querySelector('video');
                 if (placeholder && video) {
                     const peerId = wrapper.id.replace('video-', '');
-                    console.log(`[DEBUG] 🚨 Forcing video for ${peerId || 'local'}`);
-                    placeholder.style.display = 'none';
-                    video.style.display = 'block';
+                    console.log(`[DEBUG] 🚨 Forcing video for ${peerId || 'local'}`, {
+                        videoSrc: video.srcObject ? 'has stream' : 'no stream',
+                        videoDisplay: video.style.display,
+                        videoVisible: video.offsetWidth > 0 && video.offsetHeight > 0,
+                        placeholderDisplay: placeholder.style.display,
+                        videoWidth: video.videoWidth,
+                        videoHeight: video.videoHeight,
+                        videoReadyState: video.readyState
+                    });
+                    
+                    // Force hide placeholder with !important
+                    placeholder.style.setProperty('display', 'none', 'important');
+                    
+                    // Force show video with !important and additional properties
+                    video.style.setProperty('display', 'block', 'important');
+                    video.style.setProperty('visibility', 'visible', 'important');
+                    video.style.setProperty('opacity', '1', 'important');
+                    video.style.setProperty('width', '100%', 'important');
+                    video.style.setProperty('height', '100%', 'important');
+                    
+                    // Force video to play if paused
+                    if (video.paused) {
+                        video.play().catch(e => console.log('Play failed:', e));
+                    }
                 }
             });
         }
