@@ -1035,7 +1035,11 @@
                         video: { width: 1280, height: 720 },
                         audio: true
                     });
-                    console.log('[VIDEO] Got both video and audio');
+                    console.log('[VIDEO] ✅ Got both video and audio');
+                    console.log('[VIDEO] Video tracks:', localStream.getVideoTracks().length);
+                    console.log('[VIDEO] Audio tracks:', localStream.getAudioTracks().length);
+                    console.log('[VIDEO] Stream ID:', localStream.id);
+                    console.log('[VIDEO] Stream active:', localStream.active);
                 } catch (fullError) {
                     console.warn('[VIDEO] Failed to get video+audio, trying audio only:', fullError);
                     // If both fail, try audio only
@@ -1361,47 +1365,80 @@
 
         // Enhanced video track monitoring function
         function monitorVideoTrack(peer_id, stream, videoElement) {
+            console.log('[MONITOR] 🔍 Monitoring video track for', peer_id);
+            console.log('[MONITOR] Stream info:', {
+                hasStream: !!stream,
+                videoTracks: stream?.getVideoTracks().length || 0,
+                audioTracks: stream?.getAudioTracks().length || 0
+            });
+
             if (stream && stream.getVideoTracks().length > 0) {
                 const videoTrack = stream.getVideoTracks()[0];
+                console.log('[MONITOR] 📹 Video track found:', {
+                    enabled: videoTrack.enabled,
+                    readyState: videoTrack.readyState,
+                    kind: videoTrack.kind
+                });
 
                 // Monitor track enabled state
                 const checkVideoState = () => {
-                    if (!videoTrack.enabled || videoTrack.readyState === 'ended') {
+                    const isVideoWorking = videoTrack.enabled && videoTrack.readyState !== 'ended';
+                    console.log('[MONITOR] 🔍 Video state check:', {
+                        enabled: videoTrack.enabled,
+                        readyState: videoTrack.readyState,
+                        isWorking: isVideoWorking
+                    });
+
+                    if (!isVideoWorking) {
+                        console.log('[MONITOR] ❌ Video not working, showing placeholder');
                         showCameraOffPlaceholder(peer_id);
                     } else {
+                        console.log('[MONITOR] ✅ Video working, hiding placeholder');
                         hideCameraOffPlaceholder(peer_id);
                     }
                 };
 
-                // Initial check
-                setTimeout(checkVideoState, 100);
+                // Give video element time to load before checking
+                setTimeout(() => {
+                    console.log('[MONITOR] ⏰ Initial video state check for', peer_id);
+                    checkVideoState();
+                }, 500);
 
                 // Monitor track state changes
-                videoTrack.onended = () => showCameraOffPlaceholder(peer_id);
+                videoTrack.onended = () => {
+                    console.log('[MONITOR] 🔚 Video track ended for', peer_id);
+                    showCameraOffPlaceholder(peer_id);
+                };
 
                 // Monitor video element events
-                videoElement.onloadedmetadata = checkVideoState;
-                videoElement.onplaying = () => hideCameraOffPlaceholder(peer_id);
-                videoElement.onpause = checkVideoState;
+                videoElement.onloadedmetadata = () => {
+                    console.log('[MONITOR] 📊 Video metadata loaded for', peer_id);
+                    hideCameraOffPlaceholder(peer_id);
+                };
 
-                // Periodic check for track enabled state
-                const trackMonitor = setInterval(() => {
-                    if (videoTrack.readyState === 'ended') {
-                        clearInterval(trackMonitor);
-                        return;
-                    }
+                videoElement.onplaying = () => {
+                    console.log('[MONITOR] ▶️ Video playing for', peer_id);
+                    hideCameraOffPlaceholder(peer_id);
+                };
+
+                videoElement.onpause = () => {
+                    console.log('[MONITOR] ⏸️ Video paused for', peer_id);
                     checkVideoState();
-                }, 1000);
+                };
 
                 // Store monitor reference for cleanup
                 if (!window.trackMonitors) window.trackMonitors = {};
                 if (window.trackMonitors[peer_id]) {
                     clearInterval(window.trackMonitors[peer_id]);
                 }
-                window.trackMonitors[peer_id] = trackMonitor;
             } else {
-                // No video track, show placeholder immediately
-                showCameraOffPlaceholder(peer_id);
+                console.log('[MONITOR] ❌ No video track found for', peer_id, '- showing placeholder');
+                // Give it a moment in case the track arrives later
+                setTimeout(() => {
+                    if (stream && stream.getVideoTracks().length === 0) {
+                        showCameraOffPlaceholder(peer_id);
+                    }
+                }, 1000);
             }
         }
 
@@ -1410,11 +1447,24 @@
             const placeholder = document.getElementById(`placeholder-${peer_id}`);
             const video = document.querySelector(`#video-${peer_id} video`);
 
+            console.log('[PLACEHOLDER] 🙈 Hiding placeholder for', peer_id, {
+                hasPlaceholder: !!placeholder,
+                hasVideo: !!video,
+                videoSrc: video?.srcObject ? 'has stream' : 'no stream'
+            });
+
             if (placeholder && video) {
                 placeholder.style.display = 'none';
                 video.style.display = 'block';
+                console.log('[PLACEHOLDER] ✅ Placeholder hidden, video shown for', peer_id);
+            } else {
+                console.error('[PLACEHOLDER] ❌ Missing elements for hiding placeholder:', peer_id, {
+                    placeholder: !!placeholder,
+                    video: !!video
+                });
             }
         }
+
 
         // Color palette for placeholders - 12 distinct vibrant themes
         const placeholderColors = [
@@ -1724,29 +1774,47 @@
         });
 
         socket.on('user-list', (data) => {
-            console.log('User list received:', data);
+            console.log('[SOCKET] 📋 User list received:', data);
             myID = data['my_id'];
+            console.log('[SOCKET] 🆔 My ID is:', myID);
 
             if ('list' in data) {
                 const recvd_list = data['list'];
+                console.log('[SOCKET] 👥 Received peer list:', recvd_list);
+                console.log('[SOCKET] 🎥 Local stream ready:', !!localStream);
+
                 for (let peer_id in recvd_list) {
                     _peer_list[peer_id] = undefined;
                     _peer_names[peer_id] = recvd_list[peer_id]; // STORE THE USERNAME!
-                    console.log('[USER-LIST] Added peer:', peer_id, 'name:', recvd_list[peer_id]);
+                    console.log('[USER-LIST] ➕ Added peer:', peer_id, 'name:', recvd_list[peer_id]);
                 }
                 updateParticipantList(Object.keys(_peer_list));
+
+                console.log('[SOCKET] 🚀 Starting WebRTC connections...');
+                console.log('[SOCKET] 📊 Peers to connect to:', Object.keys(_peer_list));
+                if (localStream) {
+                    console.log('[SOCKET] 🎥 Local stream status:', {
+                        active: localStream.active,
+                        videoTracks: localStream.getVideoTracks().length,
+                        audioTracks: localStream.getAudioTracks().length
+                    });
+                } else {
+                    console.error('[SOCKET] ❌ NO LOCAL STREAM - This will cause connection issues!');
+                }
                 start_webrtc();
             } else {
+                console.log('[SOCKET] 👤 No existing users in room');
                 updateParticipantList([]);
             }
         });
 
         socket.on('user-connect', (data) => {
-            console.log('[USER] New user connected:', data);
+            console.log('[USER] 🔗 New user connected:', data);
             const peer_id = data['sid'];
             const peer_name = data['name'];
 
             if (peer_id !== myID) {
+                console.log('[USER] 👋 Adding new peer:', peer_id, 'name:', peer_name);
                 // Store peer information
                 _peer_names[peer_id] = peer_name;
 
