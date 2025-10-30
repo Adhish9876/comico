@@ -282,10 +282,11 @@ Browser (HTML/JS) ↔ Eel Bridge ↔ Python Client ↔ TCP Socket ↔ Python Ser
 - Check IP address is correct
 - Ensure firewall allows connections
 
-### SSL Certificate Warnings
-- Normal for self-signed certificates
-- Click "Advanced" → "Proceed anyway"
-- Terminal errors can be ignored
+### SSL Certificate Warnings (FIXED!)
+- **NEW**: Use mkcert for trusted certificates (no warnings!)
+- Run: `.\setup_mkcert.ps1` (see [QUICK_START_SSL.md](QUICK_START_SSL.md))
+- Works offline, professional experience
+- Old method: Click "Advanced" → "Proceed anyway"
 
 ### Audio Not Working
 - Check microphone permissions
@@ -297,6 +298,8 @@ Browser (HTML/JS) ↔ Eel Bridge ↔ Python Client ↔ TCP Socket ↔ Python Ser
 ## 📚 Documentation
 
 For detailed information, see:
+- **[QUICK_START_SSL.md](QUICK_START_SSL.md)** - 🔒 Fix browser SSL warnings (3 steps!)
+- **[MKCERT_SETUP.md](MKCERT_SETUP.md)** - Complete SSL certificate guide
 - **[DOCUMENTATION.md](DOCUMENTATION.md)** - Complete technical guide
 - **[QUICK_START.md](QUICK_START.md)** - Step-by-step tutorial
 - **[README_EXE.md](README_EXE.md)** - Executable build guide

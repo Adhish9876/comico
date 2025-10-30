@@ -367,12 +367,19 @@ if __name__ == '__main__':
     print("Media server starting on https://0.0.0.0:5000")
     print("Supports both Video and Audio calls\n")
     
-    # Create self-signed certificate if it doesn't exist
+    # SSL Certificate setup
     cert_file = 'cert.pem'
     key_file = 'key.pem'
     
+    # Check if certificates exist
     if not os.path.exists(cert_file) or not os.path.exists(key_file):
-        print("[MEDIA SERVER] Generating self-signed certificate...")
+        print("[MEDIA SERVER] No SSL certificates found")
+        print("[MEDIA SERVER] 🔒 For trusted certificates (no browser warnings), run:")
+        print("[MEDIA SERVER]    .\\setup_mkcert.ps1")
+        print("[MEDIA SERVER] Or see MKCERT_SETUP.md for manual setup\n")
+        print("[MEDIA SERVER] Generating self-signed certificate as fallback...")
+        print("[MEDIA SERVER] ⚠️  Browser will show security warnings with self-signed certs\n")
+        
         try:
             from cryptography import x509
             from cryptography.x509.oid import NameOID
@@ -429,14 +436,31 @@ if __name__ == '__main__':
                     encryption_algorithm=serialization.NoEncryption()
                 ))
             
-            print("[MEDIA SERVER] Certificate generated successfully\n")
+            print("[MEDIA SERVER] Self-signed certificate generated")
+            print("[MEDIA SERVER] ⚠️  You'll need to accept browser warnings\n")
         except ImportError:
             print("[MEDIA SERVER] Installing cryptography library...")
             os.system("pip install cryptography")
             print("[MEDIA SERVER] Please run the server again after installation\n")
             exit(1)
+    else:
+        # Check if certificates are from mkcert (trusted) or self-signed
+        try:
+            with open(cert_file, 'r') as f:
+                cert_content = f.read()
+                if 'mkcert' in cert_content.lower():
+                    print("[MEDIA SERVER] ✅ Using mkcert trusted certificates")
+                    print("[MEDIA SERVER] 🔒 No browser warnings - certificates are trusted!\n")
+                else:
+                    print("[MEDIA SERVER] ⚠️  Using self-signed certificates")
+                    print("[MEDIA SERVER] Browser will show security warnings")
+                    print("[MEDIA SERVER] Run .\\setup_mkcert.ps1 for trusted certificates\n")
+        except:
+            print("[MEDIA SERVER] Using existing SSL certificates\n")
     
     # Run with HTTPS using Flask-SocketIO built-in server
-    print("[MEDIA SERVER] Server running on https://0.0.0.0:5000\n")
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, 
-                certfile=cert_file, keyfile=key_file)
+    print("[MEDIA SERVER] Server running on https://0.0.0.0:5000")
+    print(f"[MEDIA SERVER] Access at: https://{SERVER_IP}:5000\n")
+    
+    # Run with SSL certificates (certfile and keyfile parameters)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, certfile=cert_file, keyfile=key_file)
