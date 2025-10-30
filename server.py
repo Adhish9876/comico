@@ -369,6 +369,7 @@ class CollaborationServer:
             'get_users': self._handle_get_users,
             'request_groups': self._handle_request_groups,
             'delete_message': self._handle_delete_message,
+            'delete_user_chat': self._handle_delete_user_chat,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -1675,6 +1676,43 @@ class CollaborationServer:
             print(f"   ✓ Message deleted successfully")
         else:
             print(f"   ❌ Failed to delete message")
+
+    def _handle_delete_user_chat(self, client_socket: socket.socket, message: Dict):
+        """Handle request to delete entire private chat with a user"""
+        sender = message.get('sender')
+        target_user = message.get('target_user')
+        
+        print(f"🗑️ Delete user chat request from {sender} for user {target_user}")
+        
+        if not target_user or not sender:
+            print(f"   ❌ Missing sender or target_user")
+            return
+        
+        # Delete the private chat from storage
+        # Create chat key in the format used by storage
+        chat_key = f"{sender}_{target_user}"
+        success = storage.delete_private_chat(chat_key)
+        
+        if success:
+            # Notify the requesting client that chat was deleted
+            response = {
+                'type': 'user_chat_deleted',
+                'target_user': target_user,
+                'success': True,
+                'timestamp': self._timestamp()
+            }
+            self._send_to_client(client_socket, response)
+            print(f"   ✓ Chat with {target_user} deleted for {sender}")
+        else:
+            # Send failure response
+            response = {
+                'type': 'user_chat_deleted',
+                'target_user': target_user,
+                'success': False,
+                'timestamp': self._timestamp()
+            }
+            self._send_to_client(client_socket, response)
+            print(f"   ❌ Failed to delete chat with {target_user}")
 
     def cleanup(self):
         """Clean up server resources"""

@@ -719,9 +719,6 @@ function ensureBadges() {
                 btn.appendChild(span);
             }
         });
-        // Do not create or show unread badge for Global Network per requirement
-        const existingGlobalBadge = document.querySelector('#globalNetworkItem .unread-count');
-        if (existingGlobalBadge) existingGlobalBadge.style.display = 'none';
     } catch (e) { /* noop */ }
 }
 
@@ -1420,6 +1417,32 @@ function updateUnreadCountsUI() {
         }
     });
 
+    // Update active users list items with unread badges
+    Object.entries(unreadCounts.private).forEach(([user, count]) => {
+        const activeUserItem = document.querySelector(`.active-user-item[data-user="${user}"]`);
+        if (activeUserItem) {
+            const nameEl = activeUserItem.querySelector('.active-user-name');
+            if (nameEl) {
+                let unreadBadge = ensureBadge(nameEl);
+                if (count > 0) {
+                    unreadBadge.textContent = count > 99 ? '99+' : count;
+                    unreadBadge.style.display = 'inline-block';
+                } else {
+                    unreadBadge.style.display = 'none';
+                }
+            }
+        }
+    });
+
+    // Also remove badges from active users not in unreadCounts.private
+    document.querySelectorAll(`.active-user-item[data-user] .unread-count`).forEach(badge => {
+        const activeUserItem = badge.closest('.active-user-item');
+        const user = activeUserItem.dataset.user;
+        if (!unreadCounts.private[user] || unreadCounts.private[user] === 0) {
+            badge.style.display = 'none';
+        }
+    });
+
     // Update group list items
     Object.entries(unreadCounts.group).forEach(([gid, count]) => {
         const chatItem = document.querySelector(`.chat-item[data-group-id="${gid}"]`);
@@ -1446,9 +1469,21 @@ function updateUnreadCountsUI() {
         }
     });
 
-    // Do not display unread badge for Global Network
-    const globalBadge = document.querySelector('#globalNetworkItem .unread-count');
-    if (globalBadge) globalBadge.style.display = 'none';
+    // Update Global Network unread badge
+    const globalNetworkItem = document.getElementById('globalNetworkItem');
+    if (globalNetworkItem) {
+        const nameEl = globalNetworkItem.querySelector('.chat-name');
+        if (nameEl) {
+            let globalBadge = ensureBadge(nameEl);
+            const globalCount = unreadCounts.global || 0;
+            if (globalCount > 0) {
+                globalBadge.textContent = globalCount > 99 ? '99+' : globalCount;
+                globalBadge.style.display = 'inline-block';
+            } else {
+                globalBadge.style.display = 'none';
+            }
+        }
+    }
 
     // Update total badges
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1542,8 +1577,16 @@ function handleMessage(message) {
             }
         }
 
+        // Don't automatically move user from active list when receiving message
+        // Only move to private chats when user initiates the chat
         if (message.receiver === username) {
-            addToRecentChats(message.sender);
+            // Check if user already exists in private chats list
+            const existingChatItem = document.querySelector(`.chat-item[data-user="${message.sender}"]`);
+            if (existingChatItem) {
+                // User already in private chats, add to recent
+                addToRecentChats(message.sender);
+            }
+            // Otherwise, keep them in active users with unread badge
         }
     }
     else if (msgType === 'private_file') {
@@ -1559,7 +1602,12 @@ function handleMessage(message) {
         }
 
         if (message.receiver === username) {
-            addToRecentChats(message.sender);
+            // Check if user already exists in private chats list
+            const existingChatItem = document.querySelector(`.chat-item[data-user="${message.sender}"]`);
+            if (existingChatItem) {
+                // User already in private chats, add to recent
+                addToRecentChats(message.sender);
+            }
             showNotification(`${message.sender} shared a file`, 'info');
         }
     }
@@ -1734,6 +1782,18 @@ function handleMessage(message) {
     }
     else if (msgType === 'group_list') {
         updateGroupsList(message.groups);
+    }
+    else if (msgType === 'user_chat_deleted') {
+        const targetUser = message.target_user;
+        const success = message.success;
+        
+        if (success) {
+            console.log(`✅ Server confirmed deletion of chat with ${targetUser}`);
+            showNotification(`Chat with ${targetUser} deleted successfully`, 'success');
+        } else {
+            console.error(`❌ Server failed to delete chat with ${targetUser}`);
+            showNotification(`Failed to delete chat with ${targetUser}`, 'error');
+        }
     }
     else if (msgType === 'file_notification') {
         chatHistories.global.push(message);
@@ -3208,6 +3268,29 @@ function updateUsersList(users) {
     }
     noUsersMsg.style.display = 'none';
 
+    // Sort users by unread count (descending) and last message timestamp (most recent first)
+    activeChattedUsers.sort((a, b) => {
+        // Current chat always at top if actively chatting
+        if (currentChatType === 'private') {
+            if (a === currentChatTarget) return -1;
+            if (b === currentChatTarget) return 1;
+        }
+
+        // Sort by unread count (higher first)
+        const unreadA = unreadCounts.private[a] || 0;
+        const unreadB = unreadCounts.private[b] || 0;
+        if (unreadA !== unreadB) {
+            return unreadB - unreadA;
+        }
+
+        // If unread counts are equal, sort by last message timestamp
+        const messagesA = chatHistories.private[a] || [];
+        const messagesB = chatHistories.private[b] || [];
+        const lastMsgA = messagesA.length > 0 ? new Date(messagesA[messagesA.length - 1].timestamp).getTime() : 0;
+        const lastMsgB = messagesB.length > 0 ? new Date(messagesB[messagesB.length - 1].timestamp).getTime() : 0;
+        return lastMsgB - lastMsgA;
+    });
+
     activeChattedUsers.forEach(user => {
         const isOnline = users.includes(user);
         const chatItem = document.createElement('div');
@@ -3284,6 +3367,7 @@ function updateActiveUsersSection(activeUsers) {
     }
 
     activeUsersSection.style.display = 'block';
+    // Don't display the count (hidden in HTML)
     activeUsersCount.textContent = activeUsers.length;
     activeUsersList.innerHTML = '';
 
@@ -3296,13 +3380,33 @@ function updateActiveUsersSection(activeUsers) {
             switchToPrivateChat(user);
         };
 
+        const userNameDiv = document.createElement('div');
+        userNameDiv.className = 'active-user-name';
+        userNameDiv.textContent = user;
+        
+        // Add unread badge support
+        const unreadCount = unreadCounts.private[user] || 0;
+        if (unreadCount > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'unread-count';
+            badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+            badge.style.display = 'inline-block';
+            userNameDiv.appendChild(badge);
+        }
+
         userItem.innerHTML = `
             <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
             <div class="active-user-info">
-                <div class="active-user-name">${user}</div>
-                <div class="active-user-status">Online</div>
             </div>
         `;
+        
+        const userInfo = userItem.querySelector('.active-user-info');
+        userInfo.appendChild(userNameDiv);
+        
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'active-user-status';
+        statusDiv.textContent = 'Online';
+        userInfo.appendChild(statusDiv);
 
         activeUsersList.appendChild(userItem);
     });
@@ -3472,6 +3576,29 @@ function renderGroupsList() {
     }
 
     noGroupsMsg.style.display = 'none';
+
+    // Sort groups by unread count (descending) and last message timestamp (most recent first)
+    groupIds.sort((a, b) => {
+        // Current chat always at top if actively chatting
+        if (currentChatType === 'group') {
+            if (a === currentChatTarget) return -1;
+            if (b === currentChatTarget) return 1;
+        }
+
+        // Sort by unread count (higher first)
+        const unreadA = unreadCounts.group[a] || 0;
+        const unreadB = unreadCounts.group[b] || 0;
+        if (unreadA !== unreadB) {
+            return unreadB - unreadA;
+        }
+
+        // If unread counts are equal, sort by last message timestamp
+        const messagesA = chatHistories.group[a] || [];
+        const messagesB = chatHistories.group[b] || [];
+        const lastMsgA = messagesA.length > 0 ? new Date(messagesA[messagesA.length - 1].timestamp).getTime() : 0;
+        const lastMsgB = messagesB.length > 0 ? new Date(messagesB[messagesB.length - 1].timestamp).getTime() : 0;
+        return lastMsgB - lastMsgA;
+    });
 
     // Render each unique group ONCE
     groupIds.forEach(groupId => {
@@ -5624,14 +5751,24 @@ function deleteChat(user) {
     console.log(`🗑️ DELETING: ${user}`);
 
     // Delete from server JSON file
-    eel.delete_private_chat(user)().then(() => {
-        console.log(`✅ Server confirmed deletion of chat for: ${user}`);
+    eel.send_message('delete_user_chat', '', {
+        sender: username,
+        target_user: user
+    })().then(() => {
+        console.log(`✅ Server delete request sent for: ${user}`);
     }).catch(err => {
-        console.error(`❌ Failed to delete from server: ${err}`);
+        console.error(`❌ Failed to send delete request to server: ${err}`);
     });
 
     // Delete chat history from frontend
     delete chatHistories.private[user];
+    
+    // Clear unread count for this user
+    if (unreadCounts.private[user]) {
+        delete unreadCounts.private[user];
+        updateTotalUnreadCount();
+        updateUnreadCountsUI();
+    }
 
     // Remove archived state
     archivedChats.delete(user);
