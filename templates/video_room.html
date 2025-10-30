@@ -925,13 +925,13 @@
         </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="/static/js/socket.io.min.js"></script>
     <script>
         const sessionId = "{{ session_id }}";
         const sessionType = "{{ session_type }}";
         const urlParams = new URLSearchParams(window.location.search);
         const username = urlParams.get('username') || 'Guest';
-        const socket = io('https://172.20.10.3:5000', { autoConnect: false });
+        const socket = io('http://192.168.137.175:5000', { autoConnect: false });
         let isVideoDisabled = false;
         let isHandRaised = false;
         let isScreenSharing = false;

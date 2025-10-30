@@ -19,7 +19,7 @@ from typing import Dict, List
 import os
 import ssl
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SECRET_KEY'] = 'shadow_nexus_video_secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
 

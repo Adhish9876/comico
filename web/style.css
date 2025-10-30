@@ -1,5 +1,5 @@
 /* Shadow Nexus - Comic Book Matte Finish CSS */
-@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&display=swap');
+@import url('../static/css/google-fonts.css');
 
 :root {
     /* Toned down comic book palette - less vibrant */
