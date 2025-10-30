@@ -118,37 +118,6 @@ let isPageRefresh = true;
 // Track last date to show dividers - reset per chat
 var lastMessageDate = null;
 
-// Function to clean up duplicate date dividers
-function cleanupDuplicateDateDividers() {
-    const dateDividers = messagesContainer.querySelectorAll('.date-divider');
-    const seenDates = new Map(); // Use Map to track first occurrence
-    const toRemove = [];
-    
-    dateDividers.forEach(divider => {
-        const dateText = divider.textContent;
-        const datasetDate = divider.dataset.date;
-        
-        // Use both textContent and dataset.date for comparison
-        const dateKey = datasetDate || dateText;
-        
-        if (seenDates.has(dateKey)) {
-            console.log('🗓️ Marking duplicate date divider for removal:', dateText);
-            toRemove.push(divider);
-        } else {
-            seenDates.set(dateKey, divider);
-        }
-    });
-    
-    // Only remove if we actually found duplicates
-    if (toRemove.length > 0) {
-        console.log(`🗓️ Removing ${toRemove.length} duplicate date dividers`);
-        toRemove.forEach(divider => {
-            console.log(`   Removing: "${divider.textContent}"`);
-            divider.remove();
-        });
-    }
-}
-
 // Add a more aggressive message rendering for page refreshes
 function ensureMessagesVisible() {
     if (currentChatType === 'global' && chatHistories.global.length > 0 && messagesContainer.children.length === 0) {
@@ -174,55 +143,24 @@ function debugChatState() {
 // Make debug function available globally for testing
 window.debugChatState = debugChatState;
 
-// Make cleanup function available globally for manual cleanup
-window.cleanupDateDividers = cleanupDuplicateDateDividers;
-
-// Debug function to test date consistency
-window.testDateConsistency = function() {
-    console.log('=== TESTING DATE CONSISTENCY ===');
-    
-    const testTimestamps = [
-        '2025-10-29 03:56 PM',
-        '03:56 PM',
-        '2025-10-29 04:30 PM',
-        '04:30 PM',
-        '2025-10-30 09:15 AM',
-        '09:15 AM'
-    ];
-    
-    testTimestamps.forEach(ts => {
-        const date = getDateFromTimestamp(ts);
-        console.log(`Timestamp: "${ts}" -> Date: "${date}"`);
-    });
-    
-    // Check existing date dividers
-    const existingDividers = messagesContainer.querySelectorAll('.date-divider');
-    console.log('Existing date dividers:');
-    existingDividers.forEach((div, index) => {
-        console.log(`${index + 1}: "${div.textContent}" (dataset.date: "${div.dataset.date}")`);
-    });
-    
-    console.log('========================');
-};
-
 // Debug function to test date functionality
-window.testDateFunction = function () {
+window.testDateFunction = function() {
     console.log('=== TESTING DATE FUNCTION ===');
-
+    
     // Test current timestamp
     const now = new Date();
-    const currentTimestamp = now.getFullYear() + '-' +
-        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    const currentTimestamp = now.getFullYear() + '-' + 
+        String(now.getMonth() + 1).padStart(2, '0') + '-' + 
         String(now.getDate()).padStart(2, '0') + ' ' +
         now.toLocaleTimeString('en-US', {
             hour: 'numeric',
             minute: '2-digit',
             hour12: true
         });
-
+    
     console.log('Current timestamp:', currentTimestamp);
     console.log('Parsed date:', getDateFromTimestamp(currentTimestamp));
-
+    
     // Test different timestamp formats
     const testTimestamps = [
         '2025-10-28 03:56 PM',
@@ -230,28 +168,28 @@ window.testDateFunction = function () {
         '2025-10-28T15:56:00',
         new Date().toISOString()
     ];
-
+    
     testTimestamps.forEach(ts => {
         console.log(`Timestamp: ${ts} -> Date: ${getDateFromTimestamp(ts)}`);
     });
-
+    
     console.log('lastMessageDate variable:', lastMessageDate);
     console.log('========================');
 };
 
 // Debug function to manually add a date divider for testing
-window.testDateDivider = function () {
+window.testDateDivider = function() {
     console.log('=== TESTING DATE DIVIDER ===');
-
+    
     const currentDate = getDateFromTimestamp();
     console.log('Current date string:', currentDate);
-
+    
     const dateDivider = document.createElement('div');
     dateDivider.className = 'date-divider';
     dateDivider.textContent = currentDate;
     dateDivider.dataset.date = currentDate;
     dateDivider.style.cssText = 'background: var(--bg-card); border: 2px solid var(--accent-cyan); border-radius: 16px; padding: 10px 20px; font-size: 13px; color: var(--accent-cyan); font-weight: 700; text-align: center; margin: 20px 0; text-transform: uppercase; letter-spacing: 1px; font-family: "Comic Neue", cursive; align-self: center;';
-
+    
     messagesContainer.appendChild(dateDivider);
     console.log('Added test date divider:', dateDivider);
     console.log('========================');
@@ -965,11 +903,11 @@ signupBtn.addEventListener('click', async () => {
 
             // Spin logo and transition to tutorial
             spinLogo(signupScreen);
-
+            
             setTimeout(() => {
                 signupScreen.classList.remove('active');
                 document.getElementById('tutorialScreen').classList.add('active');
-
+                
                 // Initialize tutorial
                 initTutorial();
             }, 1000);
@@ -1315,8 +1253,8 @@ async function sendMessage() {
 
     // Create the message object immediately with full date timestamp
     const now = new Date();
-    const timestamp = now.getFullYear() + '-' +
-        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    const timestamp = now.getFullYear() + '-' + 
+        String(now.getMonth() + 1).padStart(2, '0') + '-' + 
         String(now.getDate()).padStart(2, '0') + ' ' +
         now.toLocaleTimeString('en-US', {
             hour: 'numeric',
@@ -1595,10 +1533,6 @@ function handleMessage(message) {
                 unreadCounts.private[otherUser] = (unreadCounts.private[otherUser] || 0) + 1;
                 updateTotalUnreadCount();
                 updateUnreadCountsUI();
-                
-                // IMPORTANT: Increment unread count for Active Users section
-                incrementUnreadCount(otherUser);
-                
                 const preview = (message.content || '').slice(0, 40);
                 if (isWindowFocused) {
                     showInAppBanner(`New message from ${message.sender}${preview ? ': ' + preview : ''}`);
@@ -1882,10 +1816,8 @@ function handleMessage(message) {
             }
             handleAudioInvite(message);
         } else if (message.sender !== username) {
-            // We're not in global chat but someone else started a call - show notification AND popup
+            // We're not in global chat but someone else started a call
             showNotification(`${message.sender} started an audio call in Global Network`, 'info');
-            // Show popup modal for global calls too (like private calls)
-            showIncomingAudioCallModal(message.sender, message.link, message.session_id);
         }
     }
     else if (msgType === 'audio_invite_private') {
@@ -1951,10 +1883,8 @@ function handleMessage(message) {
             }
             handleVideoInvite(message);
         } else if (message.sender !== username) {
-            // We're not in global chat but someone else started a call - show notification AND popup
+            // We're not in global chat but someone else started a call
             showNotification(`${message.sender} started a video call in Global Network`, 'info');
-            // Show popup modal for global calls too (like private calls)
-            showIncomingCallModal(message.sender, message.link, message.session_id);
         }
     }
     else if (msgType === 'video_invite_private') {
@@ -2129,9 +2059,6 @@ function renderCurrentChat(preserveScroll = true) {
         });
     }
 
-    // Clean up any duplicate date dividers that might have been created
-    cleanupDuplicateDateDividers();
-
     // Check if this chat has been viewed already
     const chatKey = currentChatType === 'global' ? 'global' : `${currentChatType}_${currentChatTarget}`;
     const hasBeenViewed = viewedChats.has(chatKey);
@@ -2286,41 +2213,27 @@ function addMessage(message, autoScroll = true) {
         currentDate: currentDate,
         sender: message.sender
     });
-
-    let addedDateDivider = false;
     
     if (currentDate) {
+        // Check if the last message in the container has a different date
+        const lastMessage = messagesContainer.lastElementChild;
         let shouldAddDivider = false;
         
-        // Check if a date divider for this date already exists (check both textContent and dataset.date)
-        const existingDateDivider = Array.from(messagesContainer.children)
-            .find(child => child.classList.contains('date-divider') && 
-                  (child.textContent === currentDate || child.dataset.date === currentDate));
-        
-        if (existingDateDivider) {
-            // Date divider for this date already exists, don't add another
-            shouldAddDivider = false;
-            console.log('🗓️ Date divider already exists for:', currentDate);
+        if (!lastMessage) {
+            // First message - always add date divider
+            shouldAddDivider = true;
+            console.log('🗓️ First message - adding date divider');
+        } else if (lastMessage.classList.contains('date-divider')) {
+            // Last element is already a date divider - check if it's different
+            shouldAddDivider = lastMessage.textContent !== currentDate;
+            console.log('🗓️ Last element is date divider:', lastMessage.textContent, 'vs', currentDate, '-> shouldAdd:', shouldAddDivider);
         } else {
-            // Check if we need to add a date divider based on the last message
-            const lastMessage = messagesContainer.lastElementChild;
-            
-            if (!lastMessage) {
-                // First message - always add date divider
-                shouldAddDivider = true;
-                console.log('🗓️ First message - adding date divider');
-            } else if (lastMessage.classList.contains('date-divider')) {
-                // Last element is already a date divider - check if it's different
-                shouldAddDivider = lastMessage.textContent !== currentDate;
-                console.log('🗓️ Last element is date divider:', lastMessage.textContent, 'vs', currentDate, '-> shouldAdd:', shouldAddDivider);
-            } else {
-                // Last element is a message - check its date
-                const lastMessageDate = lastMessage.dataset.messageDate;
-                shouldAddDivider = !lastMessageDate || lastMessageDate !== currentDate;
-                console.log('🗓️ Last element is message with date:', lastMessageDate, 'vs', currentDate, '-> shouldAdd:', shouldAddDivider);
-            }
+            // Last element is a message - check its date
+            const lastMessageDate = lastMessage.dataset.messageDate;
+            shouldAddDivider = !lastMessageDate || lastMessageDate !== currentDate;
+            console.log('🗓️ Last element is message with date:', lastMessageDate, 'vs', currentDate, '-> shouldAdd:', shouldAddDivider);
         }
-
+        
         if (shouldAddDivider) {
             const dateDivider = document.createElement('div');
             dateDivider.className = 'date-divider';
@@ -2328,9 +2241,8 @@ function addMessage(message, autoScroll = true) {
             dateDivider.dataset.date = currentDate;
             messagesContainer.appendChild(dateDivider);
             console.log('🗓️ Added date divider:', currentDate);
-            addedDateDivider = true;
         }
-
+        
         // Store the date on the message element for future reference
         messageDiv.dataset.messageDate = currentDate;
     }
@@ -2507,11 +2419,6 @@ function addMessage(message, autoScroll = true) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     } else if (isAtBottom()) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-    // Only clean up duplicates if we actually added a date divider
-    if (addedDateDivider) {
-        setTimeout(() => cleanupDuplicateDateDividers(), 100);
     }
 
     return messageDiv;
@@ -2705,6 +2612,7 @@ function handleVideoInvite(message, isFromHistory = false) {
         </div>
     </div>
     <button class="join-call-btn" 
+            data-session-id="${session_id}"
             onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'video_call', 'width=1200,height=800')"
             style="width: 100%; 
                    background: linear-gradient(135deg, #c62828, #c62828); 
@@ -2723,9 +2631,9 @@ function handleVideoInvite(message, isFromHistory = false) {
                    align-items: center;
                    justify-content: center;
                    gap: 8px;
-                   box-shadow: 0 2px 6px #c62828;"
-            onmouseover="this.style.background='linear-gradient(135deg, #d32f2f, #c62828)'; this.style.boxShadow='0 4px 12px rgba(198, 40, 40, 0.6)';"
-            onmouseout="this.style.background='linear-gradient(135deg, #c62828, #c62828)'; this.style.boxShadow='0 2px 6px rgba(198, 40, 40, 0.4)';">
+                   box-shadow: 0 2px 6px rgba(198, 40, 40, 0.4);"
+            onmouseover="if(!this.disabled) { this.style.background='linear-gradient(135deg, #d32f2f, #c62828)'; this.style.boxShadow='0 4px 12px rgba(198, 40, 40, 0.6)'; }"
+            onmouseout="if(!this.disabled) { this.style.background='linear-gradient(135deg, #c62828, #c62828)'; this.style.boxShadow='0 2px 6px rgba(198, 40, 40, 0.4)'; }">
         <span>🎥</span>
         <span>Join Video Call</span>
     </button>
@@ -2885,6 +2793,7 @@ function handleAudioInvite(message, isFromHistory = false) {
         </div>
     </div>
     <button class="join-call-btn" 
+            data-session-id="${session_id}"
             onclick="window.open('${link}?username=${encodeURIComponent(username)}', 'audio_call', 'width=600,height=500')"
             style="width: 100%; 
                    background: linear-gradient(135deg, #00b8d4, #00b8d4); 
@@ -2903,9 +2812,9 @@ function handleAudioInvite(message, isFromHistory = false) {
                    align-items: center;
                    justify-content: center;
                    gap: 8px;
-                   box-shadow: 0 2px 6px #00b8d4;"
-            onmouseover="this.style.background='linear-gradient(135deg, #00acc1, #00b8d4)'; this.style.boxShadow='0 4px 12px rgba(0, 184, 212, 0.6)';"
-            onmouseout="this.style.background='linear-gradient(135deg, #00b8d4, #00b8d4)'; this.style.boxShadow='0 2px 6px rgba(0, 184, 212, 0.4)';">
+                   box-shadow: 0 2px 6px rgba(0, 184, 212, 0.4);"
+            onmouseover="if(!this.disabled) { this.style.background='linear-gradient(135deg, #00acc1, #00b8d4)'; this.style.boxShadow='0 4px 12px rgba(0, 184, 212, 0.6)'; }"
+            onmouseout="if(!this.disabled) { this.style.background='linear-gradient(135deg, #00b8d4, #00b8d4)'; this.style.boxShadow='0 2px 6px rgba(0, 184, 212, 0.4)'; }">
         <span>🎙️</span>
         <span>Join Audio Call</span>
     </button>
@@ -3034,7 +2943,7 @@ function handleVideoMissed(message) {
         if (btn && !btn.disabled) {  // Only update if not already disabled
             console.log('[VIDEO] Updating button to missed call');
             btn.disabled = true;
-            btn.textContent = `📵 Call (${timestamp})`;
+            btn.textContent = `📵 Missed Call (${timestamp})`;
             btn.style.background = 'linear-gradient(135deg, #555, #777)';
             btn.style.cursor = 'default';
             btn.onmouseover = null;
@@ -3164,7 +3073,7 @@ function handleAudioMissed(message) {
         if (btn && !btn.disabled) {  // Only update if not already disabled
             console.log('[AUDIO] Updating button to missed call');
             btn.disabled = true;
-            btn.textContent = `🔇Call (${timestamp})`;
+            btn.textContent = `🔇 Missed Call (${timestamp})`;
             btn.style.background = 'linear-gradient(135deg, #555, #777)';
             btn.style.cursor = 'default';
             btn.onmouseover = null;
@@ -3214,7 +3123,7 @@ function restoreVideoCallStates() {
             if (btn && !btn.disabled) {
                 console.log('[VIDEO] Restoring missed call state for session:', sessionId);
                 btn.disabled = true;
-                btn.textContent = `📵 Call (${missedInfo.timestamp})`;
+                btn.textContent = `📵 Missed Call (${missedInfo.timestamp})`;
                 btn.style.background = '#484444';
                 btn.style.borderColor = '#524e4e';
                 btn.style.color = '#908a8a';
@@ -3285,8 +3194,8 @@ function updateUsersList(users) {
     const activeOnlyUsers = onlineUsers.filter(u => !chattedUsers.has(u));
     const chattedOnlineUsers = onlineUsers.filter(u => chattedUsers.has(u));
 
-    // Update Active Users Section (pass all online users for proper filtering)
-    updateActiveUsersSection(activeOnlyUsers, onlineUsers);
+    // Update Active Users Section
+    updateActiveUsersSection(activeOnlyUsers);
 
     // Update Private Chats List (only show users we've chatted with, excluding archived)
     usersList.innerHTML = '';
@@ -3363,11 +3272,8 @@ function updateUsersList(users) {
     updateUnreadCountsUI();
 }
 
-// Track unread messages per user
-const unreadMessages = {};
-
 // Update Active Users Section
-function updateActiveUsersSection(activeUsers, allOnlineUsers = []) {
+function updateActiveUsersSection(activeUsers) {
     const activeUsersSection = document.getElementById('activeUsersSection');
     const activeUsersList = document.getElementById('activeUsersList');
     const activeUsersCount = document.getElementById('activeUsersCount');
@@ -3386,16 +3292,9 @@ function updateActiveUsersSection(activeUsers, allOnlineUsers = []) {
         userItem.className = 'active-user-item';
         userItem.dataset.user = user;
         userItem.onclick = () => {
-            // Clear unread count when clicked
-            clearUnreadCount(user);
             // Switch to private chat when clicked
             switchToPrivateChat(user);
         };
-
-        // Check if there are unread messages from this user
-        const unreadCount = unreadMessages[user] || 0;
-        const notificationBadge = unreadCount > 0 ? 
-            `<div class="notification-badge">${unreadCount > 9 ? '9+' : unreadCount}</div>` : '';
 
         userItem.innerHTML = `
             <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
@@ -3403,62 +3302,10 @@ function updateActiveUsersSection(activeUsers, allOnlineUsers = []) {
                 <div class="active-user-name">${user}</div>
                 <div class="active-user-status">Online</div>
             </div>
-            ${notificationBadge}
         `;
 
         activeUsersList.appendChild(userItem);
     });
-}
-
-// Function to increment unread count for a user
-function incrementUnreadCount(user) {
-    if (!unreadMessages[user]) {
-        unreadMessages[user] = 0;
-    }
-    unreadMessages[user]++;
-    console.log(`📬 Unread count for ${user}: ${unreadMessages[user]}`);
-    
-    // Update the UI immediately - only update if user is in active users section
-    const activeUserItem = document.querySelector(`.active-user-item[data-user="${user}"]`);
-    if (activeUserItem) {
-        // User is in active section, update the badge
-        const existingBadge = activeUserItem.querySelector('.notification-badge');
-        const count = unreadMessages[user];
-        
-        if (existingBadge) {
-            existingBadge.textContent = count > 9 ? '9+' : count;
-        } else {
-            // Add new badge
-            const badge = document.createElement('div');
-            badge.className = 'notification-badge';
-            badge.textContent = count > 9 ? '9+' : count;
-            activeUserItem.appendChild(badge);
-        }
-        console.log(`✅ Updated notification badge for ${user} in Active Users`);
-    }
-}
-
-// Function to clear unread count for a user
-function clearUnreadCount(user) {
-    if (unreadMessages[user]) {
-        console.log(`✅ Clearing unread count for ${user}`);
-        delete unreadMessages[user];
-        
-        // Remove badge from UI
-        const activeUserItem = document.querySelector(`.active-user-item[data-user="${user}"]`);
-        if (activeUserItem) {
-            const badge = activeUserItem.querySelector('.notification-badge');
-            if (badge) {
-                badge.remove();
-            }
-        }
-    }
-}
-
-// Helper function to check if user is already in private chats
-function isUserInPrivateChats(user) {
-    // Check if user has any chat history
-    return chatHistories.private && chatHistories.private[user] && chatHistories.private[user].length > 0;
 }
 
 // Move user from active to chatted when first message sent
@@ -3709,9 +3556,6 @@ function displayRecentChats() {
 
 async function switchToPrivateChat(user) {
     console.log(`🔄 SWITCHING TO PRIVATE CHAT: ${user}`);
-
-    // Clear unread count for this user in Active Users section
-    clearUnreadCount(user);
 
     // Reset date tracker when switching chats
     resetDateTracker();
@@ -4231,72 +4075,25 @@ function stopRecording() {
 }
 
 function showAudioPreview(audioBlob) {
-    // Remove any existing audio preview
-    const existingPreview = document.getElementById('audioPreview');
-    if (existingPreview) {
-        existingPreview.remove();
-    }
-    
     const previewUI = document.createElement('div');
     previewUI.id = 'audioPreview';
-    previewUI.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10001;
-        animation: fadeIn 0.3s ease-out;
-    `;
-    
     previewUI.innerHTML = `
-        <div class="audio-preview-modal" style="
-            position: relative;
-            background: var(--bg-panel);
-            border: 4px solid var(--border-main);
-            padding: 25px;
-            border-radius: 16px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-            min-width: 320px;
-            animation: slideIn 0.3s ease-out;
-        ">
-            <div class="audio-preview-title" style="
-                color: var(--accent-purple);
-                font-family: 'Bangers', cursive;
-                font-size: 20px;
-                letter-spacing: 2px;
-                text-align: center;
-                margin-bottom: 5px;
-            ">🎤 Audio Message</div>
-            <audio id="audioPreviewPlayer" controls class="audio-preview-player" style="
-                width: 300px;
-                height: 50px;
-                border-radius: 12px;
-                background: var(--bg-card);
-                border: 3px solid var(--border-main);
-                outline: none;
-            "></audio>
-            <div class="audio-preview-buttons" style="
-                display: flex;
-                gap: 15px;
-                margin-top: 10px;
-            ">
+        <div class="audio-preview-modal">
+            <div class="audio-preview-title">🎤 Audio Message</div>
+            <audio id="audioPreviewPlayer" controls class="audio-preview-player"></audio>
+            <div class="audio-preview-buttons">
                 <button id="discardAudio" class="modal-btn cancel">🗑️ Discard</button>
                 <button id="sendAudio" class="modal-btn create">📤 Send</button>
             </div>
         </div>
     `;
-    
-    // Always append to body for proper overlay
-    document.body.appendChild(previewUI);
+    // Append to chat-area instead of body
+    const chatArea = document.querySelector('.chat-area');
+    if (chatArea) {
+        chatArea.appendChild(previewUI);
+    } else {
+        document.body.appendChild(previewUI);
+    }
 
     // Set up the audio preview
     const audioURL = URL.createObjectURL(audioBlob);
@@ -4950,15 +4747,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Load saved theme on startup
     const savedTheme = localStorage.getItem('selectedTheme') || 'alt';
-
+    
     // Remove all theme classes first
     document.body.classList.remove('theme-default', 'theme-alt', 'theme-orange', 'theme-green');
-
+    
     // Apply the saved theme
     if (savedTheme !== 'default') {
         document.body.classList.add(`theme-${savedTheme}`);
     }
-
+    
     // Update active button
     const savedOption = document.querySelector(`[data-theme="${savedTheme}"]`);
     if (savedOption) {
@@ -4972,17 +4769,17 @@ eel.expose(onDisconnected);
 function onDisconnected() {
     console.log('[DISCONNECT] Server connection lost');
     showNotification('⚠️ Server connection lost', 'error');
-
+    
     // Show full screen spinner with server down message
     const spinner = document.getElementById('fullScreenSpinner');
     const spinnerSubtitle = spinner.querySelector('.spinner-subtitle');
-
+    
     if (spinnerSubtitle) {
         spinnerSubtitle.textContent = '⚠️ Server is down. Reconnecting...';
     }
-
+    
     spinner.classList.add('active');
-
+    
     // After 3 seconds, go back to login screen
     setTimeout(() => {
         spinner.classList.remove('active');
@@ -4990,7 +4787,7 @@ function onDisconnected() {
         loginScreen.classList.add('active');
         loginBtn.disabled = false;
         loginBtn.textContent = 'CONNECT';
-
+        
         if (spinnerSubtitle) {
             spinnerSubtitle.textContent = 'Connecting to Shadow Network...';
         }
@@ -5152,7 +4949,7 @@ function formatTimeWithoutSeconds(timestamp) {
 function getDateFromTimestamp(timestamp) {
     try {
         let dateObj;
-
+        
         if (!timestamp) {
             dateObj = new Date();
         } else {
@@ -5172,34 +4969,34 @@ function getDateFromTimestamp(timestamp) {
                 const parts = timestamp.split(/\s+/);
                 const timePart = parts[0];
                 const period = parts[1];
-
+                
                 const [hours, minutes] = timePart.split(':').map(Number);
-
+                
                 let hour24 = hours;
                 if (period && period.toUpperCase() === 'PM' && hours !== 12) {
                     hour24 += 12;
                 } else if (period && period.toUpperCase() === 'AM' && hours === 12) {
                     hour24 = 0;
                 }
-
+                
                 dateObj = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hour24, minutes);
             } else {
                 // Fallback to current date
                 dateObj = new Date();
             }
         }
-
+        
         // Validate the date
         if (isNaN(dateObj.getTime())) {
             dateObj = new Date();
         }
-
+        
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const dayName = days[dateObj.getDay()];
         const date = dateObj.getDate().toString().padStart(2, '0');
         const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
         const year = dateObj.getFullYear().toString().slice(-2);
-
+        
         return `${dayName} ${date}-${month}-${year}`;
     } catch (e) {
         console.log('Error parsing timestamp:', timestamp, e);
@@ -7599,13 +7396,13 @@ function initTutorial() {
     if (continueBtn) {
         continueBtn.addEventListener('click', () => {
             console.log('Tutorial complete, going to login...');
-
+            
             // Remove event listeners
             window.removeEventListener('wheel', handleMouseWheel);
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('touchstart', handleTouchStart);
             window.removeEventListener('touchend', handleTouchEnd);
-
+            
             // Transition to login screen
             setTimeout(() => {
                 document.getElementById('tutorialScreen').classList.remove('active');

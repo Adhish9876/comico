@@ -18,8 +18,13 @@ from datetime import datetime
 from typing import Dict, List
 import os
 import ssl
+from dotenv import load_dotenv
 
-app = Flask(__name__, static_folder='static', static_url_path='/static')
+# Load environment variables
+load_dotenv()
+SERVER_IP = os.getenv('SERVER_IP', '172.20.10.9')
+
+app = Flask(__name__)
 app.config['SECRET_KEY'] = 'shadow_nexus_video_secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -47,7 +52,8 @@ def video_room(session_id):
     return render_template('video_room.html', 
                          session_id=session_id,
                          session_type=session.get('type', 'global'),
-                         session_name=session.get('name', 'Video Call'))
+                         session_name=session.get('name', 'Video Call'),
+                         server_ip=SERVER_IP)
 
 @app.route('/audio/<session_id>')
 def audio_room(session_id):
@@ -59,7 +65,8 @@ def audio_room(session_id):
     return render_template('audio_room.html', 
                          session_id=session_id,
                          session_type=session.get('type', 'global'),
-                         session_name=session.get('name', 'Audio Call'))
+                         session_name=session.get('name', 'Audio Call'),
+                         server_ip=SERVER_IP)
 
 @app.route('/api/create_session', methods=['POST'])
 def api_create_session():
@@ -75,7 +82,21 @@ def api_create_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'https://10.200.14.204:5000/video/{session_id}'
+        'link': f'https://{SERVER_IP}:5000/video/{session_id}'
+    })
+
+@app.route('/api/session_status/<session_id>', methods=['GET'])
+def api_session_status(session_id):
+    """API endpoint to check if a session has active participants"""
+    has_participants = session_id in _users_in_room and len(_users_in_room[session_id]) > 0
+    is_valid = session_id in video_sessions or session_id in audio_sessions
+    
+    return jsonify({
+        'success': True,
+        'session_id': session_id,
+        'is_valid': is_valid,
+        'has_participants': has_participants,
+        'participant_count': len(_users_in_room.get(session_id, []))
     })
 
 @app.route('/api/create_audio_session', methods=['POST'])
@@ -92,7 +113,7 @@ def api_create_audio_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'https://10.200.14.204:5000/audio/{session_id}'
+        'link': f'https://{SERVER_IP}:5000/audio/{session_id}'
     })
 
 @socketio.on('connect')
@@ -148,44 +169,25 @@ def handle_join_session(data):
     
     # Determine session type for logging
     session_type = "VIDEO" if room_id in video_sessions else "AUDIO"
-    print(f"[{session_type} SERVER] {username} <{sid}> joining session {room_id}")
+    print(f"[{session_type} SERVER] {username} <{sid}> joined session {room_id}")
     
     # Initialize room user list if needed
     if room_id not in _users_in_room:
-        _users_in_room[room_id] = []
-    
-    # Always add the new user first
-    _users_in_room[room_id].append(sid)
-    current_users = len(_users_in_room[room_id])
-    
-    print(f"[{session_type} SERVER] Room {room_id} now has {current_users} users")
-    
-    if current_users == 1:
-        # First user in room - send empty user list
+        _users_in_room[room_id] = [sid]
+        # First user in room
         emit('user-list', {'my_id': sid}, room=sid)
-        print(f"[{session_type} SERVER] First user {username} in room {room_id}")
+        print(f"[{session_type} SERVER] First user in room {room_id}")
     else:
-        # Get existing users (excluding the new user)
-        existing_user_ids = [u for u in _users_in_room[room_id] if u != sid]
-        existing_users = {u_id: _name_of_sid.get(u_id, 'Unknown') for u_id in existing_user_ids}
-        
-        print(f"[{session_type} SERVER] Sending {len(existing_users)} existing users to {username}")
-        print(f"[{session_type} SERVER] Existing users: {existing_users}")
-        
-        # Send existing users to new user
+        # Existing users in room - send them to new user
+        existing_users = {u_id: _name_of_sid[u_id] for u_id in _users_in_room[room_id]}
         emit('user-list', {'list': existing_users, 'my_id': sid}, room=sid)
         
-        # Use socketio.sleep for better async handling
-        socketio.sleep(0.3)
-        
         # Notify existing users about new user
-        print(f"[{session_type} SERVER] Notifying {len(existing_user_ids)} existing users about {username}")
         emit('user-connect', {'sid': sid, 'name': username}, room=room_id, skip_sid=sid)
         
-        # Additional delay to ensure message is processed
-        socketio.sleep(0.1)
-        
-        print(f"[{session_type} SERVER] User {username} successfully joined room {room_id} with {current_users} total users")
+        # Add new user to room
+        _users_in_room[room_id].append(sid)
+        print(f"[{session_type} SERVER] New user joined. Room {room_id} now has {len(_users_in_room[room_id])} users")
 
 @socketio.on('leave_session')
 def handle_leave_session(data):
@@ -277,19 +279,6 @@ def handle_audio_level(data):
         'is_speaking': is_speaking
     }, room=session_id, skip_sid=request.sid)
 
-@socketio.on('camera_toggle')
-def handle_camera_toggle(data):
-    session_id = data['session_id']
-    user_id = data['user_id']
-    camera_enabled = data['camera_enabled']
-    
-    print(f"[MEDIA SERVER] Camera {'enabled' if camera_enabled else 'disabled'} by {user_id}")
-    
-    emit('camera_toggle', {
-        'user_id': user_id,
-        'camera_enabled': camera_enabled
-    }, room=session_id, skip_sid=request.sid)
-
 def create_video_session(session_type: str, session_name: str, creator: str, chat_id: str) -> str:
     """Create a new video session"""
     session_id = str(uuid.uuid4())[:8]
@@ -348,7 +337,7 @@ def notify_chat_server_session_empty(session_id: str):
         print(f"[{server_name.upper()}] Notifying chat server about empty session: {payload}")
 
         # Connect to chat server TCP socket
-        chat_host = '10.200.14.204'
+        chat_host = SERVER_IP
         chat_port = 5555
         s = py_socket.socket(py_socket.AF_INET, py_socket.SOCK_STREAM)
         s.settimeout(5.0)
@@ -403,7 +392,7 @@ if __name__ == '__main__':
             
             # Generate certificate
             subject = issuer = x509.Name([
-                x509.NameAttribute(NameOID.COMMON_NAME, u"10.200.14.204"),
+                x509.NameAttribute(NameOID.COMMON_NAME, u"localhost"),
             ])
             
             cert = x509.CertificateBuilder().subject_name(
@@ -420,8 +409,10 @@ if __name__ == '__main__':
                 datetime.utcnow() + timedelta(days=365)
             ).add_extension(
                 x509.SubjectAlternativeName([
-                    x509.IPAddress(ipaddress.IPv4Address("10.200.14.204")),
+                    x509.DNSName(u"localhost"),
                     x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+                    x509.IPAddress(ipaddress.IPv4Address(SERVER_IP)),
+                    x509.IPAddress(ipaddress.IPv4Address("0.0.0.0")),
                 ]),
                 critical=False,
             ).sign(private_key, hashes.SHA256(), default_backend())
@@ -446,35 +437,6 @@ if __name__ == '__main__':
             exit(1)
     
     # Run with HTTPS using Flask-SocketIO built-in server
-    print("[MEDIA SERVER] Server running on https://0.0.0.0:5000")
-    print("[MEDIA SERVER] Keepalive thread started")
-    print("[MEDIA SERVER] ⚠️  Chrome will show 'Not Secure' - click 'Advanced' -> 'Proceed to 10.200.14.204 (unsafe)'")
-    print("[MEDIA SERVER] This is normal for self-signed certificates on local network\n")
-    
-    # Use Flask-SocketIO with SSL - compatible with all versions
-    try:
-        # Try with certfile/keyfile first (newer versions)
-        socketio.run(app, host='0.0.0.0', port=5000, debug=False, 
-                    certfile=cert_file, keyfile=key_file, 
-                    allow_unsafe_werkzeug=True)
-    except TypeError:
-        # Fallback for older versions - use SSL context
-        import ssl
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain(cert_file, key_file)
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        
-        # Run with SSL context using eventlet directly
-        import eventlet
-        import eventlet.wsgi
-        
-        # Wrap the app with SocketIO
-        app_with_socketio = socketio.wsgi_app
-        
-        # Create SSL socket
-        listener = eventlet.listen(('0.0.0.0', 5000))
-        ssl_listener = eventlet.wrap_ssl(listener, certfile=cert_file, keyfile=key_file, server_side=True)
-        
-        print("[MEDIA SERVER] Starting with eventlet SSL wrapper...")
-        eventlet.wsgi.server(ssl_listener, app_with_socketio)
+    print("[MEDIA SERVER] Server running on https://0.0.0.0:5000\n")
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, 
+                certfile=cert_file, keyfile=key_file)
