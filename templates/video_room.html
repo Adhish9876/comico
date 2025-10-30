@@ -931,7 +931,7 @@
         const sessionType = "{{ session_type }}";
         const urlParams = new URLSearchParams(window.location.search);
         const username = urlParams.get('username') || 'Guest';
-        const socket = io('https://10.200.14.94:5000', { autoConnect: false });
+        const socket = io('https://10.200.14.204:5000', { autoConnect: false });
         let isVideoDisabled = false;
         let isHandRaised = false;
         let isScreenSharing = false;
@@ -1098,17 +1098,26 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             console.log(`[LOCAL-WEBRTC] Track received from ${peer_id}:`, event.track.kind, event.track.enabled, event.track.readyState);
             console.log(`[LOCAL-WEBRTC] Event streams:`, event.streams?.length || 0);
             
-            // For local network, we should get the stream directly
+            // CRITICAL FIX: Always use the stream from event.streams[0] if available
+            // This ensures we get the complete stream with all tracks (audio + video)
             let stream;
             if (event.streams && event.streams[0]) {
                 stream = event.streams[0];
                 console.log(`[LOCAL-WEBRTC] Using provided stream with ${stream.getTracks().length} tracks`);
             } else {
-                stream = new MediaStream([event.track]);
-                console.log(`[LOCAL-WEBRTC] Created new stream with single track`);
+                // Fallback: create or get existing stream for this peer
+                const existingVideo = document.querySelector(`#video-${peer_id} video`);
+                if (existingVideo && existingVideo.srcObject) {
+                    stream = existingVideo.srcObject;
+                    stream.addTrack(event.track);
+                    console.log(`[LOCAL-WEBRTC] Added ${event.track.kind} track to existing stream`);
+                } else {
+                    stream = new MediaStream([event.track]);
+                    console.log(`[LOCAL-WEBRTC] Created new stream with single ${event.track.kind} track`);
+                }
             }
             
-            // Ensure we have the track and it's enabled
+            // Ensure we have the track
             if (stream.getTracks().length === 0) {
                 console.error(`[LOCAL-WEBRTC] No tracks in stream for ${peer_id}`);
                 return;
@@ -1119,6 +1128,7 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                 console.log(`[LOCAL-WEBRTC] Track ${track.kind}: enabled=${track.enabled}, readyState=${track.readyState}, muted=${track.muted}`);
             });
             
+            // Add or update the remote video with the stream
             addRemoteVideo(peer_id, stream);
         };
 
@@ -1333,6 +1343,13 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             video.onloadstart = () => console.log(`[VIDEO-${peer_id}] Load start`);
             video.onloadedmetadata = () => {
                 console.log(`[VIDEO-${peer_id}] Metadata loaded: ${video.videoWidth}x${video.videoHeight}`);
+                // Explicitly play the video
+                video.play().then(() => {
+                    console.log(`[VIDEO-${peer_id}] Video playing successfully`);
+                }).catch(err => {
+                    console.error(`[VIDEO-${peer_id}] Error playing video:`, err);
+                });
+                
                 if (video.videoWidth === 0 || video.videoHeight === 0) {
                     console.warn(`[VIDEO-${peer_id}] Video has no dimensions, might be audio-only`);
                     showCameraOffPlaceholder(peer_id);
@@ -1416,6 +1433,13 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             if (video) {
                 video.srcObject = stream;
                 console.log(`[VIDEO-${peer_id}] Stream updated`);
+                
+                // Explicitly play the video after updating stream
+                video.play().then(() => {
+                    console.log(`[VIDEO-${peer_id}] Video playing after stream update`);
+                }).catch(err => {
+                    console.error(`[VIDEO-${peer_id}] Error playing video after update:`, err);
+                });
                 
                 // Check if we should show/hide placeholder
                 if (stream && stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled) {

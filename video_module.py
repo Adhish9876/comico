@@ -75,7 +75,7 @@ def api_create_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'https://10.200.14.94:5000/video/{session_id}'
+        'link': f'https://10.200.14.204:5000/video/{session_id}'
     })
 
 @app.route('/api/create_audio_session', methods=['POST'])
@@ -92,7 +92,7 @@ def api_create_audio_session():
     return jsonify({
         'success': True,
         'session_id': session_id,
-        'link': f'https://10.200.14.94:5000/audio/{session_id}'
+        'link': f'https://10.200.14.204:5000/audio/{session_id}'
     })
 
 @socketio.on('connect')
@@ -348,7 +348,7 @@ def notify_chat_server_session_empty(session_id: str):
         print(f"[{server_name.upper()}] Notifying chat server about empty session: {payload}")
 
         # Connect to chat server TCP socket
-        chat_host = '10.200.14.94'
+        chat_host = '10.200.14.204'
         chat_port = 5555
         s = py_socket.socket(py_socket.AF_INET, py_socket.SOCK_STREAM)
         s.settimeout(5.0)
@@ -403,7 +403,7 @@ if __name__ == '__main__':
             
             # Generate certificate
             subject = issuer = x509.Name([
-                x509.NameAttribute(NameOID.COMMON_NAME, u"10.200.14.94"),
+                x509.NameAttribute(NameOID.COMMON_NAME, u"10.200.14.204"),
             ])
             
             cert = x509.CertificateBuilder().subject_name(
@@ -420,7 +420,7 @@ if __name__ == '__main__':
                 datetime.utcnow() + timedelta(days=365)
             ).add_extension(
                 x509.SubjectAlternativeName([
-                    x509.IPAddress(ipaddress.IPv4Address("10.200.14.94")),
+                    x509.IPAddress(ipaddress.IPv4Address("10.200.14.204")),
                     x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
                 ]),
                 critical=False,
@@ -448,7 +448,7 @@ if __name__ == '__main__':
     # Run with HTTPS using Flask-SocketIO built-in server
     print("[MEDIA SERVER] Server running on https://0.0.0.0:5000")
     print("[MEDIA SERVER] Keepalive thread started")
-    print("[MEDIA SERVER] ⚠️  Chrome will show 'Not Secure' - click 'Advanced' -> 'Proceed to 10.200.14.94 (unsafe)'")
+    print("[MEDIA SERVER] ⚠️  Chrome will show 'Not Secure' - click 'Advanced' -> 'Proceed to 10.200.14.204 (unsafe)'")
     print("[MEDIA SERVER] This is normal for self-signed certificates on local network\n")
     
     # Use Flask-SocketIO with SSL - compatible with all versions
