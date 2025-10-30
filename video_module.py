@@ -448,16 +448,33 @@ if __name__ == '__main__':
     # Run with HTTPS using Flask-SocketIO built-in server
     print("[MEDIA SERVER] Server running on https://0.0.0.0:5000")
     print("[MEDIA SERVER] Keepalive thread started")
-    print("[MEDIA SERVER] ⚠️  Chrome will show 'Not Secure' - click 'Advanced' -> 'Proceed to 192.168.137.175 (unsafe)'")
+    print("[MEDIA SERVER] ⚠️  Chrome will show 'Not Secure' - click 'Advanced' -> 'Proceed to 10.200.14.94 (unsafe)'")
     print("[MEDIA SERVER] This is normal for self-signed certificates on local network\n")
     
-    # Use SSL context for better compatibility
-    import ssl
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(cert_file, key_file)
-    # Allow weak certificates for local development
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, 
-                ssl_context=context, allow_unsafe_werkzeug=True)
+    # Use Flask-SocketIO with SSL - compatible with all versions
+    try:
+        # Try with certfile/keyfile first (newer versions)
+        socketio.run(app, host='0.0.0.0', port=5000, debug=False, 
+                    certfile=cert_file, keyfile=key_file, 
+                    allow_unsafe_werkzeug=True)
+    except TypeError:
+        # Fallback for older versions - use SSL context
+        import ssl
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert_file, key_file)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        
+        # Run with SSL context using eventlet directly
+        import eventlet
+        import eventlet.wsgi
+        
+        # Wrap the app with SocketIO
+        app_with_socketio = socketio.wsgi_app
+        
+        # Create SSL socket
+        listener = eventlet.listen(('0.0.0.0', 5000))
+        ssl_listener = eventlet.wrap_ssl(listener, certfile=cert_file, keyfile=key_file, server_side=True)
+        
+        print("[MEDIA SERVER] Starting with eventlet SSL wrapper...")
+        eventlet.wsgi.server(ssl_listener, app_with_socketio)
