@@ -17,6 +17,9 @@ import requests
 import urllib3
 from dotenv import load_dotenv
 
+# Import certificate manager for automatic SSL setup
+from cert_manager import setup_certificates, verify_and_fix_certificates
+
 # Load environment variables
 load_dotenv()
 SERVER_IP = os.getenv('SERVER_IP', 'localhost')
@@ -171,6 +174,16 @@ def receive_messages():
 def connect_to_server(username: str, host: str, port: int):
     """Connect to the collaboration server"""
     try:
+        # AUTO-SETUP: Verify/generate SSL certificates on first connect
+        print(f"[CLIENT] Verifying SSL certificates...")
+        try:
+            project_dir = os.path.dirname(os.path.abspath(__file__))
+            verify_and_fix_certificates(project_dir)
+            print(f"[CLIENT] ✅ SSL certificates ready")
+        except Exception as e:
+            print(f"[CLIENT] ⚠️ Certificate setup warning: {e}")
+            print(f"[CLIENT] Continuing without auto-setup...")
+        
         # Clean up any existing connection
         if state.socket:
             try:
