@@ -10,8 +10,14 @@ import socket
 import json
 import base64
 import time
+import os
 from datetime import datetime
 from typing import Optional, Dict, List
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+DEFAULT_AUDIO_SERVER_IP = os.getenv('SERVER_IP', 'localhost')
 
 # Lazy imports for heavy modules
 _pyaudio = None
@@ -44,7 +50,10 @@ def get_audio_format():
 class AudioEngine:
     """Handles all audio operations"""
     
-    def __init__(self, username: str, server_host: str = '192.168.137.175', audio_port: int = 5557):
+    def __init__(self, username: str, server_host: str = None, audio_port: int = 5557):
+        if server_host is None:
+            server_host = DEFAULT_AUDIO_SERVER_IP
+        
         self.username = username
         self.server_host = server_host
         self.audio_port = audio_port

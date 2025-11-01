@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-SERVER_IP = os.getenv('SERVER_IP', '172.20.10.9')
+SERVER_IP = os.getenv('SERVER_IP', 'localhost')
 
 # Ultra-lazy imports for fastest startup
 _requests = None
