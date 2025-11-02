@@ -1341,7 +1341,11 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             try {
                 screenStream = await navigator.mediaDevices.getDisplayMedia({
                     video: { cursor: "always" },
-                    audio: false
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
+                    }
                 });
 
                 const screenTrack = screenStream.getVideoTracks()[0];
@@ -1355,7 +1359,78 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                     }
                 }
 
-                // Update local video
+                // Create a separate canvas and composite: screen + camera PiP
+                const canvas = document.createElement('canvas');
+                canvas.width = 1920;
+                canvas.height = 1080;
+                const ctx = canvas.getContext('2d');
+                
+                const canvasStream = canvas.captureStream(30);
+                const compositeTrack = canvasStream.getVideoTracks()[0];
+                
+                // Draw screen at full size
+                const screenVideo = document.createElement('video');
+                screenVideo.srcObject = screenStream;
+                screenVideo.play();
+                
+                // Draw camera as PiP
+                const cameraVideo = document.createElement('video');
+                cameraVideo.srcObject = localStream;
+                cameraVideo.play();
+                
+                // Animation function to composite the videos
+                function compositeVideos() {
+                    if (screenVideo.readyState === screenVideo.HAVE_ENOUGH_DATA) {
+                        ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+                    }
+                    
+                    // Draw camera in bottom-right corner as PiP (16:9 aspect, 280x158)
+                    if (cameraVideo.readyState === cameraVideo.HAVE_ENOUGH_DATA) {
+                        const pipWidth = 280;
+                        const pipHeight = 158;
+                        const pipX = canvas.width - pipWidth - 20;
+                        const pipY = canvas.height - pipHeight - 100;
+                        
+                        // Draw semi-transparent background for camera
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                        ctx.fillRect(pipX - 5, pipY - 5, pipWidth + 10, pipHeight + 10);
+                        
+                        // Draw camera video
+                        ctx.drawImage(cameraVideo, pipX, pipY, pipWidth, pipHeight);
+                        
+                        // Draw border
+                        ctx.strokeStyle = '#5865f2';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(pipX, pipY, pipWidth, pipHeight);
+                    }
+                    
+                    requestAnimationFrame(compositeVideos);
+                }
+                
+                compositeVideos();
+                
+                // Replace video track and add audio track in all peer connections
+                for (let peer_id in _peer_list) {
+                    // Replace video track with composite
+                    const videoSender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
+                    if (videoSender) {
+                        videoSender.replaceTrack(compositeTrack);
+                    }
+
+                    // Handle screen audio if available
+                    const screenAudioTrack = screenStream.getAudioTracks()[0];
+                    if (screenAudioTrack) {
+                        const audioSender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'audio');
+                        if (audioSender) {
+                            // Store original audio track for later
+                            originalAudioTrack = localStream.getAudioTracks()[0];
+                            // Replace with screen audio
+                            audioSender.replaceTrack(screenAudioTrack);
+                        }
+                    }
+                }
+                
+                // Show screen on local display
                 localVideo.srcObject = screenStream;
                 isScreenSharing = true;
                 screenShareBtn.classList.add('sharing');
@@ -1371,6 +1446,8 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                     sharing: true
                 });
 
+                showNotification('✅ Screen sharing active with camera PiP');
+
             } catch (error) {
                 console.error('Error sharing screen:', error);
                 showNotification('Could not share screen');
@@ -1381,19 +1458,24 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     }
 
     function stopScreenShare() {
-        if (screenStream) {
+                if (screenStream) {
             screenStream.getTracks().forEach(track => track.stop());
         }
 
-        // Restore original video track
+        // Restore original video and audio tracks
         for (let peer_id in _peer_list) {
-            const sender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
-            if (sender && originalVideoTrack) {
-                sender.replaceTrack(originalVideoTrack);
+            // Restore video track
+            const videoSender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
+            if (videoSender && originalVideoTrack) {
+                videoSender.replaceTrack(originalVideoTrack);
             }
-        }
 
-        localVideo.srcObject = localStream;
+            // Restore audio track if it was replaced
+            const audioSender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'audio');
+            if (audioSender && originalAudioTrack) {
+                audioSender.replaceTrack(originalAudioTrack);
+            }
+        }        localVideo.srcObject = localStream;
         isScreenSharing = false;
         screenShareBtn.classList.remove('sharing');
         document.getElementById('localScreenIndicator').classList.remove('active');
@@ -1403,6 +1485,8 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             user_id: myID,
             sharing: false
         });
+        
+        showNotification('Screen sharing stopped');
     }
 
     function sendReaction(emoji) {
