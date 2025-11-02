@@ -169,9 +169,9 @@ def receive_messages():
             if state.running and reconnect_attempts < max_reconnect_attempts:
                 reconnect_attempts += 1
                 print(f"[CLIENT] Attempting reconnection ({reconnect_attempts}/{max_reconnect_attempts})...")
-                print(f"[CLIENT] Waiting {reconnect_delay} seconds before retry...")
+                print(f"[CLIENT] Waiting {reconnect_delay:.1f} seconds before retry...")
                 
-                for i in range(reconnect_delay):
+                for i in range(int(reconnect_delay)):
                     if not state.running:
                         break
                     time.sleep(1)

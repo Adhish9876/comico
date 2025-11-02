@@ -966,13 +966,9 @@ const participantCount = document.getElementById('participantCount');
 const connectingOverlay = document.getElementById('connectingOverlay');
 
     const PC_CONFIG = {
-        iceServers: [
-            {
-                urls: ['stun:stun.l.google.com:19302', 
-                       'stun:stun1.l.google.com:19302',
-                       'stun:stun2.l.google.com:19302']
-            }
-        ]
+        iceServers: []  // Empty for LAN-only (direct P2P connection)
+        // STUN/TURN not needed when always on same LAN
+        // Direct peer-to-peer works perfectly fine locally
     };
 
     async function initVideoCall() {
