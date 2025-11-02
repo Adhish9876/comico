@@ -94,9 +94,13 @@ state = ClientState()
 
 # Socket receive thread
 def receive_messages():
-    """Background thread to receive messages"""
+    """Background thread to receive messages with reconnection logic"""
     state.buffer = b""
     print(f"[CLIENT] Starting receive thread for {state.username}")
+    
+    reconnect_attempts = 0
+    max_reconnect_attempts = 5
+    reconnect_delay = 5  # Start with 5 second delay
     
     while state.running and state.connected:
         try:
@@ -114,6 +118,9 @@ def receive_messages():
             except socket.timeout:
                 # Timeout is normal, just continue
                 continue
+            
+            # Reset reconnect counter on successful receive
+            reconnect_attempts = 0
             
             state.buffer += data
             print(f"[CLIENT] Received {len(data)} bytes, buffer now {len(state.buffer)} bytes")
@@ -158,8 +165,42 @@ def receive_messages():
         
         except (ConnectionResetError, BrokenPipeError) as e:
             print(f"[CLIENT] Connection lost: {e}")
-            # onDisconnected() will be called in finally block and show notification
-            break
+            # Attempt to reconnect if network is temporarily down
+            if state.running and reconnect_attempts < max_reconnect_attempts:
+                reconnect_attempts += 1
+                print(f"[CLIENT] Attempting reconnection ({reconnect_attempts}/{max_reconnect_attempts})...")
+                print(f"[CLIENT] Waiting {reconnect_delay} seconds before retry...")
+                
+                for i in range(reconnect_delay):
+                    if not state.running:
+                        break
+                    time.sleep(1)
+                
+                if state.running:
+                    try:
+                        print(f"[CLIENT] Retrying connection to {state.server_host}:{state.server_port}...")
+                        new_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        new_socket.settimeout(5.0)
+                        new_socket.connect((state.server_host, state.server_port))
+                        
+                        # Send username
+                        username_msg = json.dumps({'username': state.username}) + '\n'
+                        new_socket.send(username_msg.encode('utf-8'))
+                        
+                        state.socket = new_socket
+                        state.buffer = b""
+                        print(f"[CLIENT] ✅ Reconnected successfully!")
+                        
+                        # Increase delay for next attempt (exponential backoff)
+                        reconnect_delay = min(reconnect_delay * 1.5, 60)  # Max 60 second delay
+                        continue  # Try receiving again
+                    except Exception as retry_error:
+                        print(f"[CLIENT] Reconnection attempt {reconnect_attempts} failed: {retry_error}")
+                        reconnect_delay = min(reconnect_delay * 1.5, 60)
+                else:
+                    break
+            else:
+                break
         except Exception as e:
             print(f"[CLIENT] Receive error: {e}")
             if state.running:

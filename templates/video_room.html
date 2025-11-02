@@ -1341,11 +1341,7 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             try {
                 screenStream = await navigator.mediaDevices.getDisplayMedia({
                     video: { cursor: "always" },
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        sampleRate: 44100
-                    }
+                    audio: false
                 });
 
                 const screenTrack = screenStream.getVideoTracks()[0];
@@ -1409,24 +1405,11 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                 
                 compositeVideos();
                 
-                // Replace video track and add audio track in all peer connections
+                // Replace the composite track in all peer connections
                 for (let peer_id in _peer_list) {
-                    // Replace video track with composite
-                    const videoSender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
-                    if (videoSender) {
-                        videoSender.replaceTrack(compositeTrack);
-                    }
-
-                    // Handle screen audio if available
-                    const screenAudioTrack = screenStream.getAudioTracks()[0];
-                    if (screenAudioTrack) {
-                        const audioSender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'audio');
-                        if (audioSender) {
-                            // Store original audio track for later
-                            originalAudioTrack = localStream.getAudioTracks()[0];
-                            // Replace with screen audio
-                            audioSender.replaceTrack(screenAudioTrack);
-                        }
+                    const sender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
+                    if (sender) {
+                        sender.replaceTrack(compositeTrack);
                     }
                 }
                 
@@ -1458,24 +1441,19 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     }
 
     function stopScreenShare() {
-                if (screenStream) {
+        if (screenStream) {
             screenStream.getTracks().forEach(track => track.stop());
         }
 
-        // Restore original video and audio tracks
+        // Restore original video track
         for (let peer_id in _peer_list) {
-            // Restore video track
-            const videoSender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
-            if (videoSender && originalVideoTrack) {
-                videoSender.replaceTrack(originalVideoTrack);
+            const sender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
+            if (sender && originalVideoTrack) {
+                sender.replaceTrack(originalVideoTrack);
             }
+        }
 
-            // Restore audio track if it was replaced
-            const audioSender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'audio');
-            if (audioSender && originalAudioTrack) {
-                audioSender.replaceTrack(originalAudioTrack);
-            }
-        }        localVideo.srcObject = localStream;
+        localVideo.srcObject = localStream;
         isScreenSharing = false;
         screenShareBtn.classList.remove('sharing');
         document.getElementById('localScreenIndicator').classList.remove('active');

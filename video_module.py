@@ -360,103 +360,139 @@ def notify_chat_server_session_empty(session_id: str):
     except Exception as e:
         print(f"[MEDIA SERVER] Error notifying chat server: {str(e)}")
 
+def regenerate_certificates_if_needed():
+    """Regenerate certificates if SERVER_IP has changed"""
+    cert_file = 'cert.pem'
+    key_file = 'key.pem'
+    
+    # Check if we need to regenerate (SERVER_IP mismatch)
+    needs_regeneration = False
+    
+    if os.path.exists(cert_file):
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.backends import default_backend
+            with open(cert_file, 'rb') as f:
+                cert_data = f.read()
+                cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+                san_ext = cert.extensions.get_extension_for_oid(x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
+                san_names = []
+                for name in san_ext.value:
+                    if isinstance(name, x509.IPAddress):
+                        san_names.append(str(name.value))
+                
+                # Check if SERVER_IP is in SAN
+                if SERVER_IP not in san_names:
+                    print(f"[MEDIA SERVER] ⚠️  Certificate SAN doesn't include {SERVER_IP}")
+                    print(f"[MEDIA SERVER] Current SAN IPs: {san_names}")
+                    needs_regeneration = True
+        except Exception as e:
+            print(f"[MEDIA SERVER] Could not read certificate SAN: {e}")
+            needs_regeneration = True
+    else:
+        needs_regeneration = True
+    
+    if needs_regeneration:
+        print("[MEDIA SERVER] Regenerating SSL certificates with current SERVER_IP...")
+        generate_self_signed_cert(cert_file, key_file)
+    
+    return cert_file, key_file
+
+def generate_self_signed_cert(cert_file, key_file):
+    """Generate self-signed certificate with proper SAN"""
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+        from datetime import datetime, timedelta
+        import ipaddress
+        
+        # Generate private key
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+        
+        # Generate certificate with all necessary SANs
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, u"ShadowNexus"),
+        ])
+        
+        # Build SAN list - include localhost, 127.0.0.1, SERVER_IP, and common private IPs
+        san_list = [
+            x509.DNSName(u"localhost"),
+            x509.DNSName(u"*.local"),
+            x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+            x509.IPAddress(ipaddress.IPv4Address("0.0.0.0")),
+        ]
+        
+        # Add SERVER_IP if it's a valid IP
+        try:
+            san_list.append(x509.IPAddress(ipaddress.IPv4Address(SERVER_IP)))
+            print(f"[MEDIA SERVER] Added {SERVER_IP} to certificate SAN")
+        except:
+            pass
+        
+        cert = x509.CertificateBuilder().subject_name(
+            subject
+        ).issuer_name(
+            issuer
+        ).public_key(
+            private_key.public_key()
+        ).serial_number(
+            x509.random_serial_number()
+        ).not_valid_before(
+            datetime.utcnow()
+        ).not_valid_after(
+            datetime.utcnow() + timedelta(days=3650)  # 10 years
+        ).add_extension(
+            x509.SubjectAlternativeName(san_list),
+            critical=False,
+        ).add_extension(
+            x509.BasicConstraints(ca=False, path_length=None),
+            critical=True,
+        ).sign(private_key, hashes.SHA256(), default_backend())
+        
+        # Write certificate
+        with open(cert_file, "wb") as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
+        
+        # Write private key
+        with open(key_file, "wb") as f:
+            f.write(private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
+        
+        print("[MEDIA SERVER] ✅ Self-signed certificate generated (valid 10 years)")
+        print(f"[MEDIA SERVER] Certificate includes: localhost, 127.0.0.1, {SERVER_IP}")
+        print("[MEDIA SERVER] ⚠️  Browser will show security warnings (use mkcert for trusted certs)\n")
+        
+    except ImportError:
+        print("[MEDIA SERVER] ERROR: cryptography library not found")
+        print("[MEDIA SERVER] Installing cryptography...")
+        os.system("pip install cryptography")
+        print("[MEDIA SERVER] Please run the server again after installation\n")
+        exit(1)
+    except Exception as e:
+        print(f"[MEDIA SERVER] ERROR generating certificate: {e}")
+        exit(1)
+
 if __name__ == '__main__':
     print("\n" + "="*60)
     print("🎥🎙️ Shadow Nexus Media Server (WebRTC)")
     print("="*60)
+    print(f"Server IP: {SERVER_IP}")
     print("Media server starting on https://0.0.0.0:5000")
     print("Supports both Video and Audio calls\n")
     
-    # SSL Certificate setup
-    cert_file = 'cert.pem'
-    key_file = 'key.pem'
-    
-    # Check if certificates exist
-    if not os.path.exists(cert_file) or not os.path.exists(key_file):
-        print("[MEDIA SERVER] No SSL certificates found")
-        print("[MEDIA SERVER] 🔒 For trusted certificates (no browser warnings), run:")
-        print("[MEDIA SERVER]    .\\setup_mkcert.ps1")
-        print("[MEDIA SERVER] Or see MKCERT_SETUP.md for manual setup\n")
-        print("[MEDIA SERVER] Generating self-signed certificate as fallback...")
-        print("[MEDIA SERVER] ⚠️  Browser will show security warnings with self-signed certs\n")
-        
-        try:
-            from cryptography import x509
-            from cryptography.x509.oid import NameOID
-            from cryptography.hazmat.primitives import hashes
-            from cryptography.hazmat.backends import default_backend
-            from cryptography.hazmat.primitives.asymmetric import rsa
-            from cryptography.hazmat.primitives import serialization
-            from datetime import datetime, timedelta
-            import ipaddress
-            
-            # Generate private key
-            private_key = rsa.generate_private_key(
-                public_exponent=65537,
-                key_size=2048,
-                backend=default_backend()
-            )
-            
-            # Generate certificate
-            subject = issuer = x509.Name([
-                x509.NameAttribute(NameOID.COMMON_NAME, u"localhost"),
-            ])
-            
-            cert = x509.CertificateBuilder().subject_name(
-                subject
-            ).issuer_name(
-                issuer
-            ).public_key(
-                private_key.public_key()
-            ).serial_number(
-                x509.random_serial_number()
-            ).not_valid_before(
-                datetime.utcnow()
-            ).not_valid_after(
-                datetime.utcnow() + timedelta(days=365)
-            ).add_extension(
-                x509.SubjectAlternativeName([
-                    x509.DNSName(u"localhost"),
-                    x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
-                    x509.IPAddress(ipaddress.IPv4Address(SERVER_IP)),
-                    x509.IPAddress(ipaddress.IPv4Address("0.0.0.0")),
-                ]),
-                critical=False,
-            ).sign(private_key, hashes.SHA256(), default_backend())
-            
-            # Write certificate
-            with open(cert_file, "wb") as f:
-                f.write(cert.public_bytes(serialization.Encoding.PEM))
-            
-            # Write private key
-            with open(key_file, "wb") as f:
-                f.write(private_key.private_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PrivateFormat.TraditionalOpenSSL,
-                    encryption_algorithm=serialization.NoEncryption()
-                ))
-            
-            print("[MEDIA SERVER] Self-signed certificate generated")
-            print("[MEDIA SERVER] ⚠️  You'll need to accept browser warnings\n")
-        except ImportError:
-            print("[MEDIA SERVER] Installing cryptography library...")
-            os.system("pip install cryptography")
-            print("[MEDIA SERVER] Please run the server again after installation\n")
-            exit(1)
-    else:
-        # Check if certificates are from mkcert (trusted) or self-signed
-        try:
-            with open(cert_file, 'r') as f:
-                cert_content = f.read()
-                if 'mkcert' in cert_content.lower():
-                    print("[MEDIA SERVER] ✅ Using mkcert trusted certificates")
-                    print("[MEDIA SERVER] 🔒 No browser warnings - certificates are trusted!\n")
-                else:
-                    print("[MEDIA SERVER] ⚠️  Using self-signed certificates")
-                    print("[MEDIA SERVER] Browser will show security warnings")
-                    print("[MEDIA SERVER] Run .\\setup_mkcert.ps1 for trusted certificates\n")
-        except:
-            print("[MEDIA SERVER] Using existing SSL certificates\n")
+    # SSL Certificate setup - with regeneration check
+    cert_file, key_file = regenerate_certificates_if_needed()
     
     # Run with HTTPS using Flask-SocketIO built-in server
     print("[MEDIA SERVER] Server running on https://0.0.0.0:5000")
