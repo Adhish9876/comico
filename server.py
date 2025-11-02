@@ -232,8 +232,15 @@ class CollaborationServer:
                     print(f"[SERVER] Connection reset by {username}")
                     break
                 except socket.timeout:
-                    # Should not happen with settimeout(None), but handle gracefully
-                    print(f"[SERVER] Socket timeout for {username} - continuing")
+                    # Timeout occurred - this shouldn't happen with settimeout(None)
+                    # but Windows can still trigger it on network issues
+                    print(f"[SERVER] Socket timeout for {username} - this may indicate network issues")
+                    # Re-apply settimeout(None) in case it was reset
+                    try:
+                        client_socket.settimeout(None)
+                    except:
+                        pass
+                    # Don't break - give the client a chance to recover
                     continue
                 except UnicodeDecodeError as e:
                     # Handle corrupted data gracefully without disconnecting
@@ -393,6 +400,11 @@ class CollaborationServer:
         # Handle heartbeat/ping messages
         if msg_type == 'ping':
             self._send_to_client(client_socket, {'type': 'pong', 'timestamp': self._timestamp()})
+            return
+        
+        # Handle pong responses from clients
+        if msg_type == 'pong':
+            # Client is alive and responding - activity already updated above
             return
         
         handlers = {

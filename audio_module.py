@@ -14,10 +14,31 @@ import os
 from datetime import datetime
 from typing import Optional, Dict, List
 from dotenv import load_dotenv
+import sys
 
-# Load environment variables
-load_dotenv()
+# Load environment variables - check multiple possible locations for .env
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable
+    application_path = os.path.dirname(sys.executable)
+    env_path = os.path.join(application_path, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"[AUDIO] Loaded .env from: {env_path}")
+    else:
+        # Try in _internal folder (PyInstaller extracts here)
+        env_path = os.path.join(application_path, '_internal', '.env')
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            print(f"[AUDIO] Loaded .env from: {env_path}")
+        else:
+            print(f"[AUDIO] ⚠️ WARNING: .env file not found!")
+else:
+    # Running as Python script
+    load_dotenv()
+    print(f"[AUDIO] Loaded .env from script directory")
+
 DEFAULT_AUDIO_SERVER_IP = os.getenv('SERVER_IP', 'localhost')
+print(f"[AUDIO] Using SERVER_IP: {DEFAULT_AUDIO_SERVER_IP}")
 
 # Lazy imports for heavy modules
 _pyaudio = None

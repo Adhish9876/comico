@@ -19,10 +19,31 @@ from typing import Dict, List
 import os
 import ssl
 from dotenv import load_dotenv
+import sys
 
-# Load environment variables
-load_dotenv()
+# Load environment variables - check multiple possible locations for .env
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable
+    application_path = os.path.dirname(sys.executable)
+    env_path = os.path.join(application_path, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"[VIDEO] Loaded .env from: {env_path}")
+    else:
+        # Try in _internal folder (PyInstaller extracts here)
+        env_path = os.path.join(application_path, '_internal', '.env')
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            print(f"[VIDEO] Loaded .env from: {env_path}")
+        else:
+            print(f"[VIDEO] ⚠️ WARNING: .env file not found!")
+else:
+    # Running as Python script
+    load_dotenv()
+    print(f"[VIDEO] Loaded .env from script directory")
+
 SERVER_IP = os.getenv('SERVER_IP', 'localhost')
+print(f"[VIDEO] Using SERVER_IP: {SERVER_IP}")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'shadow_nexus_video_secret'

@@ -20,9 +20,30 @@ from dotenv import load_dotenv
 # Import certificate manager for automatic SSL setup
 from cert_manager import setup_certificates, verify_and_fix_certificates
 
-# Load environment variables
-load_dotenv()
+# Load environment variables - check multiple possible locations for .env
+import sys
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable
+    application_path = os.path.dirname(sys.executable)
+    env_path = os.path.join(application_path, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"[CLIENT] Loaded .env from: {env_path}")
+    else:
+        # Try in _internal folder (PyInstaller extracts here)
+        env_path = os.path.join(application_path, '_internal', '.env')
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            print(f"[CLIENT] Loaded .env from: {env_path}")
+        else:
+            print(f"[CLIENT] ⚠️ WARNING: .env file not found!")
+else:
+    # Running as Python script
+    load_dotenv()
+    print(f"[CLIENT] Loaded .env from script directory")
+
 SERVER_IP = os.getenv('SERVER_IP', 'localhost')
+print(f"[CLIENT] Using SERVER_IP: {SERVER_IP}")
 
 # Ultra-lazy imports for fastest startup
 _requests = None
@@ -180,6 +201,14 @@ def receive_messages():
                     try:
                         print(f"[CLIENT] Retrying connection to {state.server_host}:{state.server_port}...")
                         new_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        
+                        # Enable TCP keepalive on reconnection too
+                        new_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                        if hasattr(socket, 'TCP_KEEPIDLE'):
+                            new_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 120)
+                            new_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 30)
+                            new_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 8)
+                        
                         new_socket.settimeout(5.0)
                         new_socket.connect((state.server_host, state.server_port))
                         
@@ -242,6 +271,16 @@ def connect_to_server(username: str, host: str, port: int):
         print(f"[CLIENT] Connecting to {host}:{port} as {username}")
         
         state.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
+        # Enable TCP keepalive to detect dead connections
+        state.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        
+        # Platform-specific keepalive settings
+        if hasattr(socket, 'TCP_KEEPIDLE'):  # Linux
+            state.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 120)
+            state.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 30)
+            state.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 8)
+        
         state.socket.settimeout(10.0)  # Increased timeout
         state.socket.connect((host, port))
         
