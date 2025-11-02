@@ -925,7 +925,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="/static/js/socket.io.min.js"></script>
     <script>
         const sessionId = "{{ session_id }}";
         const sessionType = "{{ session_type }}";
@@ -947,6 +947,9 @@
         let enlargedVideo = null; // Track which video is currently enlarged
         let audioContext = null;
         let audioAnalyser = null;
+        let screenShareAnimationId = null;  // For canvas animation cleanup
+        let screenVideoElement = null;      // For screen video element
+        let cameraVideoElement = null;      // For camera video element
 
 const localVideo = document.getElementById('localVideo');
 const videosContainer = document.getElementById('videosContainer');
@@ -1335,102 +1338,39 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     async function toggleScreenShare() {
         if (!isScreenSharing) {
             try {
+                // Get screen with optimized settings for LAN
                 screenStream = await navigator.mediaDevices.getDisplayMedia({
                     video: { 
                         cursor: "always",
-                        width: { ideal: 1280 },  // Lower resolution for better performance
-                        height: { ideal: 720 },
-                        frameRate: { ideal: 15, max: 20 }  // Lower frame rate to reduce bandwidth
+                        width: { ideal: 1280, max: 1920 },
+                        height: { ideal: 720, max: 1080 },
+                        frameRate: { ideal: 10, max: 15 }  // Lower FPS for stability
                     },
                     audio: false
                 });
 
                 const screenTrack = screenStream.getVideoTracks()[0];
-                originalVideoTrack = localStream.getVideoTracks()[0];
-
-                // Create canvas for compositing (match screen resolution, not hardcoded)
-                const canvas = document.createElement('canvas');
-                canvas.width = 1280;  // Match the constrained resolution
-                canvas.height = 720;
-                const ctx = canvas.getContext('2d', { alpha: false });  // Disable alpha for performance
                 
-                // Capture at 15fps to match screen share frame rate
-                const canvasStream = canvas.captureStream(15);
-                const compositeTrack = canvasStream.getVideoTracks()[0];
-                
-                // Draw screen at full size
-                const screenVideo = document.createElement('video');
-                screenVideo.srcObject = screenStream;
-                screenVideo.muted = true;
-                screenVideo.play();
-                
-                // Draw camera as PiP
-                const cameraVideo = document.createElement('video');
-                cameraVideo.srcObject = localStream;
-                cameraVideo.muted = true;
-                cameraVideo.play();
-                
-                let animationId = null;
-                let lastFrameTime = 0;
-                const targetFPS = 15;  // Limit to 15fps
-                const frameInterval = 1000 / targetFPS;
-                
-                // Animation function to composite the videos with frame rate limiting
-                function compositeVideos(currentTime) {
-                    if (!isScreenSharing) {
-                        // Stop the animation loop when screen sharing stops
-                        if (animationId) {
-                            cancelAnimationFrame(animationId);
-                        }
-                        return;
-                    }
-                    
-                    animationId = requestAnimationFrame(compositeVideos);
-                    
-                    // Limit frame rate
-                    const elapsed = currentTime - lastFrameTime;
-                    if (elapsed < frameInterval) {
-                        return;  // Skip this frame
-                    }
-                    lastFrameTime = currentTime - (elapsed % frameInterval);
-                    
-                    // Clear canvas
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    
-                    // Draw screen at full size
-                    if (screenVideo.readyState === screenVideo.HAVE_ENOUGH_DATA) {
-                        ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
-                    }
-                    
-                    // Draw camera in bottom-right corner as PiP (16:9 aspect, 280x158)
-                    if (cameraVideo.readyState === cameraVideo.HAVE_ENOUGH_DATA) {
-                        const pipWidth = 220;  // Smaller PiP
-                        const pipHeight = 124;
-                        const pipX = canvas.width - pipWidth - 15;
-                        const pipY = canvas.height - pipHeight - 15;
-                        
-                        // Draw semi-transparent background for camera
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                        ctx.fillRect(pipX - 4, pipY - 4, pipWidth + 8, pipHeight + 8);
-                        
-                        // Draw camera video
-                        ctx.drawImage(cameraVideo, pipX, pipY, pipWidth, pipHeight);
-                        
-                        // Draw border
-                        ctx.strokeStyle = '#5865f2';
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(pipX, pipY, pipWidth, pipHeight);
-                    }
+                // Store original camera track
+                if (localStream && localStream.getVideoTracks().length > 0) {
+                    originalVideoTrack = localStream.getVideoTracks()[0];
                 }
+
+                // OPTION 1: Simple screen-only sharing (MOST RELIABLE)
+                // Just send the screen directly without PiP compositing
                 
-                compositeVideos(0);
+                console.log('[SCREEN] Starting screen share...');
                 
-                // Replace the composite track in all peer connections
+                // Replace video track in all existing peer connections
                 for (let peer_id in _peer_list) {
-                    const sender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
+                    const sender = _peer_list[peer_id].getSenders().find(s => s.track && s.track.kind === 'video');
                     if (sender) {
-                        sender.replaceTrack(compositeTrack);
+                        try {
+                            await sender.replaceTrack(screenTrack);
+                            console.log(`[SCREEN] Replaced track for peer ${peer_id}`);
+                        } catch (err) {
+                            console.error(`[SCREEN] Failed to replace track for ${peer_id}:`, err);
+                        }
                     }
                 }
                 
@@ -1440,7 +1380,9 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                 screenShareBtn.classList.add('sharing');
                 document.getElementById('localScreenIndicator').classList.add('active');
 
+                // Handle screen share stop
                 screenTrack.onended = () => {
+                    console.log('[SCREEN] Screen track ended');
                     stopScreenShare();
                 };
 
@@ -1450,31 +1392,66 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                     sharing: true
                 });
 
-                showNotification('✅ Screen sharing active with camera PiP');
+                showNotification('✅ Screen sharing started');
 
             } catch (error) {
-                console.error('Error sharing screen:', error);
-                showNotification('Could not share screen');
+                console.error('[SCREEN] Error sharing screen:', error);
+                showNotification('❌ Could not share screen: ' + error.message);
+                isScreenSharing = false;
             }
         } else {
             stopScreenShare();
         }
     }
 
-    function stopScreenShare() {
+    async function stopScreenShare() {
+        console.log('[SCREEN] Stopping screen share...');
+        
+        // Stop animation loop if running
+        if (screenShareAnimationId) {
+            cancelAnimationFrame(screenShareAnimationId);
+            screenShareAnimationId = null;
+        }
+        
+        // Clean up video elements
+        if (screenVideoElement) {
+            screenVideoElement.pause();
+            screenVideoElement.srcObject = null;
+            screenVideoElement = null;
+        }
+        if (cameraVideoElement) {
+            cameraVideoElement.pause();
+            cameraVideoElement.srcObject = null;
+            cameraVideoElement = null;
+        }
+        
+        // Stop screen stream
         if (screenStream) {
-            screenStream.getTracks().forEach(track => track.stop());
+            screenStream.getTracks().forEach(track => {
+                track.stop();
+                console.log('[SCREEN] Stopped track:', track.kind);
+            });
+            screenStream = null;
         }
 
-        // Restore original video track
+        // Restore original camera track to all peer connections
         for (let peer_id in _peer_list) {
-            const sender = _peer_list[peer_id].getSenders().find(s => s.track?.kind === 'video');
+            const sender = _peer_list[peer_id].getSenders().find(s => s.track && s.track.kind === 'video');
             if (sender && originalVideoTrack) {
-                sender.replaceTrack(originalVideoTrack);
+                try {
+                    await sender.replaceTrack(originalVideoTrack);
+                    console.log(`[SCREEN] Restored camera for peer ${peer_id}`);
+                } catch (err) {
+                    console.error(`[SCREEN] Failed to restore camera for ${peer_id}:`, err);
+                }
             }
         }
 
-        localVideo.srcObject = localStream;
+        // Restore local display
+        if (localStream) {
+            localVideo.srcObject = localStream;
+        }
+        
         isScreenSharing = false;
         screenShareBtn.classList.remove('sharing');
         document.getElementById('localScreenIndicator').classList.remove('active');
