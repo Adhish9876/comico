@@ -31,13 +31,14 @@ if getattr(sys, 'frozen', False):
             load_dotenv(env_path)
             print(f"[AUDIO] Loaded .env from: {env_path}")
         else:
-            print(f"[AUDIO] ⚠️ WARNING: .env file not found!")
+            print(f"[AUDIO] ⚠️ WARNING: .env file not found! Using hardcoded server IP.")
 else:
     # Running as Python script
     load_dotenv()
     print(f"[AUDIO] Loaded .env from script directory")
 
-DEFAULT_AUDIO_SERVER_IP = os.getenv('SERVER_IP', 'localhost')
+# Get SERVER_IP from .env or use hardcoded default (NOT localhost!)
+DEFAULT_AUDIO_SERVER_IP = os.getenv('SERVER_IP', '10.200.14.204')  # Hardcoded fallback to your server IP
 print(f"[AUDIO] Using SERVER_IP: {DEFAULT_AUDIO_SERVER_IP}")
 
 # Lazy imports for heavy modules

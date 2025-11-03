@@ -15,35 +15,20 @@ from datetime import datetime
 from typing import Optional, Dict, List
 import requests
 import urllib3
-from dotenv import load_dotenv
 
 # Import certificate manager for automatic SSL setup
 from cert_manager import setup_certificates, verify_and_fix_certificates
 
-# Load environment variables - check multiple possible locations for .env
-import sys
-if getattr(sys, 'frozen', False):
-    # Running as compiled executable
-    application_path = os.path.dirname(sys.executable)
-    env_path = os.path.join(application_path, '.env')
-    if os.path.exists(env_path):
-        load_dotenv(env_path)
-        print(f"[CLIENT] Loaded .env from: {env_path}")
-    else:
-        # Try in _internal folder (PyInstaller extracts here)
-        env_path = os.path.join(application_path, '_internal', '.env')
-        if os.path.exists(env_path):
-            load_dotenv(env_path)
-            print(f"[CLIENT] Loaded .env from: {env_path}")
-        else:
-            print(f"[CLIENT] ⚠️ WARNING: .env file not found!")
-else:
-    # Running as Python script
-    load_dotenv()
-    print(f"[CLIENT] Loaded .env from script directory")
+# NO .env loading for client! Server IP comes from user input in login screen
+print(f"[CLIENT] Server IP will be set from login screen input")
 
-SERVER_IP = os.getenv('SERVER_IP', 'localhost')
-print(f"[CLIENT] Using SERVER_IP: {SERVER_IP}")
+def get_server_ip():
+    """Get the current server IP from the user's login input"""
+    if state.server_host:
+        return state.server_host
+    # If somehow not set, use localhost as last resort (should never happen)
+    print("[CLIENT] ⚠️ WARNING: No server IP set! Using localhost fallback.")
+    return 'localhost'
 
 # Ultra-lazy imports for fastest startup
 _requests = None
@@ -96,7 +81,7 @@ eel.init('web')
 class ClientState:
     def __init__(self):
         self.username: Optional[str] = None
-        self.server_host = SERVER_IP
+        self.server_host = None  # Will be set from login screen input
         self.server_port = 5555
         self.file_port = 5556
         self.audio_port = 5557
@@ -269,6 +254,7 @@ def connect_to_server(username: str, host: str, port: int):
         state.connected = False
         
         print(f"[CLIENT] Connecting to {host}:{port} as {username}")
+        print(f"[CLIENT] This IP will be used for video/audio calls: {host}")
         
         state.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         
@@ -604,8 +590,10 @@ def start_video_call(chat_type, chat_id):
         print(f"[CLIENT] Session Name: {session_name}")
         #print chat_type
         print(f"[CLIENT] Chat Type: {chat_type}")
-        # Call video server API to create session with chat_id
-        response = requests.post(f'https://{SERVER_IP}:5000/api/create_session', json={
+        # Call video server API to create session with chat_id (use dynamic SERVER_IP from user input)
+        current_server_ip = get_server_ip()
+        print(f"[CLIENT] Using server IP for video call: {current_server_ip}")
+        response = requests.post(f'https://{current_server_ip}:5000/api/create_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,
@@ -695,8 +683,10 @@ def start_audio_call(chat_type, chat_id):
         print(f"[CLIENT] Audio Session Name: {session_name}")
         print(f"[CLIENT] Audio Chat Type: {chat_type}")
         
-        # Call audio server API to create session with chat_id
-        response = requests.post(f'https://{SERVER_IP}:5000/api/create_audio_session', json={
+        # Call audio server API to create session with chat_id (use dynamic SERVER_IP from user input)
+        current_server_ip = get_server_ip()
+        print(f"[CLIENT] Using server IP for audio call: {current_server_ip}")
+        response = requests.post(f'https://{current_server_ip}:5000/api/create_audio_session', json={
             'session_type': chat_type,
             'session_name': session_name,
             'creator': state.username,
@@ -949,9 +939,9 @@ def find_available_port(start_port=8081, max_attempts=10):
     import socket
     for port in range(start_port, start_port + max_attempts):
         try:
-            # Try to bind to the port
+            # Try to bind to the port (use localhost for client UI)
             test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            test_socket.bind((SERVER_IP, port))
+            test_socket.bind(('localhost', port))
             test_socket.close()
             return port
         except OSError:

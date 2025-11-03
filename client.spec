@@ -31,7 +31,7 @@ a = Analysis(
         ('templates', 'templates'),
         ('cert.pem', '.'),
         ('key.pem', '.'),
-        ('.env', '.'),  # Include .env file for server configuration
+        # NOTE: .env is NOT included for client - server IP comes from login screen input
     ],
     hiddenimports=[
         'eel',
