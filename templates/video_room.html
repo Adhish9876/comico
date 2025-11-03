@@ -1178,7 +1178,36 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             const video = document.createElement('video');
             video.autoplay = true;
             video.playsinline = true;
+            video.muted = false; // Remote video should NOT be muted
             video.srcObject = stream;
+            
+            // Explicitly try to play the video
+            video.play().then(() => {
+                console.log(`[VIDEO] Remote video playing for ${peer_id}`);
+            }).catch(err => {
+                console.error(`[VIDEO] Failed to play remote video for ${peer_id}:`, err);
+                // Try to play again on user interaction
+                document.addEventListener('click', () => {
+                    video.play().catch(e => console.error('Retry failed:', e));
+                }, { once: true });
+            });
+            
+            // Add error handling
+            video.onerror = (e) => {
+                console.error(`[VIDEO] Video element error for ${peer_id}:`, e);
+            };
+            
+            video.onloadedmetadata = () => {
+                console.log(`[VIDEO] Metadata loaded for ${peer_id}, dimensions: ${video.videoWidth}x${video.videoHeight}`);
+                if (video.videoWidth === 0 || video.videoHeight === 0) {
+                    console.warn(`[VIDEO] Video has no dimensions for ${peer_id} - may be camera off`);
+                    showCameraOffPlaceholder(peer_id);
+                }
+            };
+            
+            video.onloadeddata = () => {
+                console.log(`[VIDEO] Data loaded for ${peer_id}`);
+            };
             
             // Camera off placeholder
             const cameraOffPlaceholder = document.createElement('div');
@@ -1237,7 +1266,15 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         } else {
             console.log('[LAYOUT] Video wrapper already exists for:', peer_id, '- updating stream');
             const video = videoWrapper.querySelector('video');
-            if (video) video.srcObject = stream;
+            if (video) {
+                video.srcObject = stream;
+                // Explicitly play when updating stream
+                video.play().then(() => {
+                    console.log(`[VIDEO] Remote video playing (updated) for ${peer_id}`);
+                }).catch(err => {
+                    console.error(`[VIDEO] Failed to play updated remote video for ${peer_id}:`, err);
+                });
+            }
         }
     }
     
