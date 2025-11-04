@@ -697,7 +697,6 @@ const globalNetworkItem = document.getElementById('globalNetworkItem');
 const noUsersMsg = document.getElementById('noUsersMsg');
 const noGroupsMsg = document.getElementById('noGroupsMsg');
 const refreshUsersBtn = document.getElementById('refreshUsersBtn');
-const audioCallBtn = document.getElementById('audioCallBtn');
 const videoCallBtn = document.getElementById('videoCallBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsModal = document.getElementById('settingsModal');
@@ -706,6 +705,12 @@ const notificationsToggle = document.getElementById('notificationsToggle');
 const soundsToggle = document.getElementById('soundsToggle');
 const onlineStatusToggle = document.getElementById('onlineStatusToggle');
 const audioRecordBtn = document.getElementById('audioRecordBtn');
+
+// Global ringtone references to prevent orphaned audio
+let activeVideoRingtone = null;
+let activeAudioRingtone = null;
+let lastVideoLink = null;
+let lastAudioLink = null;
 
 // Ensure badge elements exist for totals and global
 function ensureBadges() {
@@ -772,6 +777,56 @@ function showNotification(message, type = 'info') {
     banner.textContent = message;
     document.body.appendChild(banner);
     setTimeout(() => banner.remove(), 3000);
+}
+
+// Play message sent sound effect
+function playMessageSentSound() {
+    // Check if sounds are enabled in settings
+    const soundsEnabled = localStorage.getItem('sounds') !== 'false'; // Default to true
+    if (!soundsEnabled) {
+        console.log('[MESSAGE] 🔇 Message sound disabled in settings');
+        return;
+    }
+
+    try {
+        // Determine server URL - check if we can get it from any video/audio links
+        let serverBase = null;
+        
+        // Try to get server URL from stored session links in chat history
+        if (typeof lastVideoLink !== 'undefined' && lastVideoLink) {
+            serverBase = lastVideoLink.substring(0, lastVideoLink.lastIndexOf('/video/'));
+        } else if (typeof lastAudioLink !== 'undefined' && lastAudioLink) {
+            serverBase = lastAudioLink.substring(0, lastAudioLink.lastIndexOf('/audio/'));
+        } else {
+            // Fallback: construct Flask server URL
+            // Flask video server uses HTTPS on port 5000
+            const currentHost = window.location.hostname;
+            serverBase = `https://${currentHost}:5000`;
+            console.log('[MESSAGE] 🔧 Using fallback Flask server URL:', serverBase);
+        }
+        
+        const soundUrl = `${serverBase}/static/sounds/ting.mp3?t=${Date.now()}`;
+        
+        console.log('[MESSAGE] 📻 Loading sound from:', soundUrl);
+        
+        const sound = new Audio();
+        sound.src = soundUrl;
+        sound.volume = 0.9;
+        sound.preload = 'auto';
+        
+        const playPromise = sound.play();
+        if (playPromise !== undefined) {
+            playPromise
+                .then(() => {
+                    console.log('[MESSAGE] ✓ Message sent sound played');
+                })
+                .catch(e => {
+                    console.log('[MESSAGE] ℹ️ Message sent sound play prevented by browser:', e.message);
+                });
+        }
+    } catch (error) {
+        console.log('[MESSAGE] Error playing message sound:', error);
+    }
 }
 
 // Password visibility toggle functionality
@@ -1314,6 +1369,9 @@ async function sendMessage() {
     } catch (e) {
         console.log('Could not save last seen index:', e);
     }
+
+    // Play message sent sound effect
+    playMessageSentSound();
 
     try {
         if (currentChatType === 'private' && currentChatTarget) {
@@ -2538,6 +2596,10 @@ function handleVideoInvite(message, isFromHistory = false) {
     const { sender, link, session_id } = message;
     console.log('[VIDEO] Handling video invite from', sender, 'isFromHistory:', isFromHistory);
 
+    // Store the video link globally for use in message sound playback
+    window.lastVideoLink = link;
+    console.log('[VIDEO] Stored video link for message sound:', link);
+
     // Check if this call was marked as missed in localStorage
     const missedCalls = JSON.parse(localStorage.getItem('missedVideoCalls') || '{}');
     const wasMissed = missedCalls[session_id];
@@ -2718,6 +2780,10 @@ function handleVideoInvite(message, isFromHistory = false) {
 function handleAudioInvite(message, isFromHistory = false) {
     const { sender, link, session_id } = message;
     console.log('[AUDIO] Handling audio invite from', sender, 'isFromHistory:', isFromHistory);
+
+    // Store the audio link globally for use in message sound playback
+    window.lastAudioLink = link;
+    console.log('[AUDIO] Stored audio link for message sound:', link);
 
     // Check if this call was marked as missed in localStorage
     const missedCalls = JSON.parse(localStorage.getItem('missedAudioCalls') || '{}');
@@ -2908,6 +2974,9 @@ function showIncomingCallModal(sender, link, sessionId) {
     const existing = document.getElementById('incomingCallModal');
     if (existing) existing.remove();
 
+    // Check if sounds are enabled in settings
+    const soundsEnabled = localStorage.getItem('sounds') !== 'false'; // Default to true
+
     // Extract the server URL from the video link (remove /video/sessionid)
     // link format: https://172.20.10.3:5000/video/sessionid
     const serverBase = link.substring(0, link.lastIndexOf('/video/'));
@@ -2916,11 +2985,15 @@ function showIncomingCallModal(sender, link, sessionId) {
     // Create and start ringtone with better initialization
     const ringtone = new Audio();
     ringtone.src = ringtoneUrl;
-    ringtone.loop = false;
+    ringtone.loop = true;
     ringtone.volume = 0.8;
     ringtone.preload = 'auto';
     
+    // Store ringtone globally so it can be stopped even if modal is closed
+    activeVideoRingtone = ringtone;
+    
     console.log('[VIDEO] Ringtone created:', ringtone.src);
+    console.log('[VIDEO] Sounds enabled:', soundsEnabled);
     console.log('[VIDEO] Server base:', serverBase);
     console.log('[VIDEO] Audio readyState:', ringtone.readyState, '(0=uninitialized, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA)');
     
@@ -2939,8 +3012,12 @@ function showIncomingCallModal(sender, link, sessionId) {
         console.log('[VIDEO] ✓ Audio canplaythrough event - enough data to play without stopping');
     });
     
-    // Attempt to play ringtone
+    // Attempt to play ringtone (only if sounds are enabled)
     const playRingtone = () => {
+        if (!soundsEnabled) {
+            console.log('[VIDEO] 🔇 Ringtone disabled in settings');
+            return;
+        }
         console.log('[VIDEO] Attempting to play ringtone...');
         const playPromise = ringtone.play();
         if (playPromise !== undefined) {
@@ -3047,6 +3124,14 @@ function handleVideoMissed(message) {
 
     console.log('[VIDEO] Handling missed call for session:', sessionId);
 
+    // Stop and clear any active video ringtone
+    if (activeVideoRingtone) {
+        console.log('[VIDEO] 🛑 Stopping ringtone on missed call');
+        activeVideoRingtone.pause();
+        activeVideoRingtone.currentTime = 0;
+        activeVideoRingtone = null;
+    }
+
     // Close incoming call modal if it's open
     const modal = document.getElementById('incomingCallModal');
     if (modal) modal.remove();
@@ -3111,6 +3196,9 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
     const existing = document.getElementById('incomingAudioCallModal');
     if (existing) existing.remove();
 
+    // Check if sounds are enabled in settings
+    const soundsEnabled = localStorage.getItem('sounds') !== 'false'; // Default to true
+
     // Extract the server URL from the audio link (remove /audio/sessionid)
     // link format: https://172.20.10.3:5000/audio/sessionid
     const serverBase = link.substring(0, link.lastIndexOf('/audio/'));
@@ -3123,7 +3211,11 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
     ringtone.volume = 0.8;
     ringtone.preload = 'auto';
     
+    // Store ringtone globally so it can be stopped even if modal is closed
+    activeAudioRingtone = ringtone;
+    
     console.log('[AUDIO] Ringtone created:', ringtone.src);
+    console.log('[AUDIO] Sounds enabled:', soundsEnabled);
     console.log('[AUDIO] Server base:', serverBase);
     
     // Listen for loading errors
@@ -3137,8 +3229,12 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
         console.log('[AUDIO] ✓ Audio canplay event - audio file loaded successfully');
     });
     
-    // Attempt to play ringtone
+    // Attempt to play ringtone (only if sounds are enabled)
     const playRingtone = () => {
+        if (!soundsEnabled) {
+            console.log('[AUDIO] 🔇 Ringtone disabled in settings');
+            return;
+        }
         console.log('[AUDIO] Attempting to play ringtone...');
         const playPromise = ringtone.play();
         if (playPromise !== undefined) {
@@ -3243,6 +3339,14 @@ function handleAudioMissed(message) {
     if (!sessionId) return;
 
     console.log('[AUDIO] Handling missed call for session:', sessionId);
+
+    // Stop and clear any active audio ringtone
+    if (activeAudioRingtone) {
+        console.log('[AUDIO] 🛑 Stopping ringtone on missed call');
+        activeAudioRingtone.pause();
+        activeAudioRingtone.currentTime = 0;
+        activeAudioRingtone = null;
+    }
 
     // Close incoming call modal if it's open
     const modal = document.getElementById('incomingAudioCallModal');
@@ -4029,63 +4133,6 @@ globalNetworkItem.addEventListener('click', async function () {
     }, 1000);
 });
 
-// ===== AUDIO CALL =====
-audioCallBtn.addEventListener('click', async () => {
-    if (!currentChatType) {
-        showNotification('Select a chat first', 'warning');
-        return;
-    }
-
-    // Validate that we have the required chat target for non-global calls
-    if (currentChatType === 'private' && !currentChatTarget) {
-        showNotification('Please select a user for private audio call', 'warning');
-        return;
-    }
-
-    if (currentChatType === 'group' && !currentChatTarget) {
-        showNotification('Please select a group for group audio call', 'warning');
-        return;
-    }
-
-    // Determine chat ID to pass to audio server
-    let chatId;
-    if (currentChatType === 'global') {
-        chatId = 'global';
-    } else if (currentChatType === 'private' || currentChatType === 'group') {
-        chatId = currentChatTarget;
-    } else {
-        showNotification('Invalid chat type', 'error');
-        return;
-    }
-
-    const chatTypeDisplay = currentChatType === 'global' ? 'Global Network' :
-        currentChatType === 'private' ? `Private chat with ${currentChatTarget}` :
-            `Group chat`;
-
-    if (!confirm(`Start audio call in ${chatTypeDisplay}?`)) {
-        return;
-    }
-
-    console.log(`[AUDIO] Starting ${currentChatType} audio call with chat_id: ${chatId}`);
-
-    try {
-        const result = await eel.start_audio_call(currentChatType, chatId)();
-
-        if (result.success) {
-            // Open audio call window immediately
-            window.open(`${result.link}?username=${encodeURIComponent(username)}`, 'audio_call', 'width=600,height=500');
-            showNotification('Audio call started!', 'success');
-
-            // Note: The audio invite message will be displayed when the server broadcasts it back
-        } else {
-            showNotification(`Failed to start call: ${result.error}`, 'error');
-        }
-    } catch (error) {
-        console.error('[AUDIO] Error starting audio call:', error);
-        showNotification('Error starting audio call', 'error');
-    }
-});
-
 // ===== VIDEO CALL =====
 videoCallBtn.addEventListener('click', async () => {
     if (!currentChatType) {
@@ -4649,13 +4696,6 @@ function refreshChatData(force = false) {
     const wasAtBottom = isAtBottom();
     const scrollPosition = messagesContainer.scrollTop;
 
-    // Show loading indicator
-    const refreshBtn = document.getElementById('refreshBtn');
-    if (refreshBtn) {
-        refreshBtn.disabled = true;
-        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    }
-
     // Request fresh data from server
     const promises = [
         eel.get_chat_history()().catch(err => {
@@ -4708,12 +4748,6 @@ function refreshChatData(force = false) {
         // Process user list
         if (userResult.success && userResult.users) {
             updateUsersList(userResult.users);
-        }
-
-        // Reset refresh button
-        if (refreshBtn) {
-            refreshBtn.disabled = false;
-            refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
         }
 
         // Show success message if this was a manual refresh
@@ -7003,35 +7037,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load persistent groups on startup
     console.log('===== LOADING PERSISTENT GROUPS ON STARTUP =====');
     updateGroupsList();
-
-    // Connect refresh button to soft refresh chat data instead of full page reload
-    const refreshBtn = document.getElementById('refreshBtn');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            console.log('===== SOFT REFRESH TRIGGERED =====');
-
-            // Show loading state
-            refreshBtn.disabled = true;
-            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
-
-            // Request fresh data from server
-            Promise.all([
-                eel.send_message('request_chat_history', '', {})(),
-                eel.refresh_user_list()()
-            ]).then(() => {
-                // Reset button state
-                refreshBtn.disabled = false;
-                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
-                showNotification('Chat refreshed', 'success');
-            }).catch((error) => {
-                console.error('Refresh failed:', error);
-                refreshBtn.disabled = false;
-                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
-                showNotification('Refresh failed', 'error');
-            });
-        });
-    }
 
     // Connect group settings header button
     const groupSettingsHeaderBtn = document.getElementById('groupSettingsHeaderBtn');
