@@ -46,7 +46,7 @@ else:
 SERVER_IP = os.getenv('SERVER_IP', '10.200.14.204')  # Hardcoded fallback to your server IP
 print(f"[VIDEO] Using SERVER_IP: {SERVER_IP}")
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'), static_url_path='/static')
 app.config['SECRET_KEY'] = 'shadow_nexus_video_secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -89,6 +89,12 @@ def audio_room(session_id):
                          session_type=session.get('type', 'global'),
                          session_name=session.get('name', 'Audio Call'),
                          server_ip=SERVER_IP)
+
+@app.route('/static/sounds/<filename>')
+def serve_sound(filename):
+    """Explicitly serve sound files with correct MIME type"""
+    from flask import send_from_directory
+    return send_from_directory(os.path.join(os.path.dirname(__file__), 'static', 'sounds'), filename, mimetype='audio/mpeg')
 
 @app.route('/api/create_session', methods=['POST'])
 def api_create_session():

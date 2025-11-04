@@ -2908,8 +2908,66 @@ function showIncomingCallModal(sender, link, sessionId) {
     const existing = document.getElementById('incomingCallModal');
     if (existing) existing.remove();
 
+    // Extract the server URL from the video link (remove /video/sessionid)
+    // link format: https://172.20.10.3:5000/video/sessionid
+    const serverBase = link.substring(0, link.lastIndexOf('/video/'));
+    const ringtoneUrl = `${serverBase}/static/sounds/tvk.mp3`;
+
+    // Create and start ringtone with better initialization
+    const ringtone = new Audio();
+    ringtone.src = ringtoneUrl;
+    ringtone.loop = false;
+    ringtone.volume = 0.8;
+    ringtone.preload = 'auto';
+    
+    console.log('[VIDEO] Ringtone created:', ringtone.src);
+    console.log('[VIDEO] Server base:', serverBase);
+    console.log('[VIDEO] Audio readyState:', ringtone.readyState, '(0=uninitialized, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA)');
+    
+    // Listen for loading errors
+    ringtone.addEventListener('error', (e) => {
+        console.error('[VIDEO] ❌ Audio loading error:', e.message);
+        console.error('[VIDEO] Error code:', ringtone.error?.code, '(1=ABORTED, 2=NETWORK, 3=DECODE, 4=NOT_SUPPORTED)');
+        console.error('[VIDEO] Current source:', ringtone.src);
+    });
+    
+    ringtone.addEventListener('canplay', () => {
+        console.log('[VIDEO] ✓ Audio canplay event - audio file loaded successfully');
+    });
+    
+    ringtone.addEventListener('canplaythrough', () => {
+        console.log('[VIDEO] ✓ Audio canplaythrough event - enough data to play without stopping');
+    });
+    
+    // Attempt to play ringtone
+    const playRingtone = () => {
+        console.log('[VIDEO] Attempting to play ringtone...');
+        const playPromise = ringtone.play();
+        if (playPromise !== undefined) {
+            playPromise
+                .then(() => {
+                    console.log('[VIDEO] ✅ Ringtone playing successfully');
+                })
+                .catch(e => {
+                    console.log('[VIDEO] ⚠️ Ringtone autoplay blocked:', e.message);
+                    console.log('[VIDEO] Error name:', e.name);
+                    // Try to play on next user interaction
+                    const attemptPlayOnClick = () => {
+                        ringtone.play()
+                            .then(() => console.log('[VIDEO] ✅ Ringtone started on user interaction'))
+                            .catch(err => console.log('[VIDEO] ❌ Ringtone play failed:', err.message));
+                        document.removeEventListener('click', attemptPlayOnClick);
+                    };
+                    document.addEventListener('click', attemptPlayOnClick);
+                });
+        }
+    };
+    playRingtone();
+
     const modal = document.createElement('div');
     modal.id = 'incomingCallModal';
+    // Store ringtone reference on modal for later cleanup
+    modal.ringtone = ringtone;
     modal.innerHTML = `
         <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 10000;">
             <div style="background: linear-gradient(135deg, #2d3142, #1a1d29); border: 3px solid var(--accent-pink); border-radius: 16px; padding: 32px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(198, 40, 40, 0.6); animation: slideIn 0.3s ease;">
@@ -2938,6 +2996,11 @@ function showIncomingCallModal(sender, link, sessionId) {
     answerBtn.onmouseover = () => answerBtn.style.transform = 'scale(1.05)';
     answerBtn.onmouseout = () => answerBtn.style.transform = 'scale(1)';
     answerBtn.onclick = () => {
+        // Stop ringtone when answering
+        if (modal.ringtone) {
+            modal.ringtone.pause();
+            modal.ringtone.currentTime = 0;
+        }
         // Remove from ignored calls when answering
         const ignoredCalls = JSON.parse(localStorage.getItem('ignoredVideoCalls') || '{}');
         if (ignoredCalls[sessionId]) {
@@ -2951,6 +3014,11 @@ function showIncomingCallModal(sender, link, sessionId) {
     ignoreBtn.onmouseover = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.15)'; ignoreBtn.style.color = '#fff'; };
     ignoreBtn.onmouseout = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.1)'; ignoreBtn.style.color = '#bbb'; };
     ignoreBtn.onclick = () => {
+        // Stop ringtone when declining
+        if (modal.ringtone) {
+            modal.ringtone.pause();
+            modal.ringtone.currentTime = 0;
+        }
         // Mark this call as ignored in localStorage
         const ignoredCalls = JSON.parse(localStorage.getItem('ignoredVideoCalls') || '{}');
         ignoredCalls[sessionId] = true;
@@ -2962,6 +3030,11 @@ function showIncomingCallModal(sender, link, sessionId) {
     // Auto-remove modal after 30 seconds
     setTimeout(() => {
         if (document.getElementById('incomingCallModal')) {
+            // Stop ringtone when modal auto-closes
+            if (modal.ringtone) {
+                modal.ringtone.pause();
+                modal.ringtone.currentTime = 0;
+            }
             modal.remove();
         }
     }, 30000);
@@ -3038,8 +3111,60 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
     const existing = document.getElementById('incomingAudioCallModal');
     if (existing) existing.remove();
 
+    // Extract the server URL from the audio link (remove /audio/sessionid)
+    // link format: https://172.20.10.3:5000/audio/sessionid
+    const serverBase = link.substring(0, link.lastIndexOf('/audio/'));
+    const ringtoneUrl = `${serverBase}/static/sounds/disc.mp3`;
+
+    // Create and start ringtone with better initialization
+    const ringtone = new Audio();
+    ringtone.src = ringtoneUrl;
+    ringtone.loop = true;
+    ringtone.volume = 0.8;
+    ringtone.preload = 'auto';
+    
+    console.log('[AUDIO] Ringtone created:', ringtone.src);
+    console.log('[AUDIO] Server base:', serverBase);
+    
+    // Listen for loading errors
+    ringtone.addEventListener('error', (e) => {
+        console.error('[AUDIO] ❌ Audio loading error:', e.message);
+        console.error('[AUDIO] Error code:', ringtone.error?.code);
+        console.error('[AUDIO] Current source:', ringtone.src);
+    });
+    
+    ringtone.addEventListener('canplay', () => {
+        console.log('[AUDIO] ✓ Audio canplay event - audio file loaded successfully');
+    });
+    
+    // Attempt to play ringtone
+    const playRingtone = () => {
+        console.log('[AUDIO] Attempting to play ringtone...');
+        const playPromise = ringtone.play();
+        if (playPromise !== undefined) {
+            playPromise
+                .then(() => {
+                    console.log('[AUDIO] ✅ Ringtone playing successfully');
+                })
+                .catch(e => {
+                    console.log('[AUDIO] ⚠️ Ringtone autoplay blocked:', e.message);
+                    // Try to play on next user interaction
+                    const attemptPlayOnClick = () => {
+                        ringtone.play()
+                            .then(() => console.log('[AUDIO] ✅ Ringtone started on user interaction'))
+                            .catch(err => console.log('[AUDIO] ❌ Ringtone play failed:', err.message));
+                        document.removeEventListener('click', attemptPlayOnClick);
+                    };
+                    document.addEventListener('click', attemptPlayOnClick);
+                });
+        }
+    };
+    playRingtone();
+
     const modal = document.createElement('div');
     modal.id = 'incomingAudioCallModal';
+    // Store ringtone reference on modal for later cleanup
+    modal.ringtone = ringtone;
     modal.innerHTML = `
         <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 10000;">
             <div style="background: linear-gradient(135deg, #2d3142, #1a1d29); border: 3px solid #00b8d4; border-radius: 16px; padding: 32px; max-width: 400px; width: 90%; box-shadow: 0 8px 32px rgba(0, 184, 212, 0.6); animation: slideIn 0.3s ease;">
@@ -3068,6 +3193,11 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
     answerBtn.onmouseover = () => answerBtn.style.transform = 'scale(1.05)';
     answerBtn.onmouseout = () => answerBtn.style.transform = 'scale(1)';
     answerBtn.onclick = () => {
+        // Stop ringtone when answering
+        if (modal.ringtone) {
+            modal.ringtone.pause();
+            modal.ringtone.currentTime = 0;
+        }
         // Remove from ignored calls when answering
         const ignoredCalls = JSON.parse(localStorage.getItem('ignoredAudioCalls') || '{}');
         if (ignoredCalls[sessionId]) {
@@ -3081,6 +3211,11 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
     ignoreBtn.onmouseover = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.15)'; ignoreBtn.style.color = '#fff'; };
     ignoreBtn.onmouseout = () => { ignoreBtn.style.background = 'rgba(255,255,255,0.1)'; ignoreBtn.style.color = '#bbb'; };
     ignoreBtn.onclick = () => {
+        // Stop ringtone when declining
+        if (modal.ringtone) {
+            modal.ringtone.pause();
+            modal.ringtone.currentTime = 0;
+        }
         // Mark this call as ignored in localStorage
         const ignoredCalls = JSON.parse(localStorage.getItem('ignoredAudioCalls') || '{}');
         ignoredCalls[sessionId] = true;
@@ -3092,6 +3227,11 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
     // Auto-remove modal after 30 seconds
     setTimeout(() => {
         if (document.getElementById('incomingAudioCallModal')) {
+            // Stop ringtone when modal auto-closes
+            if (modal.ringtone) {
+                modal.ringtone.pause();
+                modal.ringtone.currentTime = 0;
+            }
             modal.remove();
         }
     }, 30000);
