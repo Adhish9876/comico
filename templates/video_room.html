@@ -125,16 +125,21 @@
 
         /* Enlarged state for any video */
         .video-wrapper.enlarged {
-            position: fixed !important;
-            top: 10px !important;
-            left: 10px !important;
-            right: 10px !important;
-            bottom: 100px !important;
-            z-index: 2000 !important;
-            border: 3px solid #5865f2 !important;
+            position: absolute !important;
+            top: 1px !important;
+            left: 5px !important;
+            right: 5px !important;
+            bottom: 69px !important;
+            width: auto !important;
+            height: auto !important;
+            z-index: 1500 !important;
+            border: 2px solid #5865f2 !important;
+            border-radius: 4px !important;
             box-shadow: 0 20px 40px rgba(0,0,0,0.6) !important;
             animation: enlargeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
+
+
 
         @keyframes enlargeIn {
             from {
@@ -145,6 +150,30 @@
                 opacity: 1;
                 transform: scale(1);
             }
+        }
+
+        /* Exit fullscreen hint */
+        .video-wrapper.enlarged::after {
+            content: "Double-click to exit fullscreen";
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #f2f3f5;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 2001;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .video-wrapper.enlarged:hover::after {
+            opacity: 1;
         }
 
         /* NEW FLEX-BASED GRID SYSTEM */
@@ -969,20 +998,58 @@ const participantCount = document.getElementById('participantCount');
 const connectingOverlay = document.getElementById('connectingOverlay');
 
     const PC_CONFIG = {
-        iceServers: []  // Empty for LAN-only (direct P2P connection)
-        // STUN/TURN not needed when always on same LAN
-        // Direct peer-to-peer works perfectly fine locally
+        iceServers: [],  // Empty for LAN-only (direct P2P connection)
+        // Optimization flags for better performance
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
     };
+
+    // Adaptive bitrate config based on participant count
+    function getVideoBitrateConstraints(participantCount = 1) {
+        // Reduce bitrate for more participants
+        if (participantCount >= 4) {
+            return {
+                maxBitrate: 500000,  // 500 kbps for 4+ people
+                maxFramerate: 15,
+                maxWidth: 640,
+                maxHeight: 480
+            };
+        } else if (participantCount >= 2) {
+            return {
+                maxBitrate: 800000,  // 800 kbps for 2-3 people
+                maxFramerate: 24,
+                maxWidth: 854,
+                maxHeight: 480
+            };
+        }
+        return {
+            maxBitrate: 1500000,  // 1.5 mbps for 1-on-1
+            maxFramerate: 30,
+            maxWidth: 1280,
+            maxHeight: 720
+        };
+    }
 
     async function initVideoCall() {
         try {
-            // Try to get both video and audio
+            // Try to get both video and audio with adaptive settings
+            const participantCount = Object.keys(_peer_list).length + 1;
+            const videoBitrate = getVideoBitrateConstraints(participantCount);
+            
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 1280, height: 720 },
-                    audio: true
+                    video: { 
+                        width: { ideal: videoBitrate.maxWidth },
+                        height: { ideal: videoBitrate.maxHeight },
+                        frameRate: { ideal: videoBitrate.maxFramerate }
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
                 });
-                console.log('[VIDEO] Got both video and audio');
+                console.log('[VIDEO] Got both video and audio with adaptive settings');
             } catch (fullError) {
                 console.warn('[VIDEO] Failed to get video+audio, trying audio only:', fullError);
                 // If both fail, try audio only
@@ -1036,6 +1103,7 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         console.log(`Creating peer connection for ${peer_id}`);
         _peer_list[peer_id] = new RTCPeerConnection(PC_CONFIG);
 
+        // Add ICE candidate handler with optimizations
         _peer_list[peer_id].onicecandidate = (event) => {
             if (event.candidate) {
                 socket.emit('data', {
@@ -1057,6 +1125,7 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             handleNegotiationNeededEvent(peer_id);
         };
 
+        // Handle connection state changes
         _peer_list[peer_id].onconnectionstatechange = () => {
             console.log(`PC ${peer_id} state:`, _peer_list[peer_id].connectionState);
             if (_peer_list[peer_id].connectionState === 'failed' || 
@@ -1065,13 +1134,64 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             }
         };
 
+        // Monitor stats and adjust quality if needed
+        monitorConnectionStats(peer_id);
+
         return _peer_list[peer_id];
+    }
+
+    function monitorConnectionStats(peer_id) {
+        if (!_peer_list[peer_id]) return;
+        
+        const interval = setInterval(async () => {
+            if (!_peer_list[peer_id] || _peer_list[peer_id].connectionState === 'closed') {
+                clearInterval(interval);
+                return;
+            }
+
+            try {
+                const stats = await _peer_list[peer_id].getStats();
+                let videoStats = null;
+
+                stats.forEach(report => {
+                    if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                        videoStats = report;
+                    }
+                });
+
+                if (videoStats) {
+                    const frameRate = videoStats.framesPerSecond || 0;
+                    const packetsLost = videoStats.packetsLost || 0;
+                    
+                    if (frameRate < 10 && packetsLost > 50) {
+                        console.warn(`[STATS] Peer ${peer_id}: Low FPS (${frameRate}) and packet loss (${packetsLost})`);
+                    }
+                }
+            } catch (e) {
+                // Stats monitoring error - continue
+            }
+        }, 5000);  // Check every 5 seconds
     }
 
     function addLocalTracks(peer_id) {
         if (localStream && _peer_list[peer_id]) {
+            const participantCount = Object.keys(_peer_list).length + 1;
+            const videoBitrate = getVideoBitrateConstraints(participantCount);
+            
             localStream.getTracks().forEach((track) => {
-                _peer_list[peer_id].addTrack(track, localStream);
+                const sender = _peer_list[peer_id].addTrack(track, localStream);
+                
+                // Apply bitrate constraints to video sender
+                if (track.kind === 'video' && sender) {
+                    // Set sender parameters with bitrate limit
+                    const params = sender.getParameters();
+                    if (!params.encodings) params.encodings = [{}];
+                    params.encodings[0].maxBitrate = videoBitrate.maxBitrate;
+                    params.encodings[0].maxFramerate = videoBitrate.maxFramerate;
+                    sender.setParameters(params).catch(err => {
+                        console.warn('[BITRATE] Could not set sender constraints:', err);
+                    });
+                }
             });
         }
     }
@@ -1079,7 +1199,10 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     async function handleNegotiationNeededEvent(peer_id) {
         try {
             console.log(`Creating offer for ${peer_id}`);
-            const offer = await _peer_list[peer_id].createOffer();
+            const offer = await _peer_list[peer_id].createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
             await _peer_list[peer_id].setLocalDescription(offer);
             
             socket.emit('data', {
@@ -1253,8 +1376,8 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                 };
             }
             
-            // Add click-to-enlarge functionality
-            videoWrapper.addEventListener('click', () => toggleVideoEnlarge(peer_id));
+            // Add double-click-to-enlarge functionality
+            videoWrapper.addEventListener('dblclick', () => toggleVideoEnlarge(peer_id));
             videoWrapper.style.cursor = 'pointer';
             
             // Add to remote videos container, not directly to videosContainer
@@ -1375,13 +1498,14 @@ const connectingOverlay = document.getElementById('connectingOverlay');
     async function toggleScreenShare() {
         if (!isScreenSharing) {
             try {
-                // Get screen with optimized settings for LAN
+                // Optimize screen share for better quality and performance
                 screenStream = await navigator.mediaDevices.getDisplayMedia({
                     video: { 
                         cursor: "always",
-                        width: { ideal: 1280, max: 1920 },
-                        height: { ideal: 720, max: 1080 },
-                        frameRate: { ideal: 10, max: 15 }  // Lower FPS for stability
+                        // Higher resolution for screen share readability
+                        width: { ideal: 1920, max: 1920 },
+                        height: { ideal: 1080, max: 1080 },
+                        frameRate: { ideal: 24, max: 30 }  // Better FPS for smooth screen
                     },
                     audio: false
                 });
@@ -1393,18 +1517,23 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                     originalVideoTrack = localStream.getVideoTracks()[0];
                 }
 
-                // OPTION 1: Simple screen-only sharing (MOST RELIABLE)
-                // Just send the screen directly without PiP compositing
+                console.log('[SCREEN] Starting screen share with optimized settings...');
                 
-                console.log('[SCREEN] Starting screen share...');
-                
-                // Replace video track in all existing peer connections
+                // Replace video track in all existing peer connections with optimized bitrate
                 for (let peer_id in _peer_list) {
                     const sender = _peer_list[peer_id].getSenders().find(s => s.track && s.track.kind === 'video');
                     if (sender) {
                         try {
                             await sender.replaceTrack(screenTrack);
-                            console.log(`[SCREEN] Replaced track for peer ${peer_id}`);
+                            
+                            // Apply higher bitrate for screen share (more stable than camera)
+                            const params = sender.getParameters();
+                            if (!params.encodings) params.encodings = [{}];
+                            params.encodings[0].maxBitrate = 2500000;  // 2.5 mbps for screen
+                            params.encodings[0].maxFramerate = 30;
+                            await sender.setParameters(params);
+                            
+                            console.log(`[SCREEN] Replaced track for peer ${peer_id} with higher bitrate`);
                         } catch (err) {
                             console.error(`[SCREEN] Failed to replace track for ${peer_id}:`, err);
                         }
@@ -1471,13 +1600,24 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             screenStream = null;
         }
 
-        // Restore original camera track to all peer connections
+        // Restore original camera track to all peer connections with adaptive bitrate
+        const participantCount = Object.keys(_peer_list).length + 1;
+        const videoBitrate = getVideoBitrateConstraints(participantCount);
+        
         for (let peer_id in _peer_list) {
             const sender = _peer_list[peer_id].getSenders().find(s => s.track && s.track.kind === 'video');
             if (sender && originalVideoTrack) {
                 try {
                     await sender.replaceTrack(originalVideoTrack);
-                    console.log(`[SCREEN] Restored camera for peer ${peer_id}`);
+                    
+                    // Restore normal bitrate for camera
+                    const params = sender.getParameters();
+                    if (!params.encodings) params.encodings = [{}];
+                    params.encodings[0].maxBitrate = videoBitrate.maxBitrate;
+                    params.encodings[0].maxFramerate = videoBitrate.maxFramerate;
+                    await sender.setParameters(params);
+                    
+                    console.log(`[SCREEN] Restored camera for peer ${peer_id} with adaptive bitrate`);
                 } catch (err) {
                     console.error(`[SCREEN] Failed to restore camera for ${peer_id}:`, err);
                 }
@@ -1527,6 +1667,11 @@ const connectingOverlay = document.getElementById('connectingOverlay');
                 // Shrink previously enlarged video
                 const prevWrapper = document.getElementById(`video-${enlargedVideo}`);
                 if (prevWrapper) prevWrapper.classList.remove('enlarged');
+                
+                // Also check if local video was enlarged
+                if (enlargedVideo === 'local' && localVideoWrapper) {
+                    localVideoWrapper.classList.remove('enlarged');
+                }
             }
             videoWrapper.classList.add('enlarged');
             enlargedVideo = peer_id;
@@ -1617,6 +1762,31 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         }
     }
 
+    async function optimizeBitrateForAllPeers() {
+        const participantCount = Object.keys(_peer_list).length + 1;
+        const videoBitrate = getVideoBitrateConstraints(participantCount);
+        
+        console.log(`[BITRATE] Re-optimizing for ${participantCount} participants: ${videoBitrate.maxBitrate} bps`);
+        
+        for (let peer_id in _peer_list) {
+            if (_peer_list[peer_id] && _peer_list[peer_id].connectionState === 'connected') {
+                const sender = _peer_list[peer_id].getSenders().find(s => s.track && s.track.kind === 'video');
+                if (sender) {
+                    try {
+                        const params = sender.getParameters();
+                        if (!params.encodings) params.encodings = [{}];
+                        params.encodings[0].maxBitrate = videoBitrate.maxBitrate;
+                        params.encodings[0].maxFramerate = videoBitrate.maxFramerate;
+                        await sender.setParameters(params);
+                        console.log(`[BITRATE] Updated bitrate for ${peer_id}`);
+                    } catch (err) {
+                        console.warn(`[BITRATE] Could not update bitrate for ${peer_id}:`, err);
+                    }
+                }
+            }
+        }
+    }
+
     socket.on('connect', () => {
         console.log('Socket connected');
     });
@@ -1663,6 +1833,9 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             }
             
             updateParticipantList(Object.keys(_peer_list));
+            
+            // Re-optimize bitrate for all connections when user joins
+            optimizeBitrateForAllPeers();
         }
     });
 
@@ -1671,6 +1844,9 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         const peer_id = data['sid'];
         closeConnection(peer_id);
         updateParticipantList(Object.keys(_peer_list));
+        
+        // Re-optimize bitrate for remaining connections
+        optimizeBitrateForAllPeers();
     });
 
     socket.on('data', (msg) => {
@@ -1728,6 +1904,34 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         
         if (peer_id !== myID) {
             showReaction(peer_id, emoji);
+        }
+    });
+
+    socket.on('camera_state', (data) => {
+        const peer_id = data.user_id;
+        const camera_disabled = data.camera_disabled;
+        const peer_username = data.username;
+        
+        if (peer_id !== myID) {
+            const videoElement = document.querySelector(`#video-${peer_id} video`);
+            const placeholder = document.getElementById(`placeholder-${peer_id}`);
+            
+            if (camera_disabled) {
+                // Show placeholder for remote user
+                if (videoElement) videoElement.style.display = 'none';
+                if (placeholder) {
+                    placeholder.style.display = 'flex';
+                    // Get color for this peer and show their initial
+                    const color = getPlaceholderColor(peer_id);
+                    placeholder.style.background = color.bg;
+                    const firstLetter = peer_username ? peer_username.charAt(0).toUpperCase() : peer_id.charAt(0).toUpperCase();
+                    placeholder.textContent = firstLetter;
+                }
+            } else {
+                // Hide placeholder, show video
+                if (videoElement) videoElement.style.display = 'block';
+                if (placeholder) placeholder.style.display = 'none';
+            }
         }
     });
 
@@ -1816,6 +2020,14 @@ const connectingOverlay = document.getElementById('connectingOverlay');
             if (localVideo) localVideo.style.display = 'block';
             if (localPlaceholder) localPlaceholder.style.display = 'none';
         }
+        
+        // Notify other participants about camera state
+        socket.emit('camera_state', {
+            session_id: sessionId,
+            user_id: myID,
+            username: username,
+            camera_disabled: isVideoDisabled
+        });
     });
 
     handBtn.addEventListener('click', toggleHandRaise);
@@ -1917,16 +2129,17 @@ const connectingOverlay = document.getElementById('connectingOverlay');
         const localVideoLabel = document.getElementById('localVideoLabel');
         localVideoLabel.textContent = `${username} (You)`;
         
-        // Add click-to-enlarge to local video
-        localVideoWrapper.addEventListener('click', () => {
+        // Add double-click-to-enlarge to local video
+        localVideoWrapper.addEventListener('dblclick', () => {
             if (enlargedVideo === 'local') {
                 localVideoWrapper.classList.remove('enlarged');
                 enlargedVideo = null;
                 updateLayout();
             } else {
                 if (enlargedVideo) {
-                    const prevWrapper = document.getElementById(`video-${enlargedVideo}`);
-                    if (prevWrapper) prevWrapper.classList.remove('enlarged');
+                    // Shrink remote video if one is enlarged
+                    const prevRemoteWrapper = document.getElementById(`video-${enlargedVideo}`);
+                    if (prevRemoteWrapper) prevRemoteWrapper.classList.remove('enlarged');
                 }
                 localVideoWrapper.classList.add('enlarged');
                 enlargedVideo = 'local';

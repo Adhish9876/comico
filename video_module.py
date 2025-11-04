@@ -301,6 +301,22 @@ def handle_audio_level(data):
         'is_speaking': is_speaking
     }, room=session_id, skip_sid=request.sid)
 
+@socketio.on('camera_state')
+def handle_camera_state(data):
+    session_id = data['session_id']
+    user_id = data['user_id']
+    username = data['username']
+    camera_disabled = data['camera_disabled']
+    
+    print(f"[CAMERA] User {username} ({user_id}) camera {'disabled' if camera_disabled else 'enabled'} in session {session_id}")
+    
+    # Broadcast camera state to other participants
+    emit('camera_state', {
+        'user_id': user_id,
+        'username': username,
+        'camera_disabled': camera_disabled
+    }, room=session_id, skip_sid=request.sid)
+
 def create_video_session(session_type: str, session_name: str, creator: str, chat_id: str) -> str:
     """Create a new video session"""
     session_id = str(uuid.uuid4())[:8]
