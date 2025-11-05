@@ -1485,6 +1485,7 @@ function updateUnreadCountsUI() {
                 if (count > 0) {
                     unreadBadge.textContent = count > 99 ? '99+' : count;
                     unreadBadge.style.display = 'inline-block';
+                    console.log(`📬 Active user badge updated for ${user}: ${count}`);
                 } else {
                     unreadBadge.style.display = 'none';
                 }
@@ -1670,6 +1671,15 @@ function handleMessage(message) {
         }
     }
     else if (msgType === 'group_message') {
+        console.log('📨 GROUP MESSAGE RECEIVED:', {
+            group_id: message.group_id,
+            sender: message.sender,
+            content: message.content,
+            currentChatType: currentChatType,
+            currentChatTarget: currentChatTarget,
+            isViewingThisGroup: isViewingGroup(message.group_id)
+        });
+
         if (!chatHistories.group[message.group_id]) {
             chatHistories.group[message.group_id] = [];
         }
@@ -1682,8 +1692,11 @@ function handleMessage(message) {
                 Math.abs(new Date(m.timestamp) - new Date(message.timestamp)) < 2000
             );
 
+        console.log('🔍 Duplicate check result:', isDuplicate);
+
         if (!isDuplicate) {
             chatHistories.group[message.group_id].push(message);
+            console.log('✅ Group message added to history. Total messages in group:', chatHistories.group[message.group_id].length);
 
             // Cache to localStorage
             try {
@@ -1695,8 +1708,11 @@ function handleMessage(message) {
             }
 
             if (isViewingGroup(message.group_id)) {
+                console.log('📺 User is viewing this group, calling addMessage');
                 addMessage(message);
+                console.log('✅ addMessage called for group message');
             } else if (message.sender !== username) {
+                console.log('📬 User not viewing group, updating unread counts');
                 unreadCounts.group[message.group_id] = (unreadCounts.group[message.group_id] || 0) + 1;
                 updateTotalUnreadCount();
                 updateUnreadCountsUI();
@@ -1707,6 +1723,8 @@ function handleMessage(message) {
                     notifySystem('Group message', preview || 'New group message');
                 }
             }
+        } else {
+            console.log('⚠️ Group message was duplicate, skipped');
         }
     }
     else if (msgType === 'group_file') {
@@ -1720,6 +1738,53 @@ function handleMessage(message) {
             addFileToList(message);
         }
     }
+    else if (msgType === 'group_name_changed') {
+        console.log(`📝 Group name changed: ${message.group_id}`);
+        if (persistentGroups[message.group_id]) {
+            persistentGroups[message.group_id].name = message.new_name;
+            saveGroupsToLocalStorage();
+        }
+        if (currentGroupContext && currentGroupContext.id === message.group_id) {
+            currentGroupContext.name = message.new_name;
+        }
+        showNotification(`Group name changed to "${message.new_name}"`, 'info');
+        updateGroupsList();
+    }
+    else if (msgType === 'group_admin_changed') {
+        console.log(`👑 Group admin changed: ${message.old_admin} -> ${message.new_admin}`);
+        if (persistentGroups[message.group_id]) {
+            persistentGroups[message.group_id].admin = message.new_admin;
+            saveGroupsToLocalStorage();
+        }
+        if (currentGroupContext && currentGroupContext.id === message.group_id) {
+            currentGroupContext.admin = message.new_admin;
+        }
+        showNotification(`Admin changed to ${message.new_admin}`, 'info');
+        updateGroupsList();
+    }
+    else if (msgType === 'group_deleted') {
+        console.log(`🗑️ Group deleted: ${message.group_id}`);
+        // Remove from persistent groups
+        delete persistentGroups[message.group_id];
+        saveGroupsToLocalStorage();
+        
+        // Remove from chat histories
+        delete chatHistories.group[message.group_id];
+        
+        // Remove from UI
+        const groupItem = document.querySelector(`.chat-item[data-group-id="${message.group_id}"]`);
+        if (groupItem) {
+            groupItem.remove();
+        }
+        
+        // If this was the current chat, switch to global
+        if (currentChatType === 'group' && currentChatTarget === message.group_id) {
+            globalNetworkItem.click();
+        }
+        
+        showNotification(`Group "${message.group_name}" was deleted by ${message.deleted_by}`, 'info');
+        updateGroupsList();
+    }
     else if (msgType === 'system') {
         console.log('📢 System message received:', message.content);
         addSystemMessage(message.content);
@@ -1732,18 +1797,21 @@ function handleMessage(message) {
 
         console.log('Message deleted notification:', messageId, chatType, chatTarget);
 
-        // Update the message in the UI if it's visible
+        // Update the message in the UI if it's visible using deterministic messageId
         const messageElements = document.querySelectorAll('.message');
         messageElements.forEach(msgEl => {
-            const bubble = msgEl.querySelector('.message-bubble');
-            if (bubble && bubble.textContent.includes(messageId)) {
-                bubble.innerHTML = '<span class="message-deleted">🚫 This message was deleted</span>';
-                bubble.style.fontStyle = 'italic';
-                bubble.style.opacity = '0.6';
+            // Match by the deterministic message ID
+            if (msgEl.dataset.messageId === messageId) {
+                const bubble = msgEl.querySelector('.message-bubble');
+                if (bubble) {
+                    bubble.innerHTML = '<span class="message-deleted">🚫 This message was deleted</span>';
+                    bubble.style.fontStyle = 'italic';
+                    bubble.style.opacity = '0.6';
 
-                // Remove menu button
-                const menuBtn = msgEl.querySelector('.message-menu-btn');
-                if (menuBtn) menuBtn.remove();
+                    // Remove menu button
+                    const menuBtn = msgEl.querySelector('.message-menu-btn');
+                    if (menuBtn) menuBtn.remove();
+                }
             }
         });
 
@@ -2014,15 +2082,20 @@ function handleMessage(message) {
         }
         chatHistories.private[otherUser].push(message);
 
-        // Both sender and receiver should see the join button if they're viewing the chat
+        // Handle video invites regardless of current chat - modal should always show
+        if (message.is_acknowledgment) {
+            // This is just an acknowledgment, don't show the invite again
+            return;
+        }
+        
+        // Always call handleVideoInvite for incoming calls
+        handleVideoInvite(message);
+        
+        // Show video message in chat if we're viewing this chat
         if (currentChatType === 'private' && currentChatTarget === otherUser) {
-            if (message.is_acknowledgment) {
-                // This is just an acknowledgment, don't show the invite again
-                return;
-            }
-            handleVideoInvite(message);
+            // Already handled by addMessage in handleVideoInvite
         } else if (message.sender !== username) {
-            // We're the receiver but not viewing this chat
+            // We're not viewing this chat, but the modal will still appear
             showNotification(`${message.sender} started a video call`, 'info');
         }
     }
@@ -2034,15 +2107,20 @@ function handleMessage(message) {
         }
         chatHistories.group[message.group_id].push(message);
 
-        // Display the invite if we're viewing this group chat
+        // Handle video invites regardless of current chat - modal should always show
+        if (message.is_acknowledgment) {
+            // This is just an acknowledgment, don't show the invite again
+            return;
+        }
+        
+        // Always call handleVideoInvite for incoming calls
+        handleVideoInvite(message);
+        
+        // Show video message in chat if we're viewing this group
         if (currentChatType === 'group' && currentChatTarget === message.group_id) {
-            if (message.is_acknowledgment) {
-                // This is just an acknowledgment, don't show the invite again
-                return;
-            }
-            handleVideoInvite(message);
+            // Already handled by addMessage in handleVideoInvite
         } else if (message.sender !== username) {
-            // We're not viewing this group but someone else started a call
+            // We're not viewing this group but the modal will still appear
             showNotification(`${message.sender} started a video call in group`, 'info');
         }
     }
@@ -2233,9 +2311,19 @@ function addMessage(message, autoScroll = true) {
     // Check if we were at bottom before adding message
     const wasAtBottom = isAtBottom();
 
-    // Check if this message was deleted by the user
+    // Calculate deterministic message ID first
+    let messageId;
+    if (message.id) {
+        messageId = message.id;
+    } else {
+        // Create a deterministic ID based on sender, timestamp, and content
+        const contentHash = (message.content || message.text || '').substring(0, 50);
+        messageId = `msg_${message.sender}_${message.timestamp}_${contentHash}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    // Check if this message was deleted by the user using the deterministic ID
     const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
-    if (deletedMessages[message.id || message.timestamp]) {
+    if (deletedMessages[messageId]) {
         return null; // Skip this message if it was deleted
     }
 
@@ -2256,8 +2344,8 @@ function addMessage(message, autoScroll = true) {
     const messageDiv = document.createElement('div');
     messageDiv.className = isOwn ? 'message own' : 'message';
 
-    // Ensure every message has a unique ID
-    const messageId = message.id || message.timestamp || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // messageId was already calculated above for deletion check
+    // Just assign it to the dataset
     messageDiv.dataset.messageId = messageId;
     messageDiv.dataset.sender = message.sender;
     messageDiv.dataset.timestamp = message.timestamp;
@@ -3624,25 +3712,15 @@ function updateActiveUsersSection(activeUsers) {
             switchToPrivateChat(user);
         };
 
-        const userNameDiv = document.createElement('div');
-        userNameDiv.className = 'active-user-name';
-        userNameDiv.textContent = user;
-        
-        // Add unread badge support
-        const unreadCount = unreadCounts.private[user] || 0;
-        if (unreadCount > 0) {
-            const badge = document.createElement('span');
-            badge.className = 'unread-count';
-            badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-            badge.style.display = 'inline-block';
-            userNameDiv.appendChild(badge);
-        }
-
         userItem.innerHTML = `
             <div class="active-user-avatar">${user.charAt(0).toUpperCase()}</div>
             <div class="active-user-info">
             </div>
         `;
+
+        const userNameDiv = document.createElement('div');
+        userNameDiv.className = 'active-user-name';
+        userNameDiv.textContent = user;
         
         const userInfo = userItem.querySelector('.active-user-info');
         userInfo.appendChild(userNameDiv);
@@ -4719,9 +4797,12 @@ function refreshChatData(force = false) {
                 // Get deleted messages from localStorage
                 const deletedMessages = JSON.parse(localStorage.getItem('deletedMessages') || '{}');
 
-                // Filter out deleted messages
+                // Filter out deleted messages using deterministic ID
                 const filteredMessages = chatResult.messages.filter(msg => {
-                    return !deletedMessages[msg.id || msg.timestamp];
+                    // Generate the same deterministic ID to check deletion
+                    const contentHash = (msg.content || msg.text || '').substring(0, 50);
+                    const msgId = `msg_${msg.sender}_${msg.timestamp}_${contentHash}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+                    return !deletedMessages[msgId];
                 });
 
                 chatHistories.global = filteredMessages;
@@ -5388,6 +5469,21 @@ function showMessageContextMenu(event, messageElement) {
     event.preventDefault();
     event.stopPropagation();
 
+    // CAPTURE SELECTED TEXT BEFORE SHOWING MENU
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    const messageBubble = messageElement.querySelector('.message-bubble');
+    
+    // Store selected text if it's within this message
+    if (selectedText && messageBubble && messageBubble.contains(selection.anchorNode)) {
+        messageElement.dataset.selectedText = selectedText;
+        console.log('📝 Captured selected text:', selectedText);
+    } else {
+        // Clear any previous selected text
+        delete messageElement.dataset.selectedText;
+        console.log('📝 No text selected or selection outside message');
+    }
+
     // Hide any existing context menus
     document.querySelectorAll('.context-menu').forEach(menu => {
         menu.classList.remove('show');
@@ -5426,6 +5522,9 @@ function showMessageContextMenu(event, messageElement) {
     menu.style.top = posY + 'px';
     menu.classList.add('show');
     menu.dataset.messageId = messageElement.dataset.messageId;
+    
+    // Store reference to the actual message element to avoid ID conflicts
+    menu._targetMessageElement = messageElement;
 
     console.log('✅ Menu should now be visible with class "show"');
     console.log('📋 Menu display:', window.getComputedStyle(menu).display);
@@ -5518,22 +5617,28 @@ function handleChatContextAction(action, user) {
 function handleMessageContextAction(action, messageId) {
     console.log(`🎯 handleMessageContextAction called with action: ${action}, messageId: ${messageId}`);
 
-    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    // Use the stored element reference from the menu instead of querySelector
+    const menu = document.getElementById('messageContextMenu');
+    let messageElement = menu?._targetMessageElement;
+    
+    // Fallback to querySelector if stored reference doesn't exist
+    if (!messageElement) {
+        console.log(`⚠️ No stored element reference, falling back to querySelector`);
+        messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    }
+    
     if (!messageElement) {
         console.log(`❌ No message element found for ID: ${messageId}`);
         return;
     }
 
     console.log(`✅ Found message element:`, messageElement);
+    console.log(`✅ Message element sender:`, messageElement.dataset.sender);
 
     switch (action) {
         case 'reply':
             console.log(`📤 Calling replyToMessage`);
             replyToMessage(messageElement);
-            break;
-        case 'emoji':
-            console.log(`😀 Calling showEmojiReactionPicker`);
-            showEmojiReactionPicker(messageElement);
             break;
         case 'copy':
             console.log(`📋 Calling copyMessage`);
@@ -5551,10 +5656,7 @@ function handleMessageContextAction(action, messageId) {
             console.log(`✅ Calling selectMessage`);
             selectMessage(messageElement);
             break;
-        case 'share':
-            console.log(`📤 Calling shareMessage`);
-            shareMessage(messageElement);
-            break;
+
         default:
             console.log(`❌ Unknown action: ${action}`);
     }
@@ -5646,46 +5748,79 @@ function openGroupSettings() {
     console.log('📂 openGroupSettings called');
     console.log('Current group context:', currentGroupContext);
 
-    const modal = document.getElementById('groupSettingsModal');
-    const titleEl = document.getElementById('groupSettingsTitle');
-    const nameInput = document.getElementById('groupNameInput');
-    const adminSelect = document.getElementById('newAdminSelect');
-    const kickSelect = document.getElementById('kickUserSelect');
+    try {
+        const modal = document.getElementById('groupSettingsModal');
+        const titleEl = document.getElementById('groupSettingsTitle');
+        const nameInput = document.getElementById('groupNameInput');
+        const adminSelect = document.getElementById('newAdminSelect');
+        const kickSelect = document.getElementById('kickUserSelect');
 
-    if (!modal) {
-        console.error('❌ Modal not found!');
-        return;
+        if (!modal) {
+            console.error('❌ groupSettingsModal not found!');
+            showNotification('Group settings modal not found', 'error');
+            return;
+        }
+
+        if (!titleEl) {
+            console.error('❌ groupSettingsTitle not found!');
+            return;
+        }
+
+        if (!nameInput) {
+            console.error('❌ groupNameInput not found!');
+            return;
+        }
+
+        if (!currentGroupContext || !currentGroupContext.name) {
+            console.error('❌ No valid group context available');
+            showNotification('No group context available', 'error');
+            return;
+        }
+
+        console.log('📝 Setting modal content...');
+        titleEl.textContent = `${currentGroupContext.name} Settings`;
+        nameInput.value = currentGroupContext.name;
+
+        // Populate admin select if it exists
+        if (adminSelect) {
+            adminSelect.innerHTML = '<option value="">Select new admin...</option>';
+            if (currentGroupContext.members && currentGroupContext.members.length > 0) {
+                currentGroupContext.members.forEach(member => {
+                    if (member !== username) {
+                        const option = document.createElement('option');
+                        option.value = member;
+                        option.textContent = member;
+                        adminSelect.appendChild(option);
+                    }
+                });
+            }
+        }
+
+        // Populate kick select if it exists
+        if (kickSelect) {
+            kickSelect.innerHTML = '<option value="">Select user to kick...</option>';
+            if (currentGroupContext.members && currentGroupContext.members.length > 0) {
+                currentGroupContext.members.forEach(member => {
+                    if (member !== username) {
+                        const option = document.createElement('option');
+                        option.value = member;
+                        option.textContent = member;
+                        kickSelect.appendChild(option);
+                    }
+                });
+            }
+        }
+
+        console.log('✅ Displaying modal...');
+        modal.style.display = 'flex';
+        modal.style.zIndex = '10000';
+        console.log('Modal display set to:', modal.style.display);
+        showNotification('Group settings opened', 'success');
+
+    } catch (error) {
+        console.error('❌ Error in openGroupSettings:', error);
+        showNotification(`Error opening group settings: ${error.message}`, 'error');
     }
-
-    console.log('📝 Setting modal content...');
-    titleEl.textContent = `${currentGroupContext.name} Settings`;
-    nameInput.value = currentGroupContext.name;
-
-    // Populate admin select
-    adminSelect.innerHTML = '<option value="">Select new admin...</option>';
-    currentGroupContext.members.forEach(member => {
-        if (member !== username) {
-            const option = document.createElement('option');
-            option.value = member;
-            option.textContent = member;
-            adminSelect.appendChild(option);
-        }
-    });
-
-    // Populate kick select
-    kickSelect.innerHTML = '<option value="">Select user to kick...</option>';
-    currentGroupContext.members.forEach(member => {
-        if (member !== username) {
-            const option = document.createElement('option');
-            option.value = member;
-            option.textContent = member;
-            kickSelect.appendChild(option);
-        }
-    });
-
-    console.log('✅ Displaying modal...');
-    modal.style.display = 'flex';
-    console.log('Modal display set to:', modal.style.display);
 }
 
 function closeGroupSettings() {
@@ -5699,7 +5834,18 @@ function changeGroupName() {
         return;
     }
 
+    if (currentGroupContext.admin !== username) {
+        showNotification('Only admin can change group name', 'error');
+        return;
+    }
+
     console.log(`📝 Changing group name to: ${newName}`);
+
+    // Send to server
+    eel.send_message('group_update_name', `Changed group name to ${newName}`, {
+        group_id: currentGroupContext.id,
+        new_name: newName
+    })();
 
     // Update persistent groups
     if (persistentGroups[currentGroupContext.id]) {
@@ -5729,6 +5875,12 @@ function changeGroupAdmin() {
     }
 
     console.log(`👑 Transferring admin to: ${newAdmin}`);
+
+    // Send to server
+    eel.send_message('group_change_admin', `Transferred admin to ${newAdmin}`, {
+        group_id: currentGroupContext.id,
+        new_admin: newAdmin
+    })();
 
     // Update persistent groups
     if (persistentGroups[currentGroupContext.id]) {
@@ -5817,6 +5969,11 @@ function deleteGroup() {
     }
 
     console.log(`🗑️ Deleting group: ${currentGroupContext.name}`);
+
+    // Send to server
+    eel.send_message('group_delete', `Deleted group`, {
+        group_id: currentGroupContext.id
+    })();
 
     // Remove from persistent groups
     delete persistentGroups[currentGroupContext.id];
@@ -6023,18 +6180,45 @@ function replyToMessage(messageElement) {
 
     // Get message content, handling different message types
     let messageText = '';
-    if (messageBubble.querySelector('.file-item')) {
+    
+    // First check if there's stored selected text from when the context menu was shown
+    const storedSelectedText = messageElement.dataset.selectedText;
+    
+    if (storedSelectedText) {
+        // Use the selected text that was captured when context menu was shown
+        messageText = storedSelectedText;
+        console.log('📋 Using stored selected text:', storedSelectedText);
+        // Clear the stored text after using it
+        delete messageElement.dataset.selectedText;
+    } else if (messageBubble.querySelector('.file-item')) {
         messageText = '📎 File';
     } else if (messageBubble.querySelector('.audio-item')) {
         messageText = '🎵 Audio';
     } else {
         messageText = messageBubble.textContent.trim();
+        console.log('📋 Using full message text:', messageText);
     }
 
-    const sender = messageElement.dataset.sender || messageElement.querySelector('.message-sender')?.textContent || 'User';
+    // Debug: Log all message element data
+    console.log('🔍 Message element dataset:', messageElement.dataset);
+    console.log('🔍 Message element classes:', messageElement.className);
+    console.log('🔍 Message element HTML:', messageElement.outerHTML.substring(0, 200) + '...');
+    
+    // Try multiple ways to get the sender
+    const senderFromDataset = messageElement.dataset.sender;
+    const senderFromQuery = messageElement.querySelector('.message-sender')?.textContent;
+    const senderFromHeader = messageElement.querySelector('.message-header .message-sender')?.textContent;
+    
+    console.log('🔍 Sender detection attempts:', {
+        fromDataset: senderFromDataset,
+        fromQuery: senderFromQuery,
+        fromHeader: senderFromHeader
+    });
+    
+    const sender = senderFromDataset || senderFromQuery || senderFromHeader || 'User';
     const messageId = messageElement.dataset.messageId;
 
-    console.log('📋 Reply details:', { messageText, sender, messageId });
+    console.log('📋 Reply details:', { messageText, sender, messageId, finalSender: sender });
 
     if (!messageText || !messageId) {
         console.log('❌ Missing messageText or messageId');
@@ -6262,6 +6446,8 @@ async function deleteMessage(messageElement) {
 
     const messageText = messageBubble.textContent;
     const messageId = messageElement.dataset.messageId;
+    // Use the deterministic message ID instead of timestamp for deletion
+    // This ensures we delete only the specific message, not all messages with same timestamp
     const isOwnMessage = messageElement.classList.contains('own');
     const sender = messageElement.dataset.sender || 'User';
 
@@ -6321,6 +6507,7 @@ async function deleteMessage(messageElement) {
         if (isOwnMessage) {
             // Permanent delete for own messages
             try {
+                // Use the deterministic message ID for precise deletion
                 const result = await eel.delete_message(messageId, currentChatType, currentChatTarget)();
 
                 if (result && result.success) {
@@ -6408,19 +6595,7 @@ function selectMessage(messageElement) {
     showNotification('Message selected', 'info');
 }
 
-function shareMessage(messageElement) {
-    const messageText = messageElement.querySelector('.message-bubble').textContent;
-    if (navigator.share) {
-        navigator.share({
-            title: 'Shared Message',
-            text: messageText
-        });
-    } else {
-        navigator.clipboard.writeText(messageText).then(() => {
-            showNotification('Message copied to clipboard', 'success');
-        });
-    }
-}
+
 
 // ===== EMOJI PICKER =====
 function showEmojiPicker() {
@@ -6473,17 +6648,22 @@ function showEmojiReactionPicker(messageElement) {
         console.log('✅ Moved emoji picker to document body to avoid clipping');
     }
 
+    // Reset any previous inline styles
+    picker.removeAttribute('style');
+
+    // Apply base CSS classes and show the picker
+    picker.className = 'emoji-reaction-picker';
+    picker.style.display = 'flex';
+    picker.style.position = 'fixed';
+    picker.style.zIndex = '10001';
+    
     const messageRect = messageElement.getBoundingClientRect();
 
-    // Position picker near the message
-    picker.style.position = 'fixed';
-    picker.style.transform = 'none';
+    // Calculate position (centered near the message)
+    const pickerHeight = 250; // From CSS max-height
+    const pickerWidth = 280; // From CSS min-width
 
-    // Calculate position (above or below message depending on space)
-    const pickerHeight = 200; // Approximate height
-    const pickerWidth = 280; // Approximate width
-
-    let left = messageRect.left;
+    let left = messageRect.left + (messageRect.width / 2) - (pickerWidth / 2);
     let top = messageRect.top - pickerHeight - 10;
 
     // If picker would go off top of screen, show below message
@@ -6501,44 +6681,8 @@ function showEmojiReactionPicker(messageElement) {
 
     picker.style.left = left + 'px';
     picker.style.top = top + 'px';
-    picker.style.display = 'flex';
-    picker.style.flexDirection = 'column';
-    picker.style.zIndex = '10001';
-    picker.style.backgroundColor = '#2b2d31';
-    picker.style.border = '3px solid #00b8d4';
-    picker.style.borderRadius = '12px';
-    picker.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.8)';
-    picker.style.minWidth = '280px';
-    picker.style.maxHeight = '250px';
-    picker.style.width = '280px';  // Fixed width
-    picker.style.height = 'auto';  // Auto height
 
-    // Ensure the emoji grid has proper styling
-    const emojiGrid = picker.querySelector('.emoji-grid');
-    if (emojiGrid) {
-        emojiGrid.style.display = 'grid';
-        emojiGrid.style.gridTemplateColumns = 'repeat(6, 1fr)';
-        emojiGrid.style.gap = '8px';
-        emojiGrid.style.padding = '16px';
-    }
-
-    // Ensure the header has proper styling
-    const header = picker.querySelector('.emoji-picker-header');
-    if (header) {
-        header.style.display = 'flex';
-        header.style.justifyContent = 'center';
-        header.style.alignItems = 'center';
-        header.style.padding = '12px 16px';
-        header.style.borderBottom = '2px solid #00b8d4';
-        header.style.backgroundColor = '#1a1d29';
-        header.style.borderRadius = '12px 12px 0 0';
-        header.style.fontFamily = 'Comic Neue, cursive';
-        header.style.fontWeight = '700';
-        header.style.fontSize = '14px';
-        header.style.color = '#f2f3f5';
-        header.style.textTransform = 'uppercase';
-        header.style.letterSpacing = '0.5px';
-    }
+    console.log('✅ Emoji reaction picker positioned at:', { left, top });
 
     // Ensure emoji options have proper styling
     const emojiOptions = picker.querySelectorAll('.emoji-option');
@@ -6623,16 +6767,35 @@ function addEmojiReaction(messageElement, emoji) {
 }
 
 function renderMessageReactions(messageElement, messageId, reactions) {
-    // Find or create reactions container at message level (not in message-content)
+    // Find or create reactions container - ensure it's at the message level, not inside message-content
     let reactionsContainer = messageElement.querySelector('.message-reactions');
     if (!reactionsContainer) {
         reactionsContainer = document.createElement('div');
         reactionsContainer.className = 'message-reactions';
-        // Append to message element itself, not message-content
-        messageElement.appendChild(reactionsContainer);
+        
+        // Find the message-content div and insert reactions after it
+        const messageContent = messageElement.querySelector('.message-content');
+        if (messageContent) {
+            // Insert after message-content
+            messageContent.parentNode.insertBefore(reactionsContainer, messageContent.nextSibling);
+        } else {
+            // Fallback: append to message element
+            messageElement.appendChild(reactionsContainer);
+        }
+        console.log('✅ Created new reactions container for message:', messageId);
     }
 
+    // Clear existing reactions
     reactionsContainer.innerHTML = '';
+
+    // Only show reactions if there are any
+    const hasReactions = Object.keys(reactions).some(emoji => reactions[emoji].length > 0);
+    if (!hasReactions) {
+        reactionsContainer.style.display = 'none';
+        return;
+    }
+    
+    reactionsContainer.style.display = 'flex';
 
     Object.entries(reactions).forEach(([emoji, users]) => {
         if (users.length > 0) {
@@ -6647,7 +6810,7 @@ function renderMessageReactions(messageElement, messageId, reactions) {
                 <span class="reaction-count">${users.length}</span>
             `;
 
-            reactionItem.title = users.join(', ');
+            reactionItem.title = `Reacted by: ${users.join(', ')}`;
             reactionItem.onclick = (e) => {
                 e.stopPropagation();
                 showEmojiReactionModal(messageElement, emoji, users, messageId);
@@ -6656,6 +6819,8 @@ function renderMessageReactions(messageElement, messageId, reactions) {
             reactionsContainer.appendChild(reactionItem);
         }
     });
+    
+    console.log('✅ Rendered reactions for message:', messageId, 'Count:', Object.keys(reactions).length);
 }
 
 function showEmojiReactionModal(messageElement, emoji, users, messageId) {

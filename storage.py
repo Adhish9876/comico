@@ -21,6 +21,7 @@ class Storage:
         self.global_chat: List[Dict] = []
         self.private_chats: Dict[Tuple[str, str], List[Dict]] = {}
         self.group_chats: Dict[str, List[Dict]] = {}
+        self.groups: Dict[str, Dict] = {}
         self.file_metadata: Dict[str, Dict] = {}
         self.users: Dict[str, Dict] = {}
         
@@ -48,8 +49,19 @@ class Storage:
 
     def delete_global_message(self, message_id: str) -> bool:
         """Delete a message from global chat by ID"""
+        import re
         for i, msg in enumerate(self.global_chat):
-            if msg.get('id') == message_id or msg.get('timestamp') == message_id:
+            # Generate deterministic ID from message to match client-side ID
+            content = msg.get('content', msg.get('text', ''))
+            content_hash = content[:50] if content else ''
+            sender = msg.get('sender', '')
+            timestamp = msg.get('timestamp', '')
+            # Sanitize the ID (remove special characters)
+            deterministic_id = f"msg_{sender}_{timestamp}_{content_hash}"
+            deterministic_id = re.sub(r'[^a-zA-Z0-9_-]', '_', deterministic_id)
+            
+            # Match by deterministic ID, regular ID, or timestamp
+            if deterministic_id == message_id or msg.get('id') == message_id or msg.get('timestamp') == message_id:
                 self.global_chat[i]['content'] = '🚫 This message was deleted'
                 self.global_chat[i]['deleted'] = True
                 self.save_global_chat()
@@ -94,10 +106,19 @@ class Storage:
 
     def delete_private_message(self, user1: str, user2: str, message_id: str) -> bool:
         """Delete a message from private chat by ID"""
+        import re
         key = tuple(sorted([user1, user2]))
         if key in self.private_chats:
             for i, msg in enumerate(self.private_chats[key]):
-                if msg.get('id') == message_id or msg.get('timestamp') == message_id:
+                # Generate deterministic ID from message to match client-side ID
+                content = msg.get('content', msg.get('text', ''))
+                content_hash = content[:50] if content else ''
+                sender = msg.get('sender', '')
+                timestamp = msg.get('timestamp', '')
+                deterministic_id = f"msg_{sender}_{timestamp}_{content_hash}"
+                deterministic_id = re.sub(r'[^a-zA-Z0-9_-]', '_', deterministic_id)
+                
+                if deterministic_id == message_id or msg.get('id') == message_id or msg.get('timestamp') == message_id:
                     self.private_chats[key][i]['content'] = '🚫 This message was deleted'
                     self.private_chats[key][i]['deleted'] = True
                     self.save_private_chats()
@@ -188,9 +209,18 @@ class Storage:
 
     def delete_group_message(self, group_id: str, message_id: str) -> bool:
         """Delete a message from group chat by ID"""
+        import re
         if group_id in self.group_chats:
             for i, msg in enumerate(self.group_chats[group_id]):
-                if msg.get('id') == message_id or msg.get('timestamp') == message_id:
+                # Generate deterministic ID from message to match client-side ID
+                content = msg.get('content', msg.get('text', ''))
+                content_hash = content[:50] if content else ''
+                sender = msg.get('sender', '')
+                timestamp = msg.get('timestamp', '')
+                deterministic_id = f"msg_{sender}_{timestamp}_{content_hash}"
+                deterministic_id = re.sub(r'[^a-zA-Z0-9_-]', '_', deterministic_id)
+                
+                if deterministic_id == message_id or msg.get('id') == message_id or msg.get('timestamp') == message_id:
                     self.group_chats[group_id][i]['content'] = '🚫 This message was deleted'
                     self.group_chats[group_id][i]['deleted'] = True
                     self.save_group_chats()
@@ -218,6 +248,59 @@ class Storage:
         except Exception as e:
             print(f"Error loading group chats: {e}")
             self.group_chats = {}
+
+    # ===== GROUPS METADATA =====
+    def add_group(self, group_id: str, group_data: Dict) -> None:
+        """Add group metadata and persist"""
+        self.groups[group_id] = group_data
+        self.save_groups()
+
+    def update_group(self, group_id: str, group_data: Dict) -> None:
+        """Update group metadata and persist"""
+        if group_id in self.groups:
+            self.groups[group_id].update(group_data)
+            self.save_groups()
+
+    def remove_group(self, group_id: str) -> bool:
+        """Remove group metadata and persist"""
+        if group_id in self.groups:
+            del self.groups[group_id]
+            # Also remove group chat history when group is deleted
+            if group_id in self.group_chats:
+                del self.group_chats[group_id]
+                self.save_group_chats()
+            self.save_groups()
+            return True
+        return False
+
+    def get_groups(self) -> Dict[str, Dict]:
+        """Get all group metadata"""
+        return self.groups
+
+    def get_group(self, group_id: str) -> Dict:
+        """Get specific group metadata"""
+        return self.groups.get(group_id, {})
+
+    def save_groups(self) -> None:
+        """Save all group metadata"""
+        try:
+            path = os.path.join(self.data_dir, 'groups.json')
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(self.groups, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Error saving groups: {e}")
+
+    def load_groups(self) -> None:
+        """Load group metadata from file"""
+        try:
+            path = os.path.join(self.data_dir, 'groups.json')
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    self.groups = json.load(f)
+                print(f"Loaded {len(self.groups)} groups")
+        except Exception as e:
+            print(f"Error loading groups: {e}")
+            self.groups = {}
 
     # ===== FILES =====
     def add_file(self, file_id: str, metadata: Dict) -> None:
@@ -290,6 +373,7 @@ class Storage:
         print("\nLoading persistent data...")
         self.load_global_chat()
         self.load_private_chats()
+        self.load_groups()
         self.load_group_chats()
         self.load_files()
         self.load_users()
@@ -299,11 +383,12 @@ class Storage:
         """Clear all storage"""
         self.global_chat = []
         self.private_chats = {}
+        self.groups = {}
         self.group_chats = {}
         self.file_metadata = {}
         self.users = {}
         
-        for filename in ['global_chat.json', 'private_chats.json', 'group_chats.json', 'files.json', 'users.json']:
+        for filename in ['global_chat.json', 'private_chats.json', 'groups.json', 'group_chats.json', 'files.json', 'users.json']:
             try:
                 path = os.path.join(self.data_dir, filename)
                 if os.path.exists(path):

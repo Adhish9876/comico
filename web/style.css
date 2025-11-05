@@ -5,21 +5,21 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('../static/fonts/bangers.ttf') format('truetype');
+  src: url('fonts/bangers.ttf') format('truetype');
 }
 @font-face {
   font-family: 'Comic Neue';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('../static/fonts/comic-neue-regular.ttf') format('truetype');
+  src: url('fonts/comic-neue-regular.ttf') format('truetype');
 }
 @font-face {
   font-family: 'Comic Neue';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('../static/fonts/comic-neue-bold.ttf') format('truetype');
+  src: url('fonts/comic-neue-bold.ttf') format('truetype');
 }
 
 :root {
@@ -3591,6 +3591,25 @@ textarea {
     font-weight: 600;
     color: var(--text-normal);
     margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.active-user-name .unread-count {
+    display: none;
+    padding: 0 6px;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    font-size: 11px;
+    line-height: 20px;
+    background: #2ecc71;
+    color: white;
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: center;
+    font-weight: 700;
 }
 
 .active-user-status {

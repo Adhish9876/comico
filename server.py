@@ -35,11 +35,11 @@ class CollaborationServer:
         self.file_server_socket = self._create_socket()
         
         self.clients: Dict[socket.socket, Dict[str, Any]] = {}
-        self.groups: Dict[str, Dict[str, Any]] = {}
+        self.groups: Dict[str, Dict[str, Any]] = storage.get_groups()  # Load from persistent storage
         # Load chat history from storage instead of starting empty
         self.chat_history: List[Dict] = storage.get_global_chat(1000)
         self.private_messages: Dict[Tuple[str, str], List[Dict]] = {}
-        self.group_messages: Dict[str, List[Dict]] = {}
+        self.group_messages: Dict[str, List[Dict]] = storage.group_chats  # Load from storage
         self.file_metadata: Dict[str, Dict[str, Any]] = storage.get_files()
         self.recent_chats: Dict[str, List[str]] = {}
         
@@ -424,6 +424,9 @@ class CollaborationServer:
             'group_audio': self._handle_group_audio,
             'group_add_member': self._handle_group_add_member,
             'group_remove_member': self._handle_group_remove_member,
+            'group_update_name': self._handle_group_update_name,
+            'group_change_admin': self._handle_group_change_admin,
+            'group_delete': self._handle_group_delete,
             'request_private_history': self._handle_private_history_request,
             'request_group_history': self._handle_group_history_request,
             'screen_share': self._handle_screen_share,
@@ -815,14 +818,19 @@ class CollaborationServer:
             members_set = set(members)
             members_set.add(creator)
             
-            self.groups[group_id] = {
+            group_data = {
                 'id': group_id,
                 'name': group_name,
                 'members': list(members_set),
                 'created_by': creator,
+                'admin': creator,  # Creator is the admin by default
                 'created_at': self._timestamp()
             }
+            self.groups[group_id] = group_data
             self.group_messages[group_id] = []
+        
+        # Persist group to storage
+        storage.add_group(group_id, group_data)
         
         notification = {
             'type': 'group_created',
@@ -830,6 +838,7 @@ class CollaborationServer:
             'group_name': group_name,
             'members': list(members_set),
             'created_by': creator,
+            'admin': creator,
             'timestamp': self._timestamp()
         }
         
@@ -837,6 +846,7 @@ class CollaborationServer:
         self.broadcast_group_list()
         
         print(f"✓ Group '{group_name}' created by {creator} ({len(members_set)} members)")
+        print(f"✓ Group persisted to storage with ID: {group_id}")
 
     def _handle_group_message(self, client_socket: socket.socket, message: Dict):
         """Handle group message"""
@@ -925,6 +935,9 @@ class CollaborationServer:
                     'timestamp': self._timestamp()
                 }
                 
+                # Persist the updated group to storage
+                storage.update_group(group_id, {'members': self.groups[group_id]['members']})
+                
                 self._notify_group_members(group_id, notification)
                 self.broadcast_group_list()
 
@@ -954,8 +967,124 @@ class CollaborationServer:
                     'timestamp': self._timestamp()
                 }
                 
+                # Persist the updated group to storage
+                storage.update_group(group_id, {'members': self.groups[group_id]['members']})
+                
                 self._notify_group_members(group_id, notification, include_removed=username)
                 self.broadcast_group_list()
+
+    def _handle_group_update_name(self, client_socket: socket.socket, message: Dict):
+        """Handle updating group name"""
+        group_id = message.get('group_id')
+        new_name = message.get('new_name')
+        requester = message.get('sender')
+        
+        if group_id not in self.groups:
+            self._send_error(client_socket, "Group not found")
+            return
+        
+        # Only admin can change group name
+        if requester != self.groups[group_id].get('admin') and requester != self.groups[group_id].get('created_by'):
+            self._send_error(client_socket, "Only admin can change group name")
+            return
+        
+        with self.lock:
+            self.groups[group_id]['name'] = new_name
+            
+            # Persist to storage
+            storage.update_group(group_id, {'name': new_name})
+            
+            notification = {
+                'type': 'group_name_changed',
+                'group_id': group_id,
+                'new_name': new_name,
+                'changed_by': requester,
+                'timestamp': self._timestamp()
+            }
+            
+            self._notify_group_members(group_id, notification)
+            self.broadcast_group_list()
+            
+            print(f"✓ Group '{group_id}' name changed to '{new_name}' by {requester}")
+
+    def _handle_group_change_admin(self, client_socket: socket.socket, message: Dict):
+        """Handle changing group admin"""
+        group_id = message.get('group_id')
+        new_admin = message.get('new_admin')
+        requester = message.get('sender')
+        
+        if group_id not in self.groups:
+            self._send_error(client_socket, "Group not found")
+            return
+        
+        # Only current admin can change admin
+        if requester != self.groups[group_id].get('admin') and requester != self.groups[group_id].get('created_by'):
+            self._send_error(client_socket, "Only admin can transfer admin rights")
+            return
+        
+        # New admin must be a group member
+        if new_admin not in self.groups[group_id]['members']:
+            self._send_error(client_socket, "New admin must be a group member")
+            return
+        
+        with self.lock:
+            old_admin = self.groups[group_id].get('admin', self.groups[group_id].get('created_by'))
+            self.groups[group_id]['admin'] = new_admin
+            
+            # Persist to storage
+            storage.update_group(group_id, {'admin': new_admin})
+            
+            notification = {
+                'type': 'group_admin_changed',
+                'group_id': group_id,
+                'old_admin': old_admin,
+                'new_admin': new_admin,
+                'changed_by': requester,
+                'timestamp': self._timestamp()
+            }
+            
+            self._notify_group_members(group_id, notification)
+            self.broadcast_group_list()
+            
+            print(f"✓ Group '{group_id}' admin changed from {old_admin} to {new_admin}")
+
+    def _handle_group_delete(self, client_socket: socket.socket, message: Dict):
+        """Handle deleting a group"""
+        group_id = message.get('group_id')
+        requester = message.get('sender')
+        
+        if group_id not in self.groups:
+            self._send_error(client_socket, "Group not found")
+            return
+        
+        # Only admin/creator can delete group
+        if requester != self.groups[group_id].get('admin') and requester != self.groups[group_id].get('created_by'):
+            self._send_error(client_socket, "Only admin can delete the group")
+            return
+        
+        group_name = self.groups[group_id]['name']
+        
+        with self.lock:
+            del self.groups[group_id]
+            if group_id in self.group_messages:
+                del self.group_messages[group_id]
+            
+            # Remove from persistent storage
+            storage.remove_group(group_id)
+            
+            notification = {
+                'type': 'group_deleted',
+                'group_id': group_id,
+                'group_name': group_name,
+                'deleted_by': requester,
+                'timestamp': self._timestamp()
+            }
+            
+            # Notify members before deleting (though they won't find group after)
+            self.broadcast(json.dumps(notification))
+            self.broadcast_group_list()
+            
+            print(f"✓ Group '{group_name}' deleted by {requester}")
 
     def _handle_private_history_request(self, client_socket: socket.socket, message: Dict):
         """Handle request for private message history"""
