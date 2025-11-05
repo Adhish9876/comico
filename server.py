@@ -4,6 +4,12 @@ server.py - Shadow Nexus Server with Persistent Storage
 All messages are saved and restored on restart
 """
 
+# Suppress warnings for cleaner output
+import warnings
+warnings.filterwarnings('ignore')
+import logging
+logging.getLogger().setLevel(logging.ERROR)
+
 import socket
 import threading
 import json
