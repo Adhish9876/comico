@@ -1,5 +1,26 @@
 /* Shadow Nexus - Comic Book Matte Finish CSS */
-@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&display=swap');
+/* LOCAL FONTS - NO INTERNET REQUIRED */
+@font-face {
+  font-family: 'Bangers';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../static/fonts/bangers.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Comic Neue';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../static/fonts/comic-neue-regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Comic Neue';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../static/fonts/comic-neue-bold.ttf') format('truetype');
+}
 
 :root {
     /* Toned down comic book palette - less vibrant */
