@@ -51,6 +51,10 @@ class CollaborationServer:
         self.heartbeat_interval = 30  # Send ping every 30 seconds
         self.client_timeout = 180  # Disconnect after 3 minutes of no activity
         
+        # Cache for history requests to prevent duplicates
+        self.history_request_cache: Dict[str, float] = {}
+        self.HISTORY_CACHE_DURATION = 2  # seconds - don't send same history within this timeframe
+        
         print(f"Server initializing on {host}:{port} (chat) and {host}:{file_port} (files)")
         print(f"Loaded {len(self.chat_history)} historical global messages")
         print(f"Loaded {len(self.file_metadata)} historical files")
@@ -331,16 +335,8 @@ class CollaborationServer:
         except Exception as e:
             print(f"[SERVER] Error sending private histories: {e}")
 
-        # Send all group messages to the new user
-        with self.lock:
-            for group_id in self.groups.keys():
-                messages = storage.get_group_chat(group_id, 100)
-                response = {
-                    'type': 'group_history',
-                    'group_id': group_id,
-                    'messages': messages
-                }
-                self._send_to_client(client_socket, response)
+        # Group histories are sent on-demand when user clicks on a group
+        # No need to send all group histories on login
         
         # NOW broadcast to all OTHER clients that someone joined
         welcome_msg = {
@@ -854,10 +850,19 @@ class CollaborationServer:
         sender = message.get('sender')
         metadata = message.get('metadata', {})
         
+        print(f"\n🔍 [DEBUG] _handle_group_message called")
+        print(f"   Group ID: {group_id}")
+        print(f"   Sender: {sender}")
+        print(f"   Content: {message.get('content', '')[:50]}")
+        
         if group_id not in self.groups:
+            print(f"   ❌ Group not found: {group_id}")
+            print(f"   Available groups: {list(self.groups.keys())}")
+            self._send_error(client_socket, "Group not found")
             return
         
         if sender not in self.groups[group_id]['members']:
+            print(f"   ❌ Sender not in group members")
             return
         
         # Preserve metadata in the message
@@ -869,11 +874,17 @@ class CollaborationServer:
         self.group_messages[group_id].append(message)
         storage.add_group_message(group_id, message)  # PERSIST TO STORAGE
         
-        # Send to ALL group members including sender
+        print(f"   📤 Sending to group members...")
+        # Send to ALL group members INCLUDING the sender (so sender sees confirmation)
+        sent_count = 0
         with self.lock:
             for sock, info in self.clients.items():
                 if info['username'] in self.groups[group_id]['members']:
                     self._send_to_client(sock, message)
+                    sent_count += 1
+                    print(f"      → Sent to {info['username']}")
+        
+        print(f"   ✅ Sent to {sent_count} members\n")
 
     def _handle_group_file(self, client_socket: socket.socket, message: Dict):
         """Handle group file sharing"""
@@ -907,7 +918,7 @@ class CollaborationServer:
         self.group_messages[group_id].append(file_message)
         storage.add_group_message(group_id, file_message)
         
-        # Send to all group members
+        # Send to all group members INCLUDING the sender (for confirmation)
         with self.lock:
             for sock, info in self.clients.items():
                 if info['username'] in self.groups[group_id]['members']:
@@ -1109,11 +1120,34 @@ class CollaborationServer:
         username = self.clients.get(client_socket, {}).get('username')
         group_id = message.get('group_id')
         
+        print(f"\n📜 [DEBUG] Group history request")
+        print(f"   User: {username}")
+        print(f"   Group ID: {group_id}")
+        
         if not self._validate_group_operation(client_socket, group_id, username, require_membership=True):
+            print(f"   ❌ Validation failed")
             return
+        
+        # Check cache to prevent duplicate sends
+        cache_key = f"{username}:{group_id}"
+        current_time = time.time()
+        
+        if cache_key in self.history_request_cache:
+            last_send_time = self.history_request_cache[cache_key]
+            time_since_last_send = current_time - last_send_time
+            
+            if time_since_last_send < self.HISTORY_CACHE_DURATION:
+                print(f"   ⏭️ Skipping duplicate history send to {username}")
+                print(f"      Last sent {time_since_last_send:.2f}s ago (threshold: {self.HISTORY_CACHE_DURATION}s)\n")
+                return
+        
+        # Update cache
+        self.history_request_cache[cache_key] = current_time
         
         # GET FROM STORAGE FIRST
         messages = storage.get_group_chat(group_id, 100)
+        
+        print(f"   📨 Sending {len(messages)} messages to {username}")
         
         response = {
             'type': 'group_history',
@@ -1121,6 +1155,7 @@ class CollaborationServer:
             'messages': messages
         }
         self._send_to_client(client_socket, response)
+        print(f"   ✅ History sent\n")
 
     def _handle_screen_share(self, client_socket: socket.socket, message: Dict):
         """Handle screen sharing message"""

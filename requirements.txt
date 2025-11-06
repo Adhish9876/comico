@@ -1,7 +1,14 @@
+# CRITICAL: PyInstaller for building executable
+pyinstaller>=5.0.0
+
 # Core Framework
 eel>=0.14.0
 flask>=2.0.0
 flask-socketio>=5.0.0
+eventlet>=0.33.0
+gevent>=22.0.0
+socketio>=5.0.0
+engineio>=4.0.0
 
 # Audio/Video Processing
 pyaudio>=0.2.11
@@ -13,6 +20,14 @@ requests>=2.25.0
 urllib3>=1.26.0
 cryptography>=3.4.0
 python-dotenv>=0.19.0
+
+# Windows compatibility (optional on other platforms)
+pywin32>=227; sys_platform == "win32"
+
+# Package management (prevents initialization errors)
+setuptools>=60.0.0
+wheel>=0.37.0
+pkg_resources
 
 # Note: The following are built-in Python modules and don't need installation:
 # base64, uuid, hashlib, threading, queue, socket, json, os, time

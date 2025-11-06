@@ -11,16 +11,21 @@ copy /Y icon.png web\icon.png >nul 2>&1
 echo ✓ Icon files copied
 echo.
 
-REM Clean previous builds
-echo Cleaning previous builds...
-if exist "dist" rmdir /s /q "dist"
-if exist "build" rmdir /s /q "build"
+REM Clean previous CLIENT builds only (not entire dist folder)
+echo Cleaning previous client builds...
+if exist "dist\ShadowNexusClient" rmdir /s /q "dist\ShadowNexusClient"
+if exist "build\ShadowNexusClient" rmdir /s /q "build\ShadowNexusClient"
 echo ✓ Cleaned
 echo.
 
 REM Build the executable
 echo Building executable...
-python -m PyInstaller --clean client.spec
+python -m PyInstaller --clean specs\client.spec
+
+echo.
+echo ========================================
+echo Checking build result...
+echo ========================================
 
 if %ERRORLEVEL% EQU 0 (
     echo.

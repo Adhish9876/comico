@@ -22,15 +22,15 @@ if pyaudio_path:
         binaries_list.append((portaudio_dll, '.'))
 
 a = Analysis(
-    ['client.py'],
-    pathex=[],
+    ['..\\client.py'],
+    pathex=['..'],
     binaries=binaries_list,
     datas=[
-        ('web', 'web'),
-        ('shadow_nexus_data', 'shadow_nexus_data'),
-        ('templates', 'templates'),
-        ('cert.pem', '.'),
-        ('key.pem', '.'),
+        ('..\\web', 'web'),
+        ('..\\shadow_nexus_data', 'shadow_nexus_data'),
+        ('..\\templates', 'templates'),
+        ('..\\cert.pem', '.'),
+        ('..\\key.pem', '.'),
         # NOTE: .env is NOT included for client - server IP comes from login screen input
     ],
     hiddenimports=[
@@ -89,7 +89,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icon.ico',
+    icon='..\\icon.ico',
 )
 
 coll = COLLECT(

@@ -3290,37 +3290,60 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
     // Extract the server URL from the audio link (remove /audio/sessionid)
     // link format: https://172.20.10.3:5000/audio/sessionid
     const serverBase = link.substring(0, link.lastIndexOf('/audio/'));
-    const ringtoneUrl = `${serverBase}/static/sounds/disc.mp3`;
+    const ringtoneUrl = `${serverBase}/static/sounds/tvk.mp3?t=${Date.now()}`;
 
     // Create and start ringtone with better initialization
     const ringtone = new Audio();
-    ringtone.src = ringtoneUrl;
-    ringtone.loop = true;
-    ringtone.volume = 0.8;
+    ringtone.crossOrigin = 'anonymous';  // Allow CORS for audio
     ringtone.preload = 'auto';
+    ringtone.loop = false;
+    ringtone.volume = 0.8;
     
     // Store ringtone globally so it can be stopped even if modal is closed
     activeAudioRingtone = ringtone;
     
-    console.log('[AUDIO] Ringtone created:', ringtone.src);
+    console.log('[AUDIO] Ringtone created:', ringtoneUrl);
     console.log('[AUDIO] Sounds enabled:', soundsEnabled);
     console.log('[AUDIO] Server base:', serverBase);
     
+    let hasLoadingError = false;
+    
     // Listen for loading errors
     ringtone.addEventListener('error', (e) => {
+        hasLoadingError = true;
         console.error('[AUDIO] ❌ Audio loading error:', e.message);
         console.error('[AUDIO] Error code:', ringtone.error?.code);
         console.error('[AUDIO] Current source:', ringtone.src);
+        console.log('[AUDIO] Retrying with alternative URL in 2 seconds...');
+        
+        // Retry with alternative format (try ting.mp3 as fallback)
+        setTimeout(() => {
+            ringtone.src = `${serverBase}/static/sounds/ting.mp3?t=${Date.now()}`;
+            console.log('[AUDIO] Retrying with ting.mp3:', ringtone.src);
+        }, 2000);
     });
     
     ringtone.addEventListener('canplay', () => {
         console.log('[AUDIO] ✓ Audio canplay event - audio file loaded successfully');
     });
     
+    ringtone.addEventListener('loadeddata', () => {
+        console.log('[AUDIO] ✓ Audio data loaded, ready to play');
+        // Try playing once data is loaded
+        playRingtone();
+    });
+    
+    // Set source with timestamp to bypass cache
+    ringtone.src = ringtoneUrl;
+    
     // Attempt to play ringtone (only if sounds are enabled)
     const playRingtone = () => {
         if (!soundsEnabled) {
             console.log('[AUDIO] 🔇 Ringtone disabled in settings');
+            return;
+        }
+        if (hasLoadingError) {
+            console.log('[AUDIO] Waiting for audio to load before playing...');
             return;
         }
         console.log('[AUDIO] Attempting to play ringtone...');
@@ -3343,7 +3366,13 @@ function showIncomingAudioCallModal(sender, link, sessionId) {
                 });
         }
     };
-    playRingtone();
+    
+    // Try to play after a brief delay
+    setTimeout(() => {
+        if (!hasLoadingError) {
+            playRingtone();
+        }
+    }, 500);
 
     const modal = document.createElement('div');
     modal.id = 'incomingAudioCallModal';

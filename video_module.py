@@ -4,6 +4,14 @@ video_server.py - Flask WebRTC Signaling Server with Session Tracking
 Handles WebRTC signaling and notifies when sessions become empty
 """
 
+# Fix eventlet on Windows before any other imports
+try:
+    import eventlet
+    # Monkey patch to avoid eventlet.hubs.epolls issue on Windows
+    eventlet.monkey_patch(all=True, os=False)
+except Exception:
+    pass
+
 # Suppress all warnings for cleaner output
 import warnings
 warnings.filterwarnings('ignore')  # Suppress ALL warnings
@@ -530,7 +538,8 @@ def generate_self_signed_cert(cert_file, key_file):
         print(f"[MEDIA SERVER] ERROR generating certificate: {e}")
         exit(1)
 
-if __name__ == '__main__':
+def run_server():
+    """Start the media server - called by unified_server.py"""
     print("\n" + "="*60)
     print("🎥🎙️ Shadow Nexus Media Server (WebRTC)")
     print("="*60)
@@ -541,9 +550,40 @@ if __name__ == '__main__':
     # SSL Certificate setup - with regeneration check
     cert_file, key_file = regenerate_certificates_if_needed()
     
-    # Run with HTTPS using Flask-SocketIO built-in server
+    # Run with HTTPS using eventlet SSL wrapper
     print("[MEDIA SERVER] Server running on https://0.0.0.0:5000")
     print(f"[MEDIA SERVER] Access at: https://{SERVER_IP}:5000\n")
     
-    # Run with SSL certificates (certfile and keyfile parameters)
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, certfile=cert_file, keyfile=key_file)
+    try:
+        # Try HTTPS first - use the tuple approach which is more compatible
+        socketio.run(
+            app, 
+            host='0.0.0.0', 
+            port=5000, 
+            debug=False,
+            certfile=cert_file,
+            keyfile=key_file
+        )
+    except Exception as e:
+        print(f"[MEDIA SERVER] HTTPS failed: {e}")
+        print("[MEDIA SERVER] Falling back to HTTP mode...")
+        try:
+            # Fallback to HTTP without SSL
+            socketio.run(
+                app, 
+                host='0.0.0.0', 
+                port=5000, 
+                debug=False
+            )
+        except Exception as e2:
+            print(f"[MEDIA SERVER] SocketIO failed: {e2}")
+            print("[MEDIA SERVER] Using basic Flask server (limited functionality)...")
+            # Last resort - basic Flask without real-time features
+            app.run(
+                host='0.0.0.0', 
+                port=5000, 
+                debug=False
+            )
+
+if __name__ == '__main__':
+    run_server()
