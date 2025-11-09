@@ -38,7 +38,7 @@ echo ============================================================
 echo.
 
 REM Start chat server in background (using /b flag to stay in same terminal)
-start /b "" python server.py
+start /b "" python backend\server.py
 
 timeout /t 3 /nobreak
 
@@ -49,7 +49,7 @@ echo ============================================================
 echo.
 
 REM Start video server in foreground (will block until stopped)
-python -W ignore video_module.py
+python -W ignore backend\video_module.py
 
 echo.
 echo ============================================================

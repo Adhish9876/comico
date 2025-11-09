@@ -85,7 +85,7 @@ AUDIO_PORT=5001
         
         try:
             # Import and run chat server directly
-            import server
+            from backend import server
             chat_server = server.CollaborationServer()
             chat_server.start()
         except Exception as e:
@@ -98,7 +98,7 @@ AUDIO_PORT=5001
         
         try:
             # Import video module first to check compatibility
-            import video_module
+            from backend import video_module
             print("✓ Video module loaded successfully")
             
             # Run video server

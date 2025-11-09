@@ -39,12 +39,12 @@ python -m PyInstaller ^
     --hidden-import ssl ^
     --hidden-import json ^
     --hidden-import sqlite3 ^
-    --hidden-import storage ^
-    --hidden-import auth_module ^
-    --hidden-import audio_module ^
-    --hidden-import video_module ^
-    --hidden-import cert_manager ^
-    --hidden-import server ^
+    --hidden-import backend.storage ^
+    --hidden-import backend.auth_module ^
+    --hidden-import backend.audio_module ^
+    --hidden-import backend.video_module ^
+    --hidden-import backend.cert_manager ^
+    --hidden-import backend.server ^
     --hidden-import werkzeug ^
     --hidden-import jinja2 ^
     --hidden-import markupsafe ^

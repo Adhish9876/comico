@@ -17,7 +17,7 @@ import requests
 import urllib3
 
 # Import certificate manager for automatic SSL setup
-from cert_manager import setup_certificates, verify_and_fix_certificates
+from backend.cert_manager import setup_certificates, verify_and_fix_certificates
 
 # NO .env loading for client! Server IP comes from user input in login screen
 print(f"[CLIENT] Server IP will be set from login screen input")
@@ -49,14 +49,14 @@ def get_requests():
 def get_audio_module():
     global _audio_module
     if _audio_module is None:
-        import audio_module
+        from backend import audio_module
         _audio_module = audio_module
     return _audio_module
 
 def get_auth_module():
     global _auth_module
     if _auth_module is None:
-        import auth_module
+        from backend import auth_module
         _auth_module = auth_module
     return _auth_module
 
@@ -290,7 +290,7 @@ def connect_to_server(username: str, host: str, port: int):
         state.audio_engine = audio_module.AudioEngine(username, host, state.audio_port)
         
         # Set the global audio_engine reference
-        import audio_module
+        from backend import audio_module
         audio_module.audio_engine = state.audio_engine
         
         # Start receive thread

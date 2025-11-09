@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 
 # Import storage
-from storage import storage
+from backend.storage import storage
 
 class CollaborationServer:
     """Main server class for handling chat, files, and groups"""

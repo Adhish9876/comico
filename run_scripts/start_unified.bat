@@ -18,7 +18,7 @@ echo.
 REM Check if executable exists
 if not exist "dist\ShadowNexusServer\ShadowNexusServer.exe" (
     echo ❌ Unified server executable not found!
-    echo Please build the server first using: build_unified.bat
+    echo Please build the server first using: build_scripts\build_unified.bat
     pause
     exit /b 1
 )

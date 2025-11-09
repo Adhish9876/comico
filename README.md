@@ -14,180 +14,252 @@
 
 
 
-## 📸 Screenshots
+## 📸 Screenshots & Features
+<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 40px;">
 
-### Main Chat Interface
-![Main Chat Interface](screenshots/main-chat.png)
-*Real-time messaging with global, private, and group chats*
+  <div style="flex: 0 0 45%; text-align: center;">
+    <img src="images/signup.jpg" style="width: 100%; max-width: 400px;">
+    <div>Signup</div>
+  </div>
 
-### Video Call Interface
-![Video Call](screenshots/video-call.png)
-*WebRTC video calls with up to 10 participants*
+  <div style="flex: 0 0 45%; text-align: center;">
+    <img src="images/login.png" style="width: 100%; max-width: 400px;">
+    <div>login</div>
+  </div>
 
-### Login & Authentication
-![Login Screen](screenshots/login-screen.png)
-*Device-based authentication with security questions*
+  <div style="flex: 0 0 45%; text-align: center;">
+    <img src="images/global.png" style="width: 100%; max-width: 400px;">
+    <div>Broadcast Channel</div>
+  </div>
+  <div style="flex: 0 0 45%; text-align: center;">
+    <img src="images/video.png" style="width: 100%; max-width: 400px;">
+    <div>video call</div>
+  </div>
+
+
+  <div style="flex: 0 0 45%; text-align: center;">
+    <img src="images/file.png" style="width: 100%; max-width: 400px;">
+    <div>File Transfer</div>
+  </div>
+
+
+  <div style="flex: 0 0 45%; text-align: center;">
+    <img src="images/settings.png" style="width: 100%; max-width: 400px;">
+    <div>settings</div>
+  </div>
+
+  
+
+  
+</div>
+
+
+
+
+
+## ✨ Key Features
+
+### 💬 **LAN Communication**
+- ✅ Global Chat - Everyone on your local network
+- ✅ Private Chat - 1-on-1 conversations
+- ✅ Group Chat - Create custom groups
+- ✅ Audio Messages - Voice recordings stored locally
+- ✅ Message Replies - Quote and reply to specific messages
+
+### 🎥 **LAN Video Calls**
+- ✅ WebRTC Video - High-quality peer-to-peer over LAN
+- ✅ Screen Sharing - Share your screen with participants
+- ✅ Up to 10 Participants - Group video calls
+- ✅ Colorful Thumbnails - 12 unique themes when camera is off
+- ✅ Reactions & Hand Raise - Non-verbal communication
+
+### 📁 **Local File Sharing**
+- ✅ Large Files - Up to 2GB per file over LAN
+- ✅ Any File Type - Documents, images, videos, archives
+- ✅ Local Storage - Files saved securely on server
+
+### 🔐 **LAN Security**
+- ✅ Device-Based Auth - One account per device (MAC address)
+- ✅ Local Password Storage - Encrypted passwords stored locally
+- ✅ Security Questions - Password recovery without internet
+
+### 🎨 **User Experience**
+- ✅ Multiple Theme - Modern/dark mode with smooth animations
+- ✅ Instant Loading - ~1 second startup time
+- ✅ Auto Port Detection - No conflicts on LAN
+- ✅ Offline Capable - Works without internet connection
+- ✅ Responsive UI - Works on desktop and tablets
 
 ---
 
-## ✨ Features
+## 🚀 Quick Start (Running from Terminal)
 
-### 💬 LAN Communication
-- **Global Chat** - Everyone on your local network
-- **Private Chat** - 1-on-1 conversations within LAN
-- **Group Chat** - Create custom groups on your network
-- **Audio Messages** - Voice recordings (stored locally)
-- **Message Replies** - Reply to specific messages
+### 📋 Prerequisites
+- **Python 3.12+** installed ([Download Python](https://www.python.org/))
+- **Windows, Linux, or Mac**
 
-### 🎥 LAN Video Calls
-- **WebRTC Video** - High-quality peer-to-peer over LAN
-- **Screen Sharing** - Share your screen with local participants
-- **Up to 10 Participants** - Group video calls on your network
-- **Colorful Thumbnails** - 12 unique themes when camera is off
-- **Reactions & Hand Raise** - Non-verbal communication
+### 🔧 Installation & Setup
 
-### 📁 Local File Sharing
-- **Large Files** - Up to 2GB per file over LAN
-- **Any File Type** - Documents, images, videos
-- **Local Storage** - Files saved on the server machine
-
-### 🔐 LAN Security
-- **Device-Based Auth** - One account per device (MAC address)
-- **Local Password Storage** - Encrypted passwords stored locally
-- **Security Questions** - Password recovery without internet
-
-### 🎨 User Experience
-- **Cyan/Purple Theme** - Modern dark mode
-- **Smooth Animations** - Polished interface
-- **Instant Loading** - ~1 second startup
-- **Auto Port Detection** - No conflicts on LAN
-- **Offline Cache** - Works without internet connection
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.12 or higher
-- Windows/Linux/Mac
-
-### Installation
-
-1. **Clone the repository**
+#### Step 1: Clone / Extract Repository
 ```bash
 git clone <repository-url>
 cd shadow-nexus
 ```
 
-2. **Install dependencies**
+#### Step 2: Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Start the servers**
-```bash
-# Terminal 1: Main Server
-python server.py
+#### Step 3: Run the Servers
 
-# Terminal 2: Video Server
-python video_module.py
+**Option A: All-in-One Unified Server (RECOMMENDED)**
+```bash
+python unified_server.py
 ```
+This automatically detects your IP, starts all servers, and updates `.env`
 
-4. **Start the client**
+**Option B: Manual - Run Each Server Separately**
 ```bash
-# Terminal 3: Client
+# Terminal 1: Start Chat Server
+python -m backend.server
+
+# Terminal 2: Start Video Server (in another terminal)
+python -m backend.video_module
+
+# Terminal 3: Start Client (in another terminal)
 python client.py
 ```
 
-5. **First-time setup**
-- Create account (username + password)
-- Connect to server (use `localhost` for testing)
-- Start chatting!
-
-### Setup Screenshots
-
-![Setup Process](screenshots/setup-process.png)
-*Step-by-step setup: Signup → Login → Connect to Server*
+#### Step 4: Access the Application
+- The browser will automatically open
+- If not, go to: `http://localhost:8081`
+- **First time?** Create account → Login → Done!
 
 ---
 
-## 📦 Building Executable
+### � Building an Executable (.EXE)
 
-Create a standalone `.exe` for easy distribution:
+Create a standalone executable for distribution (no Python needed!):
 
+#### Step 1: Verify Build Requirements
 ```bash
-build_exe.bat
+python verify_build_requirements.py
+```
+Expected output: `✅ All checks passed! Ready to build.`
+
+#### Step 2: Build the Unified Server Executable
+```bash
+build_scripts\build_unified.bat
+```
+Or on Linux/Mac:
+```bash
+python -m PyInstaller build_scripts/ShadowNexusServer.spec
 ```
 
-**Output:** `dist/ShadowNexusClient/ShadowNexusClient.exe`
+#### Step 3: Locate Your Executable
+```
+dist/ShadowNexusServer/ShadowNexusServer.exe
+```
 
-**Share with others:**
-- Copy the entire `dist/ShadowNexusClient/` folder
-- No Python installation needed!
-- Just double-click the `.exe`
+#### Step 4: Run the Executable
+Simply **double-click** the `.exe` file or run:
+```bash
+dist\ShadowNexusServer\ShadowNexusServer.exe
+```
 
-### Build Process
-![Build Process](screenshots/build-process.png)
-*Building the executable with custom icon and features*
+**Output:**
+```
+✅ All Servers Started!
+🌐 Server IP Address: 192.168.1.100
+📡 Chat Server: 192.168.1.100:5555
+📁 File Server: 192.168.1.100:5556
+🔊 Audio Server: 192.168.1.100:5557
+📹 Video Server: 192.168.1.100:5000
+✅ Clients can connect to: 192.168.1.100
+```
+
+#### Step 5: Share with Others
+1. Copy the entire `dist/ShadowNexusServer/` folder
+2. Share via USB, email, or network
+3. Users extract and run the `.exe`
+4. **No Python installation needed!**
 
 ---
 
-## 🌐 LAN Network Setup
+### 📂 Project Structure - Core Architecture
 
-### Same Computer (Testing)
-```
-Server: localhost
-Ports: 5555, 5556, 5557, 5000
-```
-
-### Local Area Network (LAN)
-1. Find server's IP address:
-   ```bash
-   # Windows
-   ipconfig
-   
-   # Linux/Mac
-   ifconfig
-   ```
-2. All clients connect using server's LAN IP
-3. Ensure firewall allows ports 5555-5557, 5000
-4. **No internet required** - works completely offline
-
-### Mobile Hotspot (Portable LAN)
-1. Create hotspot on one device
-2. Connect all devices to the same hotspot
-3. Use hotspot IP as server address
-4. **Perfect for offline meetings** and remote locations
-
-### Network Setup Examples
-![Network Setup](screenshots/network-setup.png)
-*Different network configurations: LAN, Hotspot, and Local testing*
-
----
-
-## 📂 Project Structure
+> **💡 The core client-server logic is in the `backend/` folder**
 
 ```
 shadow-nexus/
-├── client.py              # Client application
-├── server.py              # Main server
-├── video_module.py        # Video call server
-├── storage.py             # Data persistence
-├── auth_module.py         # Authentication
-├── audio_module.py        # Audio handling
-├── web/                   # Web interface
-│   ├── index.html         # UI structure
-│   ├── app.js             # Frontend logic
-│   └── style.css          # Styling
-├── templates/             # Video call UI
-│   └── video_room.html
-├── shadow_nexus_data/     # Data storage
-│   ├── global_chat.json
-│   ├── private_chats.json
-│   ├── group_chats.json
-│   └── users_auth.json
-└── build_exe.bat          # Build script
+├── 🎯 ROOT LEVEL (Executables & Launchers)
+│   ├── unified_server.py          ⭐ Run this for all-in-one server
+│   ├── server_launcher.py         ⭐ Environment + process manager
+│   ├── client.py                  ⭐ Desktop client (Eel GUI)
+│   └── ShadowNexusServer.spec     ⭐ PyInstaller build config
+│
+├── 📦 backend/ (CORE SERVER-CLIENT LOGIC)
+│   ├── __init__.py
+│   ├── server.py                  🔥 Main chat server (5555, 5556, 5557)
+│   ├── video_module.py            🎥 Video call server (WebRTC, port 5000)
+│   ├── audio_module.py            🔊 Audio streaming
+│   ├── storage.py                 💾 JSON-based persistence
+│   ├── auth_module.py             🔐 Device-based authentication
+│   └── cert_manager.py            🛡️ SSL certificate management
+│
+├── 🎨 Frontend (GUI & Web Interface)
+│   ├── web/
+│   │   ├── index.html             📄 Main UI structure
+│   │   ├── app.js                 ⚡ JavaScript logic
+│   │   └── style.css              🎨 Styling & themes
+│   ├── templates/
+│   │   ├── video_room.html        📹 Video call UI
+│   │   └── audio_room.html        🔊 Audio call UI
+│   └── static/                    📁 Images, icons, assets
+│
+├── 🔨 Build & Run Scripts
+│   ├── build_scripts/             📦 Build executables
+│   │   ├── build_unified.bat
+│   │   ├── build_exe.bat
+│   │   └── build_server.bat
+│   ├── run_scripts/               ▶️ Run applications
+│   │   ├── start_unified.bat
+│   │   ├── start_server.bat
+│   │   └── start_all_servers.ps1
+│   ├── cert_scripts/              🔐 Certificate management
+│   │   ├── fix_ssl_certificate.ps1
+│   │   └── regenerate_certs.ps1
+│   └── tools/                     🛠️ Utilities
+│
+├── 💾 Data Storage
+│   └── shadow_nexus_data/         📊 All data saved here
+│       ├── users_auth.json
+│       ├── users.json
+│       ├── global_chat.json
+│       ├── private_chats.json
+│       ├── group_chats.json
+│       └── files.json
+│
+└── 📚 Documentation
+    ├── docs/
+    │   ├── README.md              👈 You are here
+    │   └── MKCERT_SETUP.md        🔐 SSL certificate guide
+    ├── requirements.txt           📋 Python dependencies
+    └── QUICKSTART.txt             🚀 Quick reference
 ```
+
+### 🎯 Where to Make Changes
+
+| What to Change | Where | Language |
+|---|---|---|
+| Chat logic, server behavior | `backend/server.py` | Python |
+| Video/WebRTC features | `backend/video_module.py` | Python |
+| Authentication system | `backend/auth_module.py` | Python |
+| Data storage | `backend/storage.py` | Python |
+| UI design | `web/index.html` | HTML |
+| Frontend interactivity | `web/app.js` | JavaScript |
+| Styling & themes | `web/style.css` | CSS |
 
 ---
 
@@ -195,79 +267,183 @@ shadow-nexus/
 
 ### Ports Used
 
-| Port | Service | Purpose |
-|------|---------|---------|
-| 5555 | Chat Server | Text messages |
-| 5556 | File Server | File transfers |
-| 5557 | Audio Server | Audio streaming |
-| 5000 | Video Server | WebRTC signaling |
-| 8081+ | Client UI | Web interface |
+| Port | Service | Purpose | Backend File |
+|------|---------|---------|---|
+| 5555 | Chat Server | Text messages | `backend/server.py` |
+| 5556 | File Server | File transfers | `backend/server.py` |
+| 5557 | Audio Server | Audio streaming | `backend/server.py` + `backend/audio_module.py` |
+| 5000 | Video Server | WebRTC signaling | `backend/video_module.py` |
+| 8081+ | Client UI | Web interface (Eel) | `client.py` + `web/` |
 
-### Changing Server IP
+### Environment Variables (.env)
+```env
+SERVER_IP=192.168.1.100
+CHAT_PORT=5555
+FILE_PORT=5556
+VIDEO_PORT=5000
+AUDIO_PORT=5001
+```
 
-Edit in `client.py`:
+---
+
+## 💡 How It Works - The Backend Architecture
+
+### 🎯 Core Backend (`backend/` folder)
+
+All the real-time communication logic lives in the `backend/` folder:
+
+```
+BACKEND (Python)
+├── server.py
+│   ├── CollaborationServer (Main orchestrator)
+│   ├── Handles all socket connections
+│   ├── Routes messages to clients
+│   ├── Manages chat data
+│   ├── Handles file uploads/downloads
+│   └── Stores everything in JSON
+│
+├── video_module.py
+│   ├── WebRTC signaling server
+│   ├── Manages video peer connections
+│   ├── Flask + Socket.IO
+│   └── Port: 5000
+│
+├── audio_module.py
+│   ├── Real-time audio streaming
+│   ├── Audio capture & playback
+│   └── PyAudio integration
+│
+├── storage.py
+│   ├── JSON-based data persistence
+│   ├── Chat history storage
+│   ├── User data management
+│   └── File metadata storage
+│
+├── auth_module.py
+│   ├── Device-based authentication
+│   ├── MAC address identification
+│   ├── Password hashing & verification
+│   └── Security questions
+│
+└── cert_manager.py
+    ├── SSL certificate generation
+    ├── HTTPS support
+    └── mkcert integration
+```
+
+### 📡 Communication Flow
+
+```
+User Types Message (Browser)
+         ↓
+[JavaScript] - web/app.js
+         ↓
+[Eel Bridge] - Python-JS communication
+         ↓
+[Python Client] - client.py
+         ↓
+[TCP Socket] - TCP/IP connection
+         ↓
+[Backend Server] - backend/server.py (Port 5555)
+         ↓
+[Storage] - backend/storage.py (JSON files)
+         ↓
+[Broadcast] - Send to all connected clients
+         ↓
+[Update Display] - Real-time update for everyone
+```
+
+### 🔐 Authentication Flow (Backend)
+
+```
+Signup
+  ↓
+[backend/auth_module.py] → Hash password + Store in JSON
+[backend/storage.py] → Save user data
+  ↓
+Login
+  ↓
+[backend/auth_module.py] → Verify password
+[backend/server.py] → Create socket session
+  ↓
+Connected & Authenticated
+```
+
+### 📁 File Transfer Flow (Backend)
+
+```
+Upload File (Frontend)
+  ↓
+[web/app.js] → Send via Eel
+  ↓
+[client.py] → Receive from browser
+  ↓
+[backend/server.py] → Socket upload handler
+  ↓
+[backend/storage.py] → Save to disk + Store metadata
+  ↓
+[Broadcast to All] → Notify other clients
+  ↓
+Download Link Created
+```
+
+### 🎥 Video Call Flow (Backend)
+
+```
+Initiate Call
+  ↓
+[backend/video_module.py] → Create peer connection
+[Port 5000 - WebRTC Signaling]
+  ↓
+Exchange ICE Candidates & Offer/Answer
+  ↓
+Direct P2P Connection (over LAN)
+  ↓
+Video Stream (Encrypted, No Server Intermediary)
+```
+
+---
+
+## 💻 Modifying the Backend
+
+The `backend/` folder is where all the magic happens. Here's what you can modify:
+
+### Chat Server Modifications
+**File:** `backend/server.py`
+
 ```python
-self.server_host = "192.168.1.100"  # Your server IP
+# Add a new command handler
+@server.on_connect
+def handle_new_message(data):
+    # Your custom logic here
+    broadcast_to_all(data)
 ```
 
----
+### Video Server Customizations
+**File:** `backend/video_module.py`
 
-## 💡 How It Works
-
-### Architecture
+```python
+# Customize WebRTC behavior
+# Add recording, filters, effects, etc.
 ```
-Browser (HTML/JS) ↔ Eel Bridge ↔ Python Client ↔ TCP Socket ↔ Python Server ↔ JSON Storage
+
+### Storage Customizations
+**File:** `backend/storage.py`
+
+```python
+# Switch from JSON to database if needed
+# Add encryption layer
+# Implement backup system
 ```
 
-### Message Flow
-1. You type message in browser
-2. JavaScript captures it
-3. Eel bridge calls Python function
-4. Client sends to server via socket
-5. Server broadcasts to all clients
-6. Everyone receives and displays message
+### Authentication Customizations
+**File:** `backend/auth_module.py`
 
-### Storage System
-- **JS Array** - What you see (instant)
-- **localStorage** - Browser backup (survives refresh)
-- **Server JSON** - Permanent storage (shared with all)
-
----
-
-## 🎯 Key Features Explained
-
-### Real-Time Communication
-- Uses persistent TCP sockets (not HTTP polling)
-- Messages appear in ~50-100ms
-- Bidirectional communication
-
-### Three-Tier Storage
-- **Level 1**: Browser RAM (instant display)
-- **Level 2**: Browser disk (quick reload)
-- **Level 3**: Server disk (permanent, shared)
-
-### Device-Based Auth
-- Each device registers with MAC address
-- Passwords stored locally (encrypted)
-- Server only sees username + IP
-
-## 🎨 Feature Showcase
-
-### Chat Features
-![Chat Features](screenshots/chat-features.png)
-*Message replies, audio messages, file sharing, and typing indicators*
-
-### Video Call Features
-![Video Features](screenshots/video-features.png)
-*Screen sharing, reactions, hand raise, and colorful camera-off thumbnails*
-
-### File Sharing
-![File Sharing](screenshots/file-sharing.png)
-*Drag & drop file uploads with progress tracking*
-
-### Audio Messages
-![Audio Messages](screenshots/audio-messages.png)
-*Voice recordings with playback controls and waveform visualization*
+```python
+# Add 2FA
+# Implement role-based access
+# Add more security layers
+```
 
 ---
 
@@ -396,7 +572,7 @@ MIT License - Free for personal and educational use.
 ## 📞 Support
 
 **Having issues?**
-1. Check [DOCUMENTATION.md](DOCUMENTATION.md)
+1
 2. Review error messages in terminal
 3. Check browser console (F12)
 4. Verify all servers are running

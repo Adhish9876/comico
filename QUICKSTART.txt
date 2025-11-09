@@ -17,7 +17,7 @@ WHAT YOU GET:
 Core Implementation:
   ✅ server_launcher.py      (Process manager + .env handler)
   ✅ server.spec             (PyInstaller configuration)
-  ✅ build_server.bat        (Build script)
+  ✅ build_scripts\build_server.bat        (Build script)
   ✅ verify_build_requirements.py (Verification tool)
 
 Documentation:
@@ -29,7 +29,7 @@ Documentation:
   ✅ INDEX_SERVER_EXE.md                (Navigation)
   ✅ IMPLEMENTATION_SUMMARY.md          (This summary)
 
-QUICK START - 3 STEPS:
+QUICKSTART - 3 STEPS:
 ═════════════════════════════════════════════════════════════════
 
 STEP 1: VERIFY (5 minutes)
@@ -48,12 +48,14 @@ This checks:
 Expected output:
   ✅ All checks passed! Ready to build.
 
+NOTE: For SSL/HTTPS certificate setup, see: docs/MKCERT_SETUP.md
+
 
 STEP 2: BUILD (2-3 minutes)
 ───────────────────────────────────────────────────────────────
 Run:
 
-  build_server.bat
+  build_scripts\build_server.bat
 
 This:
   ✓ Verifies PyInstaller
@@ -126,7 +128,7 @@ Solution:
   server.spec:
     └─ Bundles everything into ShadowNexusServer.exe
 
-  build_server.bat:
+  build_scripts\build_server.bat:
     └─ One-command build process
 
 
@@ -195,9 +197,9 @@ Verify requirements:
   python verify_build_requirements.py
 
 Build the executable:
-  build_server.bat
+  build_scripts\build_server.bat
   or
-  build_server.ps1
+  build_scripts\build_server.ps1
 
 Run the server:
   .\ShadowNexusServer.exe
@@ -205,7 +207,7 @@ Run the server:
   .\ShadowNexusServer.exe 192.168.1.100
 
 Run with launcher batch:
-  run_server.bat
+  run_scripts\run_server.bat
 
 
 DOCUMENTATION REFERENCE:
@@ -225,9 +227,9 @@ FILES CREATED FOR YOU:
 Implementation Files:
   server_launcher.py          (295 lines - CORE)
   server.spec                 (130 lines - CORE)
-  build_server.bat            (80 lines - CORE)
-  build_server.ps1            (140 lines)
-  run_server.bat              (30 lines)
+  build_scripts\build_server.bat            (80 lines - CORE)
+  build_scripts\build_server.ps1            (140 lines)
+  run_scripts\run_server.bat              (30 lines)
   verify_build_requirements   (250 lines)
 
 Documentation Files:
@@ -315,7 +317,7 @@ NEXT STEPS:
 2. Run: python verify_build_requirements.py
    (Should say: "✅ All checks passed!")
 
-3. Run: build_server.bat
+3. Run: build_scripts\build_server.bat
    (Wait 2-3 minutes)
 
 4. Check: dist/ShadowNexusServer/ShadowNexusServer.exe exists
@@ -368,7 +370,7 @@ Everything is prepared and documented.
 
 Start with: python verify_build_requirements.py
 
-Then: build_server.bat
+Then: build_scripts\build_server.bat
 
 Then: ShadowNexusServer.exe
 
